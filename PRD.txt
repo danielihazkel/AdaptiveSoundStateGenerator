@@ -1,0 +1,672 @@
+PRD — Adaptive Sound State Generator
+
+Product name: Resonance
+Version: 1.0
+Platform: Web + Mobile
+Product type: Personalized sound/focus/wellness application
+
+1. Product Vision
+
+Create an application that generates real-time sound environments designed to help users achieve a desired mental state, such as:
+
+🎯 Focus
+🧘 Relaxation
+⚡ Energy
+😴 Sleep
+🧠 Deep work
+📖 Study
+🌿 Calm
+🧘‍♂️ Meditation
+💡 Creativity
+
+Instead of simply playing pre-recorded tracks, the application generates sound dynamically using combinations of tones, noise, rhythmic modulation, binaural beats, ambient layers, and music-like textures.
+
+The system learns which sound configurations work best for each individual user.
+
+2. Core Product Idea
+
+The user doesn't need to understand frequencies.
+
+They simply select:
+
+"I need to focus for 60 minutes."
+
+The application generates an appropriate sound environment.
+
+For example:
+
+                    USER
+                      │
+                      ▼
+              ┌───────────────┐
+              │ Desired State │
+              │    FOCUS      │
+              └───────┬───────┘
+                      │
+                      ▼
+             ┌─────────────────┐
+             │ Sound Generator │
+             └────────┬────────┘
+                      │
+        ┌─────────────┼──────────────┐
+        ▼             ▼              ▼
+    Noise layer   Tone layer    Rhythmic layer
+        │             │              │
+        └─────────────┼──────────────┘
+                      ▼
+               Generated Sound
+                      │
+                      ▼
+                    USER
+                      │
+                      ▼
+               Feedback / Rating
+                      │
+                      ▼
+              Personalization
+
+The important differentiator is the feedback loop.
+
+3. Target Users
+Primary
+
+People who want help with:
+
+studying
+programming
+reading
+working
+meditation
+relaxation
+sleeping
+Secondary
+
+People interested in:
+
+neuroscience
+biohacking
+productivity
+mindfulness
+sound therapy
+ambient music
+4. User Experience
+
+The home screen should be extremely simple.
+
+Step 1 — Choose your state
+What do you want to feel?
+
+┌────────────┐ ┌────────────┐ ┌────────────┐
+│ 🎯 Focus   │ │ 🧘 Calm    │ │ ⚡ Energy  │
+└────────────┘ └────────────┘ └────────────┘
+
+┌────────────┐ ┌────────────┐ ┌────────────┐
+│ 😴 Sleep   │ │ 💡 Create  │ │ 📖 Study  │
+└────────────┘ └────────────┘ └────────────┘
+Step 2 — Specify intensity
+
+Example:
+
+Focus
+
+Relaxed ─────────●─────── Intense
+
+The slider maps to concrete engine parameters — primarily modulation depth, beat frequency (lower vs. upper end of the state's range), and noise level. It is never exposed to the user as "Hz."
+
+Step 3 — Duration
+15 min
+30 min
+45 min
+60 min
+90 min
+Custom
+Step 4 — Generate
+
+The system creates a soundscape.
+
+Session behavior:
+
+Start: always fade in — never begin at full volume.
+Pause/resume is supported; audio interruptions (phone calls, other apps) pause the session and offer to resume.
+End: state-dependent. Sleep fades to silence with no end chime. Focus/study may end with an optional gentle chime.
+
+5. Sound Generation Engine
+
+The engine should not simply map:
+
+Focus → 40 Hz
+
+Instead, represent a sound configuration as multiple parameters.
+
+SoundProfile {
+
+    carrierFrequency
+    modulationFrequency
+    modulationDepth
+
+    noiseType
+    noiseLevel
+
+    rhythmicPulse
+    pulseRate
+
+    harmonicLayers
+
+    stereoWidth
+
+    volumeEnvelope
+
+    randomness
+
+    transitionSpeed
+}
+
+This gives the system a huge parameter space to experiment with.
+
+6. Sound Components
+A. Pure tones
+
+Generate sine waves at configurable frequencies.
+
+Example:
+
+440 Hz
+528 Hz
+800 Hz
+1000 Hz
+
+These should be treated primarily as sound design parameters, not as scientifically proven "brain frequencies."
+
+B. Binaural beats
+
+Example:
+
+Left: 400 Hz
+Right: 410 Hz
+
+Perceived beat: ~10 Hz
+
+The generator can dynamically change the beat frequency.
+
+For example:
+
+10 Hz → 11 Hz → 12 Hz
+
+rather than abruptly switching.
+
+C. Isochronic-style pulses
+
+Create amplitude modulation:
+
+████████    ████████    ████████
+        ████        ████
+
+with configurable pulse frequency.
+
+Parameters:
+
+pulse_frequency = 10 Hz
+depth = 40%
+waveform = sine
+D. Noise
+
+Support:
+
+White noise
+Pink noise
+Brown noise
+Blue noise
+
+The user should be able to control the mix.
+
+Example:
+
+Brown Noise ███████████████ 70%
+Tone        ████            20%
+Ambience    ██              10%
+E. Ambient layers
+
+Optional layers, split by how they're produced:
+
+Synthesized (filtered/shaped noise — no audio files needed):
+
+rain
+ocean
+wind
+space ambience
+
+Sample-based loops (require recorded assets — deferred past MVP):
+
+forest
+fireplace
+café
+
+These aren't "frequency therapy"; they're primarily there to make the soundscape pleasant and mask environmental distractions.
+
+7. Technical Architecture
+
+Audio engine: Web Audio API.
+
+OscillatorNode — pure tones and binaural pairs
+AudioWorklet — noise generation (white/pink/brown/blue)
+GainNode — volume envelopes and isochronic amplitude modulation
+StereoPannerNode / ChannelMergerNode — stereo width and binaural channel routing
+
+Engine requirements:
+
+All parameter changes must be ramped (linearRampToValueAtTime / setTargetAtTime). Abrupt value jumps cause audible clicks and "zipper noise."
+Raw sine waves become fatiguing over long sessions. Soften sustained tones with gentle detuning, harmonic stacking, and low-pass filtering.
+Crossfade between configurations during session evolution — never hard-switch.
+
+Platform constraints:
+
+iOS Safari suspends Web Audio when the screen locks — a serious problem for a sleep product. Decide early between a PWA and a native wrapper (Capacitor / React Native) with a background-audio entitlement.
+Binaural beats require true stereo separation. Prompt the user to wear headphones, and provide a mono/speaker fallback mode (this doubles as an accessibility feature for users with single-sided hearing loss).
+
+Offline-first:
+
+Because the core soundscapes are generated algorithmically, the app can work fully offline with nothing to download. Make this an explicit selling point.
+
+8. Mental State Profiles
+
+Instead of making hard scientific claims, each state should contain an experimental sound profile.
+
+Example:
+
+Focus
+state: focus
+
+noise:
+  type: brown
+  level: 0.35
+
+binaural:
+  enabled: true
+  beat_range: 10-18Hz
+
+modulation:
+  depth: 0.10
+
+ambience:
+  level: 0.05
+
+variation:
+  low
+Relaxation
+state: relaxation
+
+noise:
+  type: pink
+  level: 0.20
+
+binaural:
+  enabled: optional
+  beat_range: 6-10Hz
+
+modulation:
+  depth: 0.05
+
+ambience:
+  level: 0.40
+
+variation:
+  medium
+Sleep
+state: sleep
+
+noise:
+  type: brown
+  level: 0.40
+
+binaural:
+  enabled: optional
+  beat_range: 1-6Hz
+
+high_frequencies:
+  reduced: true
+
+volume:
+  gradual_fade: true
+
+Again, the application should present these as sound environments that may help, rather than scientifically guaranteed effects.
+
+9. Adaptive Personalization
+
+This could become the most interesting part of the product.
+
+After a session:
+
+How did it work?
+
+Focus
+────────────────────
+😫  1  2  3  4  5  😍
+
+Distraction
+────────────────────
+Low                  High
+
+Would you use this again?
+
+YES        NO
+
+Store:
+
+User
+ ↓
+Desired state
+ ↓
+Sound configuration
+ ↓
+Session duration
+ ↓
+User feedback
+
+Then optimize future sessions.
+
+Feedback mechanics:
+
+Sleep sessions cannot be rated at session end — the user is asleep. Use a next-morning prompt instead.
+Explicit ratings will be sparse; most users won't rate every session. Also collect implicit signals: session completed vs. stopped early, mid-session volume adjustments, replays of saved presets, skips.
+
+Cold start:
+
+Before personalization has data (roughly the first 5–10 sessions per state), use the default state profiles from section 8.
+
+Explore vs. exploit:
+
+Treat parameter selection as a multi-armed bandit / Bayesian optimization problem over the SoundProfile space.
+Users who have found a sound that works will resent forced experimentation. Provide a toggle: "lock what works" vs. "keep experimenting."
+
+10. Personal Sound Profile
+
+After several sessions:
+
+Daniel's Focus Profile
+
+Most effective:
+
+Brown noise       ██████████
+Binaural beats    ███████
+Pure tones        ███
+Nature sounds     █████
+
+Preferred beat:
+13–15 Hz
+
+Preferred noise:
+Brown
+
+Preferred volume:
+Low
+
+Session duration:
+45–60 min
+
+The application can gradually learn:
+
+"This particular user appears to prefer brown noise + subtle rhythmic modulation."
+
+That's considerably more compelling than claiming one frequency works for everyone.
+
+11. AI Component
+
+An AI assistant could sit on top of the sound engine.
+
+User:
+
+"I'm tired but need to study for two hours."
+
+AI converts this into:
+
+{
+  "goal": "study",
+  "energy": "low",
+  "duration": 120,
+  "desired_arousal": 0.55,
+  "distraction_masking": 0.7
+}
+
+The sound engine then generates the appropriate configuration.
+
+The AI could also ask:
+
+"Do you want to feel calmer or more alert?"
+
+This creates a much more natural interface than asking users about Hz values.
+
+12. Session Evolution
+
+The sound shouldn't necessarily remain static for an hour.
+
+For example:
+
+00:00
+↓
+Gentle transition
+↓
+10 Hz modulation
+↓
+15 Hz
+↓
+15 Hz stable
+↓
+12 Hz
+↓
+Gradual reduction
+↓
+Session complete
+
+This could prevent habituation and make the experience feel more intentional.
+
+13. Safety
+
+This is important.
+
+The product should not claim:
+
+❌ "This frequency increases IQ."
+
+❌ "40 Hz synchronizes your brain."
+
+❌ "528 Hz heals DNA."
+
+❌ "This cures ADHD/anxiety/depression."
+
+Instead:
+
+"These sound configurations are designed to support relaxation, focus, or other desired states. Individual responses vary."
+
+Also provide:
+
+safe volume recommendations
+hearing-safety warnings
+a loudness ceiling (normalize output to a fixed LUFS target)
+always fade in — no sudden loud sounds
+easy stop button
+"do not use while driving" warning for sleep/relaxation states
+tinnitus caution
+optional binaural-beat warning for users who find stereo effects uncomfortable
+a clear "this is not a medical device" disclaimer
+
+14. Data, Privacy & Accounts
+
+MVP is local-first: all session history and feedback stored on-device, no account required.
+Accounts arrive with V2, when cross-device sync of the personal sound profile becomes worthwhile.
+Mental-state data — and later biometric data — is health-adjacent. Handle it under GDPR, require explicit opt-in consent before reading any wearable data, and never sell or share it.
+Repeat wherever relevant: this is not a medical device.
+
+15. MVP
+
+I would not build the full AI personalization system initially.
+
+MVP features
+
+1. State selection
+
+Focus
+Relax
+Sleep
+Energy
+Meditation
+
+(These 5 ship in the MVP. The remaining states from section 1 — Study, Deep work, Creativity, Calm — arrive post-MVP; Calm is served by Relax initially.)
+
+2. Sound generator
+
+Pure tones
+Binaural beats
+Pink/brown/white noise
+Volume control
+Stereo balance
+
+3. Session timer
+
+15 / 30 / 45 / 60 / 90 min / custom
+
+4. Live parameter controls
+
+Advanced users can see:
+
+Carrier:       440 Hz
+Beat:           12 Hz
+Noise:          35%
+Modulation:      8%
+Stereo:         70%
+
+5. Saved presets
+
+Let the user save a generated configuration they liked and replay it later.
+
+Cheap to build, strong retention value, and every save is a high-confidence positive label for the personalization system.
+
+6. Feedback
+
+How effective was this?
+
+😫  1  2  3  4  5  😍
+
+(One 1–5 scale everywhere in the product — lower friction than 1–10, and consistent with the post-session screen in section 9.)
+
+That's enough to start collecting useful data.
+
+16. V2 — Personalization
+
+Once enough sessions exist:
+
+User → State → Sound configuration → Result
+
+Use an optimization algorithm to find configurations producing the best subjective results.
+
+You could eventually model:
+
+P(effectiveness∣user,state,soundParameters)
+
+and optimize:
+
+arg
+parameters
+max
+	​
+
+P(effectiveness)
+
+This turns the application into a personalized sound optimization system.
+
+17. V3 — Adaptive Real-Time System
+
+This is where the idea gets really interesting.
+
+Instead of:
+
+"Play this sound for 60 minutes."
+
+the system continuously adapts.
+
+For example:
+
+                 USER
+                   │
+                   ▼
+             Current state
+                   │
+                   ▼
+          ┌────────────────┐
+          │ Sound Engine   │
+          └───────┬────────┘
+                  │
+                  ▼
+              10 minutes
+                  │
+                  ▼
+             User feedback
+                  │
+                  ▼
+          Optimization model
+                  │
+                  ▼
+          New sound parameters
+                  │
+                  └──────►
+
+Eventually you could integrate optional signals such as:
+
+heart rate
+HRV
+smartwatch data
+movement
+breathing
+EEG, for advanced users
+
+Then the system could become genuinely adaptive rather than simply a frequency player.
+
+18. Success Metrics
+
+Session completion rate (started vs. finished)
+Repeat-session rate and D7 / D30 retention
+% of sessions with feedback captured (explicit or implicit)
+Rating trend per user over time — the core proof point: personalization should measurably raise a user's own ratings
+Free → premium conversion (post-MVP)
+
+19. Business Model -- ignore for now
+Free
+5 predefined states
+basic sound generator
+unlimited basic sessions
+
+(Do not limit free session counts — the personalization loop needs session data to work, and limiting sessions starves the product's own flywheel. Monetize the intelligence, not the sound.)
+Premium
+
+$5–10/month
+
+personalized profiles
+unlimited generation
+advanced sound parameters
+AI sound coach
+session history
+adaptive sessions
+Advanced / Research
+
+Potentially:
+
+wearable integration
+EEG integration
+experimental protocols
+detailed analytics
+20. Key Differentiator
+
+The product shouldn't be:
+
+"Listen to 432 Hz and become relaxed."
+
+There are already thousands of apps/videos doing essentially that.
+
+The real competition, though, isn't frequency videos — it's Endel and Brain.fm (generative/adaptive audio) and myNoise (deep parameter control). None of them combine a per-user measured feedback loop with transparent parameter control; that combination is the position to claim.
+
+The stronger concept is:
+
+"Tell us how you want to feel. We'll generate a sound environment, measure how well it works for you, and gradually discover your personal optimal sound."
+
+That turns it from a frequency player into a personalized mental-state sound engine.
+
+And technically, this could be a very interesting project because the core generator could be built entirely algorithmically — you wouldn't need a huge library of audio files. You could potentially generate essentially unlimited soundscapes in real time.
