@@ -34,9 +34,11 @@ export class AmbienceLayer {
   private sampleSource: AudioBufferSourceNode | undefined;
   /** Drops sample loads that finish after the type has changed again. */
   private loadGeneration = 0;
+  /** Pending sample fetch+decode, if any — see whenReady(). */
+  private loadPromise: Promise<void> = Promise.resolve();
 
   constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
     destination: AudioNode,
     type: AmbienceType,
   ) {
@@ -65,6 +67,16 @@ export class AmbienceLayer {
     ramp(this.ctx, this.gain.gain, level, timeConstant);
   }
 
+  /**
+   * Resolves once any in-flight sample fetch+decode has settled. Offline
+   * rendering must await this before startRendering() — the render would
+   * otherwise finish before the async load lands. Never rejects: a failed
+   * load plays silence, matching realtime behavior.
+   */
+  whenReady(): Promise<void> {
+    return this.loadPromise;
+  }
+
   dispose(): void {
     this.loadGeneration += 1;
     this.stopSample();
@@ -84,7 +96,9 @@ export class AmbienceLayer {
       ramp(this.ctx, this.sampleGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
     } else {
       ramp(this.ctx, this.synthGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
-      void this.startSample(type, this.loadGeneration);
+      this.loadPromise = this.startSample(type, this.loadGeneration).catch(() => {
+        // Load failures mean silence, by design — never propagate.
+      });
     }
   }
 

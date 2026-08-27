@@ -22,6 +22,10 @@ import { cloneProfile, type NoiseType, type SoundProfile } from '../audio/types'
  */
 // v2: priors gained ambience + tone warmth defaults (every arm now sits on a
 // different base sound) and the ambience-up/ambience-off arms were added.
+// 2026-08 state-prior retuning (harmony/bass/pattern-rhythm defaults) and the
+// flow/calm/creative additions deliberately did NOT bump the version: recipe
+// math is unchanged, and arm stats measure relative preference against the
+// prior, which shifts with it.
 export const CANDIDATE_SET_VERSION = 2;
 
 export interface CandidateSpec {
@@ -43,6 +47,10 @@ const BEAT_BANDS: Record<MentalState, [number, number]> = {
   sleep: [1, 8],
   energy: [10, 32],
   meditation: [3, 10],
+  arousal: [4, 10],
+  flow: [14, 40],
+  calm: [6, 12],
+  creative: [4, 10],
 };
 
 const NOISE_SWAP: Partial<Record<NoiseType, NoiseType>> = {

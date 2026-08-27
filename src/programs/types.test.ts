@@ -13,6 +13,15 @@ describe('normalizeProgram', () => {
     expect(normalizeProgram(program)).toEqual(program);
   });
 
+  it('preserves an explicit endChime and never invents one', () => {
+    const plain = defaultProgram('sleep', 0.5);
+    expect(normalizeProgram(plain).endChime).toBeUndefined();
+    expect(normalizeProgram({ ...plain, endChime: true }).endChime).toBe(true);
+    // Anything other than literal true stays absent.
+    expect(normalizeProgram({ ...plain, endChime: false }).endChime).toBeUndefined();
+    expect(normalizeProgram({ ...plain, endChime: 'yes' }).endChime).toBeUndefined();
+  });
+
   it('turns non-objects into a usable one-segment program', () => {
     for (const raw of [null, undefined, 42, 'program']) {
       const p = normalizeProgram(raw);

@@ -107,6 +107,88 @@ function contextTemplate(
   };
 }
 
+/**
+ * Per-phase values for session-arc templates. Unlike PhaseSpec, texture
+ * scalers are optional (absent = ride the base state's own tuned profile) and
+ * warmth is still required on every phase so the evaluator's null-mixing snap
+ * path never triggers.
+ */
+interface ArcPhaseSpec {
+  endMin: number | null;
+  label: string;
+  description: string;
+  intensity: number; // at t = 0.5
+  bpmRange: [number, number];
+  complexity: number;
+  warmth: number;
+  noiseScale?: number;
+  ambienceScale?: number;
+  lowpassScale?: number;
+  harmonyScale?: number;
+}
+
+/**
+ * Session-arc templates (deep work, wind-down, nap…): unlike contexts they
+ * keep the base state's own profile — tone drone, harmony, bass and all —
+ * and only shape the session over time. Programs can't move the binaural
+ * beat, so descents are carved with intensity, lowpass, and the scalers.
+ */
+function arcTemplate(
+  id: string,
+  label: string,
+  emoji: string,
+  description: string,
+  baseState: MentalState,
+  phases: ArcPhaseSpec[],
+  options?: { endChime?: boolean },
+): ProgramTemplate {
+  return {
+    id,
+    label,
+    emoji,
+    description,
+    build(_state, intensity) {
+      const t = clamp01(intensity);
+      const profile = STATES[baseState].buildProfile(t);
+      // The evaluator's pattern pulse needs the depth source active.
+      profile.isochronic.enabled = true;
+      let cursor = 0;
+      const segments: ProgramSegment[] = phases.map((phase) => {
+        const startMin = cursor;
+        if (phase.endMin !== null) cursor = phase.endMin;
+        const segment: ProgramSegment = {
+          id: newId(),
+          startMin,
+          endMin: phase.endMin,
+          label: phase.label,
+          description: phase.description,
+          // Center the listed value at t=0.5, lifting/lowering ±0.1 with t.
+          intensity: clamp01(phase.intensity + 0.2 * (t - 0.5)),
+          bpmRange: [...phase.bpmRange] as [number, number],
+          complexity: phase.complexity,
+          warmth: phase.warmth,
+        };
+        if (phase.noiseScale !== undefined) segment.noiseScale = phase.noiseScale;
+        if (phase.ambienceScale !== undefined) segment.ambienceScale = phase.ambienceScale;
+        if (phase.lowpassScale !== undefined) segment.lowpassScale = phase.lowpassScale;
+        if (phase.harmonyScale !== undefined) segment.harmonyScale = phase.harmonyScale;
+        return segment;
+      });
+      const program: Program = {
+        id: newId(),
+        name: label,
+        createdAt: new Date().toISOString(),
+        baseState,
+        baseIntensity: t,
+        baseProfile: profile,
+        segments,
+      };
+      if (options?.endChime) program.endChime = true;
+      return program;
+    },
+  };
+}
+
 const blank: ProgramTemplate = {
   id: 'blank',
   label: 'Blank',
@@ -275,6 +357,79 @@ const passionate = contextTemplate(
   ],
 );
 
+const deepWork90 = arcTemplate(
+  'deepWork90',
+  'Deep Work 90',
+  '🧠',
+  'One ultradian work block: settle in, two deep stretches, a breather between.',
+  'flow',
+  [
+    { endMin: 10, label: 'Settle', description: 'Ease into the work', intensity: 0.5, bpmRange: [70, 80], complexity: 0.05, warmth: 0.7, ambienceScale: 1.3 },
+    { endMin: 40, label: 'Deep block 1', description: 'Full engagement', intensity: 0.8, bpmRange: [78, 88], complexity: 0.2, warmth: 0.6 },
+    { endMin: 50, label: 'Trough', description: 'A softer breather mid-cycle', intensity: 0.55, bpmRange: [72, 80], complexity: 0.1, warmth: 0.75, ambienceScale: 1.4, lowpassScale: 0.85 },
+    { endMin: 80, label: 'Deep block 2', description: 'Second deep stretch', intensity: 0.85, bpmRange: [80, 90], complexity: 0.25, warmth: 0.6 },
+    { endMin: null, label: 'Wind-down', description: 'Ease off and wrap up', intensity: 0.55, bpmRange: [72, 80], complexity: 0.1, warmth: 0.75 },
+  ],
+);
+
+const sleepWindDown = arcTemplate(
+  'sleepWindDown',
+  'Sleep Wind-Down',
+  '🌙',
+  'A slow descent into sleep — darker, softer, quieter with each phase.',
+  'sleep',
+  [
+    { endMin: 10, label: 'Drift', description: 'Lights lowering', intensity: 0.5, bpmRange: [60, 66], complexity: 0, warmth: 0.9, ambienceScale: 1.3, lowpassScale: 1 },
+    { endMin: 25, label: 'Descend', description: 'Thoughts slowing', intensity: 0.65, bpmRange: [55, 62], complexity: 0, warmth: 0.95, lowpassScale: 0.8 },
+    { endMin: 40, label: 'Deepen', description: 'Darker and heavier', intensity: 0.8, bpmRange: [50, 58], complexity: 0, warmth: 1, lowpassScale: 0.6, noiseScale: 1.1, ambienceScale: 0.7 },
+    { endMin: null, label: 'Under', description: 'Barely there', intensity: 0.85, bpmRange: [48, 54], complexity: 0, warmth: 1, lowpassScale: 0.45, ambienceScale: 0.4 },
+  ],
+);
+
+const powerNap26 = arcTemplate(
+  'powerNap26',
+  'Power Nap 26',
+  '⏰',
+  'A ~26-minute nap: quick descent, a dark hold, then a bright wake-up with a chime.',
+  'sleep',
+  [
+    { endMin: 6, label: 'Let go', description: 'Quick descent', intensity: 0.6, bpmRange: [55, 62], complexity: 0, warmth: 0.95, lowpassScale: 0.9 },
+    { endMin: 20, label: 'Nap', description: 'Dark, still hold', intensity: 0.85, bpmRange: [50, 56], complexity: 0, warmth: 1, lowpassScale: 0.55, ambienceScale: 0.5 },
+    { endMin: 24, label: 'Rise', description: 'Coming back up', intensity: 0.45, bpmRange: [70, 80], complexity: 0.15, warmth: 0.8, lowpassScale: 0.9, noiseScale: 0.7 },
+    { endMin: null, label: 'Wake', description: 'Bright and clear', intensity: 0.25, bpmRange: [85, 95], complexity: 0.3, warmth: 0.7, lowpassScale: 1, noiseScale: 0.5, ambienceScale: 1.2 },
+  ],
+  { endChime: true }, // the waker — overrides sleep's chime-less end
+);
+
+const pomodoroFocus = arcTemplate(
+  'pomodoroFocus',
+  'Pomodoro Focus',
+  '🍅',
+  'Two 25-minute work sprints with 5-minute rests, then keep going.',
+  'focus',
+  [
+    { endMin: 25, label: 'Work 1', description: 'First sprint', intensity: 0.75, bpmRange: [82, 92], complexity: 0.35, warmth: 0.6 },
+    { endMin: 30, label: 'Rest', description: 'Step away', intensity: 0.35, bpmRange: [64, 72], complexity: 0, warmth: 0.85, ambienceScale: 1.6, lowpassScale: 0.7 },
+    { endMin: 55, label: 'Work 2', description: 'Second sprint', intensity: 0.8, bpmRange: [84, 94], complexity: 0.4, warmth: 0.6 },
+    { endMin: 60, label: 'Rest', description: 'Step away again', intensity: 0.35, bpmRange: [64, 72], complexity: 0, warmth: 0.85, ambienceScale: 1.6, lowpassScale: 0.7 },
+    { endMin: null, label: 'Work on', description: 'Keep the rhythm going', intensity: 0.75, bpmRange: [82, 92], complexity: 0.35, warmth: 0.6 },
+  ],
+);
+
+const meditationJourney = arcTemplate(
+  'meditationJourney',
+  'Meditation Journey',
+  '🕉️',
+  'Arrive, descend into depth, and return — the drone stays with you.',
+  'meditation',
+  [
+    { endMin: 5, label: 'Arrive', description: 'Settle onto the cushion', intensity: 0.4, bpmRange: [62, 68], complexity: 0, warmth: 0.8 },
+    { endMin: 15, label: 'Descend', description: 'Deepening attention', intensity: 0.6, bpmRange: [58, 64], complexity: 0, warmth: 0.85, harmonyScale: 1.2, lowpassScale: 0.9 },
+    { endMin: 25, label: 'Deep', description: 'The still center', intensity: 0.85, bpmRange: [54, 60], complexity: 0, warmth: 0.9, harmonyScale: 1.4, lowpassScale: 0.75 },
+    { endMin: null, label: 'Return', description: 'Gently surfacing', intensity: 0.5, bpmRange: [62, 68], complexity: 0, warmth: 0.8, harmonyScale: 1.1, lowpassScale: 1 },
+  ],
+);
+
 export const PROGRAM_TEMPLATES: readonly ProgramTemplate[] = [
   blank,
   buildArc,
@@ -284,6 +439,19 @@ export const PROGRAM_TEMPLATES: readonly ProgramTemplate[] = [
   playful,
   fantasy,
   passionate,
+  deepWork90,
+  sleepWindDown,
+  powerNap26,
+  pomodoroFocus,
+  meditationJourney,
+];
+
+export const ARC_TEMPLATE_IDS: readonly string[] = [
+  'deepWork90',
+  'sleepWindDown',
+  'powerNap26',
+  'pomodoroFocus',
+  'meditationJourney',
 ];
 
 export const CONTEXT_TEMPLATE_IDS: readonly string[] = [

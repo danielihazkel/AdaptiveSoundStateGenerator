@@ -97,7 +97,9 @@ export class AudioEngine {
   onContextStateChange: ((state: AudioContextState) => void) | undefined;
 
   private constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
+    /** True when rendering to file on an OfflineAudioContext — see createOffline. */
+    private readonly offline: boolean,
     private readonly master: GainNode,
     private readonly lowpass: BiquadFilterNode,
     private readonly bassShelf: BiquadFilterNode,
@@ -112,11 +114,34 @@ export class AudioEngine {
     private readonly harmony: HarmonyLayer,
     private profile: SoundProfile,
   ) {
-    ctx.onstatechange = () => this.onContextStateChange?.(ctx.state);
+    // Offline contexts flip suspended/running at every render checkpoint —
+    // that is driver mechanics, not an interruption, so don't surface it.
+    if (!offline) ctx.onstatechange = () => this.onContextStateChange?.(ctx.state);
   }
 
   static async create(profile: SoundProfile): Promise<AudioEngine> {
-    const ctx = new AudioContext();
+    return AudioEngine.build(new AudioContext(), profile, false);
+  }
+
+  /**
+   * Offline-render twin of create(): the identical worklets and node graph on
+   * a caller-owned OfflineAudioContext. No user gesture needed. The realtime
+   * lifecycle (start/stop/pause/endSession/setMonoMode) must not be used on
+   * an offline engine — it leans on wall-clock timers and resume/suspend;
+   * use the *Offline methods below, which schedule against ctx time instead.
+   */
+  static async createOffline(
+    profile: SoundProfile,
+    ctx: OfflineAudioContext,
+  ): Promise<AudioEngine> {
+    return AudioEngine.build(ctx, profile, true);
+  }
+
+  private static async build(
+    ctx: BaseAudioContext,
+    profile: SoundProfile,
+    offline: boolean,
+  ): Promise<AudioEngine> {
     await Promise.all([loadNoiseWorklet(ctx), loadAmbienceWorklet(ctx)]);
     const p = cloneProfile(profile);
 
@@ -159,6 +184,7 @@ export class AudioEngine {
       master,
       p.isochronic.rate,
       p.isochronic.enabled ? p.isochronic.depth : 0,
+      offline,
     );
     mixBus.connect(pulse.input);
     const width = new StereoWidthNode(ctx, mixBus, p.stereoWidth);
@@ -172,8 +198,8 @@ export class AudioEngine {
     const harmony = new HarmonyLayer(ctx, width.input, p.harmony.rootHz);
 
     const engine = new AudioEngine(
-      ctx, master, lowpass, bassShelf, limiter, monoGate, width, pulse, tone, binaural,
-      noise, ambience, harmony, p,
+      ctx, offline, master, lowpass, bassShelf, limiter, monoGate, width, pulse, tone,
+      binaural, noise, ambience, harmony, p,
     );
     engine.applyAll();
     return engine;
@@ -189,6 +215,11 @@ export class AudioEngine {
 
   get contextState(): AudioContextState {
     return this.ctx.state;
+  }
+
+  /** The realtime context, or null offline (no resume/suspend/close there). */
+  private get realtime(): AudioContext | null {
+    return this.offline ? null : (this.ctx as AudioContext);
   }
 
   getProfile(): SoundProfile {
@@ -233,7 +264,7 @@ export class AudioEngine {
 
   async start(): Promise<void> {
     clearTimeout(this.stopTimer);
-    if (this.ctx.state !== 'running') await this.ctx.resume();
+    if (this.ctx.state !== 'running') await this.realtime?.resume();
     this.applyAll();
     fadeTo(this.ctx, this.master.gain, this.profile.masterVolume, FADE_IN_SECONDS);
     this.playing = true;
@@ -257,10 +288,10 @@ export class AudioEngine {
       if (chime) {
         playChime(this.ctx, this.limiter);
         this.stopTimer = setTimeout(() => {
-          if (!this.playing) void this.ctx.suspend();
+          if (!this.playing) void this.realtime?.suspend();
         }, CHIME_SECONDS * 1000);
       } else {
-        void this.ctx.suspend();
+        void this.realtime?.suspend();
       }
     }, (fadeSeconds + 0.1) * 1000);
   }
@@ -270,14 +301,46 @@ export class AudioEngine {
     fadeTo(this.ctx, this.master.gain, 0, PAUSE_FADE_SECONDS);
     this.playing = false;
     await new Promise((resolve) => setTimeout(resolve, PAUSE_FADE_SECONDS * 1000 + 50));
-    if (!this.playing) await this.ctx.suspend();
+    if (!this.playing) await this.realtime?.suspend();
   }
 
   async resume(): Promise<void> {
     clearTimeout(this.stopTimer);
-    await this.ctx.resume();
+    await this.realtime?.resume();
     fadeTo(this.ctx, this.master.gain, this.profile.masterVolume, PAUSE_FADE_SECONDS);
     this.playing = true;
+  }
+
+  // ── Offline-render lifecycle ─────────────────────────────────────────────
+  // These schedule against ctx time only (no timers, no resume/suspend), so
+  // the offline driver calls them at t=0 or inside frozen suspend
+  // checkpoints, where ctx.currentTime is the checkpoint time.
+
+  /** Offline t=0: schedule the standard session fade-in. */
+  beginOffline(): void {
+    this.playing = true;
+    fadeTo(this.ctx, this.master.gain, this.profile.masterVolume, FADE_IN_SECONDS);
+  }
+
+  /** Offline end fade — call at the fade's start checkpoint. */
+  scheduleOfflineEndFade(fadeSeconds: number): void {
+    this.playing = false;
+    fadeTo(this.ctx, this.master.gain, 0, fadeSeconds);
+  }
+
+  /** Offline chime — call at the checkpoint where silence has landed. */
+  playOfflineChime(): void {
+    playChime(this.ctx, this.limiter);
+  }
+
+  /** Push pattern-mode pulses forward past the next offline checkpoint. */
+  schedulePulsesUntil(time: number): void {
+    this.pulse.scheduleAheadUntil(time);
+  }
+
+  /** Pending async ambience sample load — await before startRendering(). */
+  whenAmbienceReady(): Promise<void> {
+    return this.ambience.whenReady();
   }
 
   /**
@@ -446,7 +509,7 @@ export class AudioEngine {
     this.bassShelf.disconnect();
     this.limiter.disconnect();
     this.monoGate.disconnect();
-    void this.ctx.close();
+    void this.realtime?.close(); // OfflineAudioContext has no close()
   }
 
   /**

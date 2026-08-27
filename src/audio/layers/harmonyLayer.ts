@@ -93,7 +93,7 @@ export class HarmonyLayer {
   private softness = 0;
 
   constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
     destination: AudioNode,
     rootHz: number,
   ) {

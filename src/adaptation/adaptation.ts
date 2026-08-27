@@ -46,12 +46,19 @@ export interface AdaptationInput {
 
 /**
  * HR only informs adaptation where rising is unambiguously adverse
- * (relax/sleep/meditation). For focus/energy a rising HR could just as well
- * be engagement, so it is ignored (v1).
+ * (relax/sleep/meditation/calm/creative). For focus/energy/flow a rising HR
+ * could just as well be engagement, and for arousal it is expected, so it is
+ * ignored (v1).
  */
 function isAdverseHr(state: MentalState, trend: HrTrend | null): boolean {
   if (trend !== 'rising') return false;
-  return state === 'relax' || state === 'sleep' || state === 'meditation';
+  return (
+    state === 'relax' ||
+    state === 'sleep' ||
+    state === 'meditation' ||
+    state === 'calm' ||
+    state === 'creative'
+  );
 }
 
 /** Apply the soften nudge to the currently playing profile (arm unchanged). */

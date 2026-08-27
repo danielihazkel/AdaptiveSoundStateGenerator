@@ -17,6 +17,8 @@ import {
   type SampleAmbienceType,
   type SoundProfile,
 } from './audio/types';
+import { exportSessionMp3, type ExportProgress } from './export/exportSession';
+import type { ExportSelection } from './export/offlineRenderer';
 import { programMinDurationSec, type Program } from './programs/types';
 import { IDENTITY_MODULATION } from './session/evolution';
 import { computeHrTrend } from './biometrics/hrTrend';
@@ -198,6 +200,9 @@ export function App() {
   const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>();
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>();
   const [starting, setStarting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const exportAbortRef = useRef<AbortController | null>(null);
   const [liveProfile, setLiveProfile] = useState<SoundProfile | null>(null);
   const [microPrompt, setMicroPrompt] = useState<CheckpointInfo | null>(null);
   const [coachMessage, setCoachMessage] = useState<string | null>(null);
@@ -439,6 +444,80 @@ export function App() {
       controllerRef.current = controller;
     }
     return engineRef.current;
+  };
+
+  /**
+   * The sound the Download button would export — same precedence as begin()
+   * (program > preset > personalized), but served deterministically
+   * ('locked' = best known arm): a download must not create a session record
+   * or feed the bandit, and re-downloading should yield the same sound.
+   */
+  const resolveExportSelection = (): { sel: ExportSelection; label: string } => {
+    const program = programs.find((p) => p.id === selectedProgramId);
+    const preset = program
+      ? undefined
+      : presets.find((p) => p.id === selectedPresetId && p.state === mentalState);
+    const chimeEnabled = settings.chimeEnabled;
+    if (program) {
+      return {
+        sel: {
+          profile: normalizeProfile(program.baseProfile),
+          state: program.baseState,
+          durationSec: Math.max(minutes * 60, programMinDurationSec(program)),
+          program,
+          chimeEnabled,
+        },
+        label: program.name,
+      };
+    }
+    if (preset) {
+      return {
+        sel: {
+          profile: cloneProfile(preset.profile),
+          state: mentalState,
+          durationSec: minutes * 60,
+          program: null,
+          chimeEnabled,
+        },
+        label: preset.name,
+      };
+    }
+    const served = chooseProfile(mentalState, intensity, 'locked');
+    return {
+      sel: {
+        profile: served.profile,
+        state: mentalState,
+        durationSec: minutes * 60,
+        program: null,
+        chimeEnabled,
+      },
+      label: mentalState,
+    };
+  };
+
+  const handleDownload = async () => {
+    if (exportProgress) return;
+    const abort = new AbortController();
+    exportAbortRef.current = abort;
+    setExportMessage(null);
+    setExportProgress({ phase: 'rendering', fraction: 0 });
+    try {
+      const { sel, label } = resolveExportSelection();
+      await exportSessionMp3(sel, label, setExportProgress, abort.signal);
+      setExportMessage('Saved — check your downloads. It plays in any audio player.');
+    } catch (err) {
+      if (abort.signal.aborted) {
+        setExportMessage('Download cancelled.');
+      } else {
+        console.error('MP3 export failed', err);
+        setExportMessage(
+          'Could not create the file — this device may be low on memory. Try a shorter duration.',
+        );
+      }
+    } finally {
+      exportAbortRef.current = null;
+      setExportProgress(null);
+    }
   };
 
   const begin = async () => {
@@ -800,6 +879,10 @@ export function App() {
           }
           onShowInsights={() => setScreen('insights')}
           onBegin={() => void begin()}
+          exportProgress={exportProgress}
+          exportMessage={exportMessage}
+          onDownload={() => void handleDownload()}
+          onCancelExport={() => exportAbortRef.current?.abort()}
         />
       )}
 

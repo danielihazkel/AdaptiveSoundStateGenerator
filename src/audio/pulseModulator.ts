@@ -56,10 +56,16 @@ export class PulseModulator {
   private eventTime = 0;
 
   constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
     destination: AudioNode,
     rate: number,
     depth: number,
+    /**
+     * Offline (render-to-file) mode: no setInterval scheduler runs — the
+     * offline driver pushes the pattern forward via scheduleAheadUntil() at
+     * its suspend checkpoints instead.
+     */
+    private readonly offline = false,
   ) {
     this.depth = depth;
     this.input = new GainNode(ctx, { gain: 1 - depth / 2 });
@@ -126,11 +132,24 @@ export class PulseModulator {
     this.input.disconnect();
   }
 
+  /**
+   * Offline scheduling entry point: schedule every pattern pulse starting
+   * before `until` (ctx time). Called at each offline suspend checkpoint with
+   * a horizon past the next checkpoint; idempotent because eventTime only
+   * advances. No-op in simple mode and in realtime engines (the interval
+   * scheduler owns eventTime there — a second writer would double-schedule).
+   */
+  scheduleAheadUntil(until: number): void {
+    if (!this.offline || this.mode !== 'pattern') return;
+    this.scheduleWindow(until);
+  }
+
   private startScheduler(): void {
     if (this.schedulerTimer !== undefined) return;
     this.barEvents = buildBar(this.complexity);
     this.eventIdx = 0;
     this.eventTime = this.ctx.currentTime + 0.05;
+    if (this.offline) return; // driven externally via scheduleAheadUntil
     this.schedulerTimer = setInterval(() => this.schedulerTick(), SCHEDULER_TICK_MS);
     this.schedulerTick();
   }
@@ -160,7 +179,12 @@ export class PulseModulator {
     const now = this.ctx.currentTime;
     // Catch up without scheduling after suspension or a starved interval.
     while (this.eventTime < now) this.advance();
-    while (this.eventTime < now + SCHEDULE_HORIZON_SEC) {
+    this.scheduleWindow(now + SCHEDULE_HORIZON_SEC);
+  }
+
+  /** Schedule every pulse starting before `until`. Shared realtime/offline. */
+  private scheduleWindow(until: number): void {
+    while (this.eventTime < until) {
       const event = this.barEvents[this.eventIdx];
       const beatDur = 60 / this.bpm;
       const start = this.eventTime;

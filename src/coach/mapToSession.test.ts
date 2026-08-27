@@ -34,6 +34,22 @@ describe('coachPlan', () => {
     });
     expect(coachPlan(request({ goal: 'meditate' }))!.state).toBe('meditation');
     expect(coachPlan(request({ goal: 'energize' }))!.state).toBe('energy');
+    expect(coachPlan(request({ goal: 'intimacy' }))).toMatchObject({
+      state: 'arousal',
+      minutes: 30,
+    });
+    expect(coachPlan(request({ goal: 'flow' }))).toMatchObject({
+      state: 'flow',
+      minutes: 90,
+    });
+    expect(coachPlan(request({ goal: 'calm' }))).toMatchObject({
+      state: 'calm',
+      minutes: 15,
+    });
+    expect(coachPlan(request({ goal: 'create' }))).toMatchObject({
+      state: 'creative',
+      minutes: 45,
+    });
   });
 
   it('an explicit duration wins over the state default', () => {
@@ -55,6 +71,27 @@ describe('coachPlan', () => {
     // Aligned energy leaves intensity alone.
     expect(coachPlan(request({ goal: 'relax', energy: 'low' }))!.intensity).toBe(
       calmRelax.intensity,
+    );
+
+    const wiredIntimacy = coachPlan(request({ goal: 'intimacy', energy: 'high' }))!;
+    const calmIntimacy = coachPlan(request({ goal: 'intimacy' }))!;
+    expect(wiredIntimacy.intensity).toBeCloseTo(
+      calmIntimacy.intensity + ENERGY_MISMATCH_INTENSITY_BUMP,
+      5,
+    );
+
+    const wiredCalm = coachPlan(request({ goal: 'calm', energy: 'high' }))!;
+    const restedCalm = coachPlan(request({ goal: 'calm' }))!;
+    expect(wiredCalm.intensity).toBeCloseTo(
+      restedCalm.intensity + ENERGY_MISMATCH_INTENSITY_BUMP,
+      5,
+    );
+
+    const tiredFlow = coachPlan(request({ goal: 'flow', energy: 'low' }))!;
+    const restedFlow = coachPlan(request({ goal: 'flow' }))!;
+    expect(tiredFlow.intensity).toBeCloseTo(
+      restedFlow.intensity + ENERGY_MISMATCH_INTENSITY_BUMP,
+      5,
     );
   });
 

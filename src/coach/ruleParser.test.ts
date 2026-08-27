@@ -21,11 +21,34 @@ describe('parseGoalText', () => {
   it('maps each goal family', () => {
     expect(parseGoalText('help me fall asleep').request.goal).toBe('sleep');
     expect(parseGoalText('I want to meditate').request.goal).toBe('meditate');
-    expect(parseGoalText('so stressed, need to unwind').request.goal).toBe('relax');
+    expect(parseGoalText('so stressed, need to unwind').request.goal).toBe('calm');
     expect(parseGoalText('need to wake up before my workout').request.goal).toBe(
       'energize',
     );
-    expect(parseGoalText('deep work session').request.goal).toBe('work');
+    expect(parseGoalText('deep work session').request.goal).toBe('flow');
+    expect(parseGoalText('something sensual for tonight').request.goal).toBe(
+      'intimacy',
+    );
+    expect(parseGoalText('set the mood for a romantic evening').request.goal).toBe(
+      'intimacy',
+    );
+  });
+
+  it('maps the flow, calm, and create goal families', () => {
+    expect(parseGoalText('time to grind').request.goal).toBe('flow');
+    expect(parseGoalText('get into a flow state').request.goal).toBe('flow');
+    expect(parseGoalText('feeling anxious and overwhelmed').request.goal).toBe('calm');
+    expect(parseGoalText('help me breathe for a bit').request.goal).toBe('calm');
+    expect(parseGoalText('help me brainstorm ideas').request.goal).toBe('create');
+    expect(parseGoalText('I need to write this evening').request.goal).toBe('create');
+    // Plain relaxing still lands on relax, not calm.
+    expect(parseGoalText('just want to chill and relax').request.goal).toBe('relax');
+  });
+
+  it('bare "arousal" means alertness, never the intimacy goal', () => {
+    expect(parseGoalText('my desired arousal is high').request.goal).not.toBe(
+      'intimacy',
+    );
   });
 
   it('detects high energy and distraction masking', () => {

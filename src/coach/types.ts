@@ -4,13 +4,26 @@
  * provider can slot in behind the same interface — CoachProvider.interpret is
  * async for exactly that reason, even though the rule parser is synchronous.
  */
-export type CoachGoal = 'study' | 'work' | 'relax' | 'sleep' | 'meditate' | 'energize';
+export type CoachGoal =
+  | 'study'
+  | 'work'
+  | 'relax'
+  | 'sleep'
+  | 'meditate'
+  | 'energize'
+  | 'intimacy'
+  | 'flow'
+  | 'calm'
+  | 'create';
 
 export interface CoachRequest {
   goal: CoachGoal | null;
   energy: 'low' | 'normal' | 'high' | null;
   durationMin: number | null;
-  /** 0..1 — reserved; the mapper derives it from goal+energy when null. */
+  /**
+   * 0..1 — reserved; the mapper derives it from goal+energy when null.
+   * This is *alertness* in the PRD sense, unrelated to the 'arousal' state.
+   */
   desiredArousal: number | null;
   /** 0..1 — parsed and recorded, not yet used to bias the sound (v1). */
   distractionMasking: number | null;

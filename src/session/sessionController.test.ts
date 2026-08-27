@@ -78,6 +78,16 @@ describe('SessionController', () => {
     expect(engine.endSession).toHaveBeenCalledWith(expect.any(Number), false);
   });
 
+  it('a program endChime overrides the base state: a sleep nap can wake with a chime', async () => {
+    const program = { ...defaultProgram('sleep', 0.5), endChime: true };
+    await controller.start(
+      config({ state: 'sleep', durationSec: 120, chimeEnabled: false, program }),
+    );
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(controller.phase).toBe('ending');
+    expect(engine.endSession).toHaveBeenCalledWith(expect.any(Number), true);
+  });
+
   it('pause freezes the clock, resume continues it', async () => {
     await controller.start(config());
     await vi.advanceTimersByTimeAsync(10_000);

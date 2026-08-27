@@ -19,6 +19,7 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 
 - [x] State selection screen: Focus / Relax / Sleep / Energy / Meditation (§4 Step 1) — `src/ui/StatePicker.tsx`
 - [x] Mental state profiles with per-state parameter ranges (§8) — `src/audio/states.ts`
+- [x] Arousal state (sensual/intimate, experimental — not in PRD §8) — `src/audio/states.ts`, coach goal `intimacy`
 - [x] Intensity slider mapped to modulation depth, beat range position, noise level (§4 Step 2) — `src/audio/states.ts`, `src/ui/SetupScreen.tsx`
 - [x] Duration picker: 15/30/45/60/90/custom + session timer (§4 Step 3) — `src/ui/DurationPicker.tsx`, `src/session/sessionController.ts`
 - [x] Session end behavior per state — sleep fades to silence, no chime (§4 Step 4) — `src/session/sessionController.ts`, `src/audio/chime.ts`
@@ -76,6 +77,7 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [ ] Sample-based ambience: forest, fireplace, café (§6E, post-MVP) — infrastructure done (loader + seamless loop crossfade + asset probe, `src/audio/ambienceAssets.ts`; UI hides types without assets); still needs the actual recordings in `public/ambience/` (see README there)
 - [x] Tone softening: detuning, harmonic stacking, low-pass filtering (§7) — `tone.warmth` (0..1) in `SoundProfile`, implemented in `src/audio/layers/toneLayer.ts` (equal-power, warmth 0 = old pure sine); Warmth slider in the advanced panel
 - [ ] Verify by ear: each synth ambience type solo + click-free switches, ambience steady under deep isochronic depth (post-pulse routing), warmth 0→1 sweep on meditation (no loudness jump), 5-min session per state to hear the compressed arc land in the end fade, drop a test `forest.mp3` in `public/ambience/` and hear it loop seamlessly
+- [x] MP3 session export ("Download") — offline render of the selected session (profile + arc/program, adaptation excluded by design) via `OfflineAudioContext` suspend-checkpoints driving the ordinary `AudioEngine`, lamejs worker encode — `src/export/`, button on the setup screen. Capped at 60 min @ 44.1 kHz (monolithic render buffer ≈ 20 MiB/min). Follow-ups: phase-continuable chunked rendering to lift the cap; stream the encode during the render to shrink peak memory; optional lower-sample-rate long-export mode
 - [ ] PWA vs native wrapper decision for background audio on iOS (§7) -- ignore for now
 - [ ] Offline support (§7) -- ignore for now
 - [ ] Success-metrics instrumentation: completion, retention, rating trend (§18) -- ignore for now

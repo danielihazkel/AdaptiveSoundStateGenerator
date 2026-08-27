@@ -12,7 +12,7 @@ export class NoiseLayer {
   private readonly gain: GainNode;
 
   constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
     destination: AudioNode,
     type: NoiseType,
   ) {

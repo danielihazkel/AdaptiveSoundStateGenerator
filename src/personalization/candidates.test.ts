@@ -16,6 +16,10 @@ const BEAT_BANDS = {
   sleep: [1, 8],
   energy: [10, 32],
   meditation: [3, 10],
+  arousal: [4, 10],
+  flow: [14, 40],
+  calm: [6, 12],
+  creative: [4, 10],
 } as const;
 
 describe('candidate sets', () => {

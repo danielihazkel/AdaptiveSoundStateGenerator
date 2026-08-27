@@ -16,18 +16,23 @@ describe('helpers', () => {
 });
 
 describe('state profiles', () => {
-  it('exposes exactly the 5 MVP states in order', () => {
+  it('exposes exactly the 9 states in order', () => {
     expect(STATE_LIST.map((s) => s.id)).toEqual([
       'focus',
       'relax',
       'sleep',
       'energy',
       'meditation',
+      'arousal',
+      'flow',
+      'calm',
+      'creative',
     ]);
   });
 
-  it('emits the legacy simple rhythm explicitly (fingerprint stability)', () => {
+  it('emits the rhythm block explicitly (fingerprint stability)', () => {
     for (const state of STATE_LIST) {
+      if (state.id === 'energy') continue; // pattern rhythm, asserted below
       for (const t of [0, 0.5, 1]) {
         expect(state.buildProfile(t).rhythm).toEqual({
           mode: 'simple',
@@ -38,20 +43,52 @@ describe('state profiles', () => {
     }
   });
 
-  it('emits disabled harmony and zero bass explicitly (fingerprint stability)', () => {
+  it('gives energy a driving pattern rhythm', () => {
+    const low = STATES.energy.buildProfile(0).rhythm;
+    const high = STATES.energy.buildProfile(1).rhythm;
+    expect(low).toEqual({ mode: 'pattern', bpm: 115, complexity: 0.3 });
+    expect(high).toEqual({ mode: 'pattern', bpm: 140, complexity: 0.55 });
+  });
+
+  it('emits harmony explicitly — disabled block for the pad-free states', () => {
+    const padFree = ['focus', 'sleep', 'energy', 'flow'];
     for (const state of STATE_LIST) {
       for (const t of [0, 0.5, 1]) {
         const p = state.buildProfile(t);
-        expect(p.harmony).toEqual({
-          enabled: false,
-          level: 0.25,
-          richness: 0.5,
-          movement: 0.3,
-          rootHz: 110,
-        });
-        expect(p.bass).toBe(0);
+        if (padFree.includes(state.id)) {
+          expect(p.harmony).toEqual({
+            enabled: false,
+            level: 0.25,
+            richness: 0.5,
+            movement: 0.3,
+            rootHz: 110,
+          });
+        } else {
+          expect(p.harmony.enabled).toBe(true);
+        }
       }
     }
+  });
+
+  it('roots each harmony pad where the state lives', () => {
+    expect(STATES.relax.buildProfile(0.5).harmony.rootHz).toBe(110);
+    expect(STATES.meditation.buildProfile(0.5).harmony.rootHz).toBe(105);
+    expect(STATES.arousal.buildProfile(0.5).harmony.rootHz).toBe(98);
+    expect(STATES.calm.buildProfile(0.5).harmony.rootHz).toBe(110);
+    expect(STATES.creative.buildProfile(0.5).harmony.rootHz).toBe(146.8);
+  });
+
+  it('keeps bass grounded per state', () => {
+    for (const id of ['focus', 'flow', 'creative', 'arousal'] as const) {
+      expect(STATES[id].buildProfile(0.5).bass).toBe(0);
+    }
+    expect(STATES.relax.buildProfile(0.5).bass).toBe(0.1);
+    expect(STATES.meditation.buildProfile(0.5).bass).toBe(0.1);
+    expect(STATES.calm.buildProfile(0.5).bass).toBe(0.15);
+    expect(STATES.sleep.buildProfile(0).bass).toBe(0.1);
+    expect(STATES.sleep.buildProfile(1).bass).toBe(0.2);
+    expect(STATES.energy.buildProfile(0).bass).toBe(0.1);
+    expect(STATES.energy.buildProfile(1).bass).toBe(0.25);
   });
 
   it('clamps intensity outside 0..1', () => {
@@ -73,6 +110,8 @@ describe('state profiles', () => {
           p.noise.level,
           p.isochronic.depth,
           p.ambience.level,
+          p.harmony.level,
+          p.bass,
           p.stereoWidth,
         ]) {
           expect(level).toBeGreaterThanOrEqual(0);
@@ -96,6 +135,15 @@ describe('state profiles', () => {
     expect(STATES.meditation.buildProfile(1).binaural.beat).toBeLessThan(
       STATES.meditation.buildProfile(0).binaural.beat,
     );
+    expect(STATES.arousal.buildProfile(0).binaural.beat).toBe(8);
+    expect(STATES.arousal.buildProfile(1).binaural.beat).toBe(6);
+    // flow rises into gamma; calm and creative settle toward theta.
+    expect(STATES.flow.buildProfile(0).binaural.beat).toBe(18);
+    expect(STATES.flow.buildProfile(1).binaural.beat).toBe(40);
+    expect(STATES.calm.buildProfile(0).binaural.beat).toBe(10);
+    expect(STATES.calm.buildProfile(1).binaural.beat).toBe(8);
+    expect(STATES.creative.buildProfile(0).binaural.beat).toBe(9);
+    expect(STATES.creative.buildProfile(1).binaural.beat).toBe(6);
   });
 
   it('never asks for an isochronic rate above the perceptual cap', () => {
@@ -111,11 +159,40 @@ describe('state profiles', () => {
     expect(STATES.sleep.buildProfile(0.5).lowpassHz).toBe(2000);
   });
 
+  it('arousal fades gently with no chime and warm softened highs', () => {
+    expect(STATES.arousal.end).toEqual({ fadeSeconds: 6, chime: 'none' });
+    expect(STATES.arousal.buildProfile(0.5).lowpassHz).toBe(6000);
+  });
+
+  it('flow ends crisply with an optional chime', () => {
+    expect(STATES.flow.end).toEqual({ fadeSeconds: 1.5, chime: 'optional' });
+  });
+
+  it('calm fades slowly with no chime and softened highs', () => {
+    expect(STATES.calm.end).toEqual({ fadeSeconds: 6, chime: 'none' });
+    expect(STATES.calm.buildProfile(0.5).lowpassHz).toBe(8000);
+  });
+
+  it('calm paces breathing at 6-9 breaths per minute, not the beat', () => {
+    const low = STATES.calm.buildProfile(0).isochronic;
+    const high = STATES.calm.buildProfile(1).isochronic;
+    expect(low.rate).toBeCloseTo(0.15); // 9 breaths/min
+    expect(high.rate).toBeCloseTo(0.1); // 6 breaths/min — resonance frequency
+    expect(low.rate).not.toBe(STATES.calm.buildProfile(0).binaural.beat);
+  });
+
+  it('creative fades gently with no chime', () => {
+    expect(STATES.creative.end).toEqual({ fadeSeconds: 4, chime: 'none' });
+  });
+
   it('marks the drowsy states with the no-driving warning', () => {
     expect(STATE_LIST.filter((s) => s.noDrivingWarning).map((s) => s.id)).toEqual([
       'relax',
       'sleep',
       'meditation',
+      'arousal',
+      'calm',
+      'creative',
     ]);
   });
 });

@@ -20,7 +20,7 @@ export class StereoWidthNode {
   private readonly merger: ChannelMergerNode;
 
   constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
     destination: AudioNode,
     width: number,
   ) {

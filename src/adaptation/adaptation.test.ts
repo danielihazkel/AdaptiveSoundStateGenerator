@@ -142,18 +142,22 @@ describe('decideAdaptation', () => {
     if (tweaks.kind === 'switch') expect(tweaks.trigger).toBe('implicit');
   });
 
-  it('adverse HR triggers a biometric switch for relax, never for focus', () => {
-    const relax = decideAdaptation(
-      input({ state: 'relax', observation: observation({ hrTrend: 'rising' }) }),
-    );
-    expect(relax.kind).toBe('switch');
-    if (relax.kind === 'switch') expect(relax.trigger).toBe('biometric');
+  it('adverse HR triggers a biometric switch for relax and calm, never for focus or flow', () => {
+    for (const state of ['relax', 'calm'] as const) {
+      const action = decideAdaptation(
+        input({ state, observation: observation({ hrTrend: 'rising' }) }),
+      );
+      expect(action.kind).toBe('switch');
+      if (action.kind === 'switch') expect(action.trigger).toBe('biometric');
+    }
 
-    expect(
-      decideAdaptation(
-        input({ state: 'focus', observation: observation({ hrTrend: 'rising' }) }),
-      ),
-    ).toEqual({ kind: 'stay' });
+    for (const state of ['focus', 'flow'] as const) {
+      expect(
+        decideAdaptation(
+          input({ state, observation: observation({ hrTrend: 'rising' }) }),
+        ),
+      ).toEqual({ kind: 'stay' });
+    }
   });
 
   it('customization always wins: stay even on worse', () => {

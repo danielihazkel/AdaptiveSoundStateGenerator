@@ -178,7 +178,8 @@ export class SessionController {
     const end = STATES[config.state].end;
 
     if (phase === 'running' && remainingMs <= end.fadeSeconds * 1000) {
-      const chime = end.chime === 'optional' && config.chimeEnabled;
+      const chime =
+        config.program?.endChime ?? (end.chime === 'optional' && config.chimeEnabled);
       this.engine.endSession(Math.max(remainingMs / 1000, 0.1), chime);
       this.setPhase('ending');
       return;

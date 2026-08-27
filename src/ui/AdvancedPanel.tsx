@@ -189,7 +189,7 @@ export function AdvancedPanel(props: {
         <Slider
           label="Beat"
           min={1}
-          max={30}
+          max={40}
           step={0.5}
           value={p.binaural.beat}
           display={`${p.binaural.beat} Hz`}
@@ -229,9 +229,9 @@ export function AdvancedPanel(props: {
         {p.rhythm.mode === 'simple' ? (
           <Slider
             label="Rate"
-            min={0.5}
+            min={0.1}
             max={16}
-            step={0.5}
+            step={0.1}
             value={p.isochronic.rate}
             display={`${p.isochronic.rate} Hz`}
             onChange={(v) => edit((d) => (d.isochronic.rate = v))}

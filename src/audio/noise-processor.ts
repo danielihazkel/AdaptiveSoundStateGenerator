@@ -77,7 +77,7 @@ registerProcessor('${NOISE_PROCESSOR_NAME}', NoiseProcessor);
 
 const loadedContexts = new WeakSet<BaseAudioContext>();
 
-export async function loadNoiseWorklet(ctx: AudioContext): Promise<void> {
+export async function loadNoiseWorklet(ctx: BaseAudioContext): Promise<void> {
   if (loadedContexts.has(ctx)) return;
   const blob = new Blob([processorSource], { type: 'application/javascript' });
   const url = URL.createObjectURL(blob);

@@ -1,10 +1,10 @@
 # Resonance — Adaptive Sound State Generator
 
-Resonance generates real-time sound environments designed to help you reach a desired mental state — focus, relaxation, sleep, energy, or meditation. Instead of playing pre-recorded tracks, it synthesizes everything algorithmically in the browser with the Web Audio API: colored noise, binaural beat pairs, isochronic-style rhythmic pulses, and pure tones, all mixed per state and intensity.
+Resonance generates real-time sound environments designed to help you reach a desired mental state — focus, relaxation, sleep, energy, meditation, or sensual arousal. Instead of playing pre-recorded tracks, it synthesizes everything algorithmically in the browser with the Web Audio API: colored noise, binaural beat pairs, isochronic-style rhythmic pulses, and pure tones, all mixed per state and intensity.
 
 You don't need to know anything about frequencies. Pick how you want to feel, how deep, and for how long — the app builds the soundscape, runs the session, and asks how well it worked. Over time those ratings (plus implicit signals like early stops and volume tweaks) become the training data for personalization: the app gradually learns which sound configurations work best *for you*. That feedback loop is the core idea — see `PRD.txt` for the full product spec.
 
-Because everything is generated algorithmically, there are no audio files to download and the app works fully offline.
+Because everything is generated algorithmically, the app ships no audio files and works fully offline. When you do want the sound elsewhere — a phone without the app, a car stereo, a cheap speaker — the Download button renders the selected session (up to 60 minutes, including its slow evolution arc) to an MP3 you can play in any audio player. MP3 encoding uses [@breezystack/lamejs](https://github.com/shijinyu/lamejs) (LGPL-3.0), the only non-React runtime dependency.
 
 > **Not a medical device.** These soundscapes are experimental sound environments that may support focus, relaxation, or other states — individual responses vary. No claims of clinical effect are made. Listen at a safe, comfortable volume.
 

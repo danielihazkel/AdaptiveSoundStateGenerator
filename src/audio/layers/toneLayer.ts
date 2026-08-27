@@ -34,7 +34,7 @@ export class ToneLayer {
   private warmth = 0;
 
   constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
     destination: AudioNode,
     frequency: number,
   ) {

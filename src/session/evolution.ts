@@ -79,6 +79,8 @@ const FLAT: ArcTrack = { points: [{ at: 0, value: 1 }] };
  * ramp in below the plateau and ease down at the end; relax/meditation
  * (PRD §8 variation: medium) add one slow deterministic undulation across the
  * plateau; sleep only ever descends — darker, slower, softer — with no rise.
+ * Arousal builds in gently, swells once across the plateau, and eases down
+ * while the filter warms.
  */
 export const STATE_ARCS: Record<MentalState, ArcDefinition> = {
   focus: {
@@ -179,6 +181,99 @@ export const STATE_ARCS: Record<MentalState, ArcDefinition> = {
         { at: 0, value: 0 },
         { at: 0.6, value: -1 },
         { at: 0.8, value: -0.6 },
+        { at: 1, value: -1.2 },
+      ],
+    },
+    lowpassScale: FLAT,
+  },
+  arousal: {
+    intensity: {
+      points: [
+        { at: 0, value: 0.85 },
+        { at: 0.2, value: 1 },
+        { at: 0.5, value: 0.94 },
+        { at: 0.75, value: 1 },
+        { at: 1, value: 0.88 },
+      ],
+    },
+    beatOffsetHz: {
+      points: [
+        { at: 0, value: 0 },
+        { at: 0.55, value: -1 },
+        { at: 0.8, value: -0.5 },
+        { at: 1, value: -1.5 },
+      ],
+    },
+    lowpassScale: {
+      points: [
+        { at: 0, value: 1 },
+        { at: 1, value: 0.85 },
+      ],
+    },
+  },
+  // Flow ramps in from beta (-4 Hz) so the gamma edge builds instead of
+  // slamming in, holds the plateau, then eases off for the wrap-up.
+  flow: {
+    intensity: {
+      points: [
+        { at: 0, value: 0.8 },
+        { at: 0.15, value: 1 },
+        { at: 0.8, value: 1 },
+        { at: 1, value: 0.9 },
+      ],
+    },
+    beatOffsetHz: {
+      points: [
+        { at: 0, value: -4 },
+        { at: 0.3, value: 0 },
+        { at: 0.85, value: 0 },
+        { at: 1, value: -2 },
+      ],
+    },
+    lowpassScale: FLAT,
+  },
+  // Calm settles like relax: a gentle descent with a slight warm-down. The
+  // beat offset never touches the 0.1 Hz breathing pulse (it isn't tracking).
+  calm: {
+    intensity: {
+      points: [
+        { at: 0, value: 1 },
+        { at: 0.3, value: 0.94 },
+        { at: 0.6, value: 0.97 },
+        { at: 1, value: 0.85 },
+      ],
+    },
+    beatOffsetHz: {
+      points: [
+        { at: 0, value: 0 },
+        { at: 0.6, value: -1 },
+        { at: 1, value: -1.5 },
+      ],
+    },
+    lowpassScale: {
+      points: [
+        { at: 0, value: 1 },
+        { at: 1, value: 0.85 },
+      ],
+    },
+  },
+  // Creative undulates like meditation — drift down toward theta with one
+  // mid-session lift to keep the texture from flatlining.
+  creative: {
+    intensity: {
+      points: [
+        { at: 0, value: 0.9 },
+        { at: 0.2, value: 1 },
+        { at: 0.5, value: 0.92 },
+        { at: 0.75, value: 1 },
+        { at: 1, value: 0.88 },
+      ],
+    },
+    beatOffsetHz: {
+      points: [
+        { at: 0, value: 0 },
+        { at: 0.5, value: -1 },
+        { at: 0.75, value: -0.5 },
         { at: 1, value: -1.2 },
       ],
     },

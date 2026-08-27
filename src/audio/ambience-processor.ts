@@ -183,7 +183,7 @@ registerProcessor('${AMBIENCE_PROCESSOR_NAME}', AmbienceProcessor);
 
 const loadedContexts = new WeakSet<BaseAudioContext>();
 
-export async function loadAmbienceWorklet(ctx: AudioContext): Promise<void> {
+export async function loadAmbienceWorklet(ctx: BaseAudioContext): Promise<void> {
   if (loadedContexts.has(ctx)) return;
   const blob = new Blob([processorSource], { type: 'application/javascript' });
   const url = URL.createObjectURL(blob);

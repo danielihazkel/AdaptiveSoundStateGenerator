@@ -45,6 +45,11 @@ export interface Program {
   baseProfile: SoundProfile;
   /** ≥1 segments, sorted, contiguous from minute 0. */
   segments: ProgramSegment[];
+  /**
+   * Overrides the base state's end.chime — a sleep-based nap program can
+   * request a wake chime. Absent = defer to the state (the historic behavior).
+   */
+  endChime?: boolean;
 }
 
 const MIN_BPM = 30;
@@ -151,7 +156,7 @@ export function normalizeProgram(raw: unknown): Program {
     }
   });
 
-  return {
+  const program: Program = {
     id: str(p.id, newId()),
     name: str(p.name, 'Untitled program'),
     createdAt: str(p.createdAt, new Date().toISOString()),
@@ -160,6 +165,10 @@ export function normalizeProgram(raw: unknown): Program {
     baseProfile: normalizeProfile(p.baseProfile ?? STATES[baseState].buildProfile(baseIntensity)),
     segments,
   };
+  // Only materialize an explicit true — absent stays absent so old programs
+  // round-trip identically through the normalizer.
+  if (p.endChime === true) program.endChime = true;
+  return program;
 }
 
 /** Sum of the closed segments in seconds — the minimum session duration. */

@@ -260,6 +260,24 @@ input[type="checkbox"] {
   justify-content: center;
 }
 
+/* MP3 export row under Begin. */
+.download-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.download-row .link-button {
+  margin: 0;
+}
+
+.download-progress {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- Notices & safety ----------------------------------------------------- */
 
 .notice {

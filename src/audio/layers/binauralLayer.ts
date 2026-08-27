@@ -13,7 +13,7 @@ export class BinauralLayer {
   private beat: number;
 
   constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
     destination: AudioNode,
     carrier: number,
     beat: number,
