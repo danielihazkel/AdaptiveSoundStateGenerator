@@ -7,16 +7,11 @@ import {
   type SoundProfile,
 } from '../../audio/types';
 import { programMinDurationSec, type Program } from '../../programs/types';
+import { formatMinSec } from '../format';
 
 /** Short ramp for scrubbing: instant enough to audition, no clicks. */
 const SCRUB_TIME_CONSTANT = 0.15;
 const TICK_MS = 500;
-
-function formatMinSec(totalSec: number): string {
-  const m = Math.floor(totalSec / 60);
-  const s = Math.floor(totalSec % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
 
 /**
  * Audition a timed program without waiting in real time: scrub to any moment
@@ -29,6 +24,8 @@ export function TimelinePreview(props: {
   getEngine: () => AudioEngine | null;
   /** Applies the selected program's base sound to the lab. */
   onApplyBase: (profile: SoundProfile) => void;
+  /** Freeze the preview while a timed run owns the program channel. */
+  disabled?: boolean;
 }) {
   const [programId, setProgramId] = useState<string>('');
   const [positionSec, setPositionSec] = useState(0);
@@ -61,6 +58,11 @@ export function TimelinePreview(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+  // A timed run takes over the program channel — stop rolling, don't clear it.
+  useEffect(() => {
+    if (props.disabled) stopRolling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.disabled]);
 
   const applyAt = (t: number, timeConstant: number) => {
     if (!program) return;
@@ -99,6 +101,7 @@ export function TimelinePreview(props: {
         <span>Program</span>
         <select
           value={programId}
+          disabled={props.disabled}
           onChange={(e) => {
             stopRolling();
             setPositionSec(0);
@@ -132,6 +135,7 @@ export function TimelinePreview(props: {
               max={maxSec}
               step={5}
               value={Math.min(positionSec, maxSec)}
+              disabled={props.disabled}
               onChange={(e) => scrubTo(Number(e.target.value))}
             />
             <span className="value">{formatMinSec(positionSec)}</span>
@@ -145,11 +149,11 @@ export function TimelinePreview(props: {
           )}
           <div className="preset-strip">
             {rolling ? (
-              <button type="button" className="chip" onClick={stopRolling}>
+              <button type="button" className="chip" disabled={props.disabled} onClick={stopRolling}>
                 ❚❚ Hold position
               </button>
             ) : (
-              <button type="button" className="chip" onClick={playFromHere}>
+              <button type="button" className="chip" disabled={props.disabled} onClick={playFromHere}>
                 ► Play from here
               </button>
             )}

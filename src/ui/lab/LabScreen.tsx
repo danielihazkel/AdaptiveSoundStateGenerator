@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { AudioEngine } from '../../audio/engine';
 import { STATES, type MentalState } from '../../audio/states';
 import {
@@ -7,6 +7,7 @@ import {
   type SampleAmbienceType,
   type SoundProfile,
 } from '../../audio/types';
+import { LabProgramRunner } from '../../lab/programRunner';
 import { randomizeProfile } from '../../lab/randomize';
 import type { Program } from '../../programs/types';
 import type { Preset } from '../../storage/types';
@@ -14,13 +15,14 @@ import { AdvancedPanel } from '../AdvancedPanel';
 import { PresetSaveRow } from '../PresetSaveRow';
 import { StatePicker } from '../StatePicker';
 import { ExplorePanel } from './ExplorePanel';
+import { ProgramRunPanel } from './ProgramRunPanel';
 import { TimelinePreview } from './TimelinePreview';
 
 /**
- * The sound lab (a grown-up Phase 0 test bench): instant audio with no
- * session timer, every parameter live, program timeline scrubbing, and
- * exploration tools. Only reachable when no session is running; the engine is
- * shared with sessions, created lazily on the first Play tap (user gesture).
+ * The sound lab (a grown-up Phase 0 test bench): instant audio, every
+ * parameter live, timed program runs, timeline scrubbing, and exploration
+ * tools. Only reachable when no session is running; the engine is shared
+ * with sessions, created lazily on the first Play tap (user gesture).
  */
 export function LabScreen(props: {
   ensureEngine: (profile: SoundProfile) => Promise<AudioEngine>;
@@ -40,6 +42,21 @@ export function LabScreen(props: {
   const [starting, setStarting] = useState(false);
   const startingRef = useRef(false);
 
+  const runnerRef = useRef<LabProgramRunner | null>(null);
+  runnerRef.current ??= new LabProgramRunner();
+  const runner = runnerRef.current;
+  const runStatus = useSyncExternalStore(runner.subscribe, runner.getSnapshot).status;
+  const runActive =
+    runStatus === 'running' || runStatus === 'paused' || runStatus === 'ending';
+  // The lab must hand the engine back clean — the runner stops its audio and
+  // clears the program channel on unmount.
+  useEffect(() => () => runnerRef.current?.dispose(), []);
+  // A timed run takes over the transport; when it ends the engine is stopped,
+  // so the instant Play button must not come back showing Stop.
+  useEffect(() => {
+    if (runActive) setPlaying(false);
+  }, [runActive]);
+
   const apply = (next: SoundProfile) => {
     setProfile(next);
     props.getEngine()?.applyProfile(next);
@@ -50,6 +67,7 @@ export function LabScreen(props: {
     startingRef.current = true;
     setStarting(true);
     try {
+      if (runner.status !== 'idle') runner.stop();
       const engine = await props.ensureEngine(profile);
       engine.applyProfile(profile);
       await engine.start();
@@ -77,20 +95,23 @@ export function LabScreen(props: {
     <section className="lab-screen">
       <h2 className="setup-question">Sound lab</h2>
       <p className="hint">
-        Instant audio, no timer — try any combination, then save what works.
+        Instant audio or a timed program run — try any combination, then save
+        what works.
       </p>
 
-      <div className="transport">
-        {playing ? (
-          <button type="button" className="play-button playing" onClick={stop}>
-            ■ Stop
-          </button>
-        ) : (
-          <button type="button" className="play-button" disabled={starting} onClick={() => void play()}>
-            {starting ? 'Starting…' : '► Play'}
-          </button>
-        )}
-      </div>
+      {!runActive && (
+        <div className="transport">
+          {playing ? (
+            <button type="button" className="play-button playing" onClick={stop}>
+              ■ Stop
+            </button>
+          ) : (
+            <button type="button" className="play-button" disabled={starting} onClick={() => void play()}>
+              {starting ? 'Starting…' : '► Play'}
+            </button>
+          )}
+        </div>
+      )}
 
       <section className="panel">
         <div className="panel-header">
@@ -128,10 +149,20 @@ export function LabScreen(props: {
         )}
       </section>
 
+      <ProgramRunPanel
+        runner={runner}
+        programs={props.programs}
+        state={labState}
+        intensity={labIntensity}
+        ensureEngine={props.ensureEngine}
+        onApplyBase={apply}
+      />
+
       <TimelinePreview
         programs={props.programs}
         getEngine={props.getEngine}
         onApplyBase={apply}
+        disabled={runActive}
       />
 
       <ExplorePanel

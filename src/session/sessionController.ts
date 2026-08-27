@@ -4,6 +4,8 @@ import { STATES, type MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
 import { evaluateProgram } from '../programs/evaluator';
 import type { Program } from '../programs/types';
+import { ElapsedClock } from './elapsedClock';
+import { resolveEndChime } from './endPolicy';
 import { evaluateArc, STATE_ARCS } from './evolution';
 
 export type SessionPhase =
@@ -75,8 +77,7 @@ export class SessionController {
   private nextCheckpointSec = Infinity;
   private checkpointIndex = 0;
   private startedAt = '';
-  private accumulatedMs = 0;
-  private segmentStartedAt = 0;
+  private readonly clock = new ElapsedClock();
   private interval: ReturnType<typeof setInterval> | undefined;
   private listeners = new Set<() => void>();
   private snapshot: SessionSnapshot = { phase: 'idle', elapsedSec: 0, remainingSec: 0 };
@@ -86,7 +87,7 @@ export class SessionController {
       // A suspension we did not initiate (phone call, another app grabbing
       // the output) lands while we still think we are running (PRD §4).
       if (this.snapshot.phase === 'running' && state !== 'running') {
-        this.accumulate();
+        this.clock.pause();
         this.setPhase('interrupted');
       }
     };
@@ -106,8 +107,7 @@ export class SessionController {
   async start(config: SessionConfig): Promise<void> {
     this.config = config;
     this.startedAt = new Date().toISOString();
-    this.accumulatedMs = 0;
-    this.segmentStartedAt = Date.now();
+    this.clock.start();
     this.nextCheckpointSec = config.checkpointSec ?? Infinity;
     this.checkpointIndex = 0;
     this.engine.applyProfile(config.profile);
@@ -128,7 +128,7 @@ export class SessionController {
 
   async pause(): Promise<void> {
     if (this.snapshot.phase !== 'running') return;
-    this.accumulate();
+    this.clock.pause();
     this.setPhase('paused');
     await this.engine.pause();
   }
@@ -137,7 +137,7 @@ export class SessionController {
     const phase = this.snapshot.phase;
     if (phase !== 'paused' && phase !== 'interrupted') return;
     await this.engine.resume();
-    this.segmentStartedAt = Date.now();
+    this.clock.resume();
     this.setPhase('running');
   }
 
@@ -145,7 +145,7 @@ export class SessionController {
   stop(): void {
     const phase = this.snapshot.phase;
     if (phase !== 'running' && phase !== 'paused' && phase !== 'interrupted') return;
-    if (phase === 'running') this.accumulate();
+    this.clock.pause();
     clearInterval(this.interval);
     this.engine.stop();
     this.setPhase('stoppedEarly');
@@ -178,15 +178,14 @@ export class SessionController {
     const end = STATES[config.state].end;
 
     if (phase === 'running' && remainingMs <= end.fadeSeconds * 1000) {
-      const chime =
-        config.program?.endChime ?? (end.chime === 'optional' && config.chimeEnabled);
+      const chime = resolveEndChime(config.state, config.program, config.chimeEnabled);
       this.engine.endSession(Math.max(remainingMs / 1000, 0.1), chime);
       this.setPhase('ending');
       return;
     }
     if (phase === 'ending' && remainingMs <= 0) {
       clearInterval(this.interval);
-      this.accumulate();
+      this.clock.pause();
       this.setPhase('finished');
       this.emitResult(true);
       return;
@@ -232,15 +231,7 @@ export class SessionController {
   }
 
   private elapsedMs(): number {
-    const running =
-      this.snapshot.phase === 'running' || this.snapshot.phase === 'ending';
-    const segment = running ? Date.now() - this.segmentStartedAt : 0;
-    return this.accumulatedMs + segment;
-  }
-
-  private accumulate(): void {
-    this.accumulatedMs += Date.now() - this.segmentStartedAt;
-    this.segmentStartedAt = Date.now();
+    return this.clock.elapsedMs();
   }
 
   private emitResult(completed: boolean): void {
@@ -248,7 +239,7 @@ export class SessionController {
     this.onComplete?.({
       config: this.config,
       startedAt: this.startedAt,
-      actualDurationSec: Math.round(this.accumulatedMs / 1000),
+      actualDurationSec: Math.round(this.clock.elapsedMs() / 1000),
       completed,
     });
   }
