@@ -1,3 +1,9 @@
+import {
+  breathEnvelopeAt,
+  levelBeforePhase,
+  patternPeriodSec,
+  type BreathPattern,
+} from './breathing';
 import { ramp } from './ramp';
 import {
   BEATS_PER_BAR,
@@ -17,6 +23,11 @@ const SCHEDULER_TICK_MS = 100;
 const SCHEDULE_HORIZON_SEC = 1.2;
 /** Segments per raised-cosine pulse envelope (linear-ramp approximation). */
 const ENVELOPE_SEGMENTS = 8;
+/** Segments per breath inhale/exhale ramp (4-8 s long, so 8 is plenty). */
+const BREATH_SEGMENTS = 8;
+
+/** The profile's two rhythm modes plus the guided-breathing side channel. */
+type PulseMode = RhythmMode | 'breath';
 
 /** One scheduled pulse, in absolute (session) seconds. */
 interface ScheduledPulse {
@@ -54,7 +65,16 @@ export interface PulseHandover {
  * exactly `depth` and the limiter-safe invariant (gain ∈ [1 - depth, 1])
  * holds in both modes.
  *
- * Mode switches crossfade the two depth paths via ramps — no graph changes.
+ * Breath mode (guided breathing, engine side channel): the same
+ * patternSource.offset carries a slow 0..1 breath envelope — raised-cosine
+ * up over the inhale, flat through holds, down over the exhale — but with
+ * patternDepthGain at +depth and input at 1 - depth, so the mix is loudest
+ * at the top of the breath: gain = 1 - depth + depth·env ∈ [1 - depth, 1].
+ * Cycles are scheduled whole from an anchor time, so the envelope is a pure
+ * function of time (the on-screen pacer computes the same function) and a
+ * pattern change takes effect from the next unscheduled cycle.
+ *
+ * Mode switches crossfade the depth paths via ramps — no graph changes.
  */
 export class PulseModulator {
   readonly input: GainNode;
@@ -63,10 +83,15 @@ export class PulseModulator {
   private readonly patternSource: ConstantSourceNode;
   private readonly patternDepthGain: GainNode;
 
-  private mode: RhythmMode = 'simple';
+  private mode: PulseMode = 'simple';
   private depth: number;
   private bpm = 80;
   private complexity = 0;
+  private breath: BreathPattern | null = null;
+  /** ctx time of breath cycle 0. */
+  private breathAnchor = 0;
+  /** ctx time up to which the breath envelope has been scheduled. */
+  private breathScheduledUntil = -Infinity;
 
   private schedulerTimer: ReturnType<typeof setInterval> | undefined;
   private barEvents: PulseEvent[] = [];
@@ -113,14 +138,28 @@ export class PulseModulator {
     ramp(this.ctx, this.input.gain, 1 - depth / 2, timeConstant);
   }
 
-  /** Crossfades between the sine-LFO path and the scheduled-pattern path. */
-  setMode(mode: RhythmMode, timeConstant?: number): void {
+  /** Crossfades between the sine-LFO, scheduled-pattern, and breath paths. */
+  setMode(mode: PulseMode, timeConstant?: number): void {
     if (this.mode === mode) return;
+    const wasScheduled = this.mode !== 'simple';
     this.mode = mode;
+    // Pattern pulses and breath cycles share patternSource.offset; a switch
+    // between them must clear the other's pending automation. Mode switches
+    // are rare (session start, profile edits) and the depth-gain crossfade
+    // through zero hides the reset — the never-cancel rule is about
+    // parameter changes *within* a mode.
+    if (wasScheduled && mode !== 'simple') this.resetOffsetAutomation();
     if (mode === 'pattern') {
       ramp(this.ctx, this.depthGain.gain, 0, timeConstant);
       ramp(this.ctx, this.input.gain, 1, timeConstant);
       ramp(this.ctx, this.patternDepthGain.gain, -this.depth, timeConstant);
+      this.resetBar();
+      this.startScheduler();
+    } else if (mode === 'breath') {
+      ramp(this.ctx, this.depthGain.gain, 0, timeConstant);
+      ramp(this.ctx, this.input.gain, 1 - this.depth, timeConstant);
+      ramp(this.ctx, this.patternDepthGain.gain, this.depth, timeConstant);
+      this.breathScheduledUntil = -Infinity;
       this.startScheduler();
     } else {
       this.stopScheduler();
@@ -128,6 +167,25 @@ export class PulseModulator {
       ramp(this.ctx, this.depthGain.gain, this.depth / 2, timeConstant);
       ramp(this.ctx, this.input.gain, 1 - this.depth / 2, timeConstant);
     }
+  }
+
+  /**
+   * Breath-path targets. The pattern applies from the next unscheduled
+   * cycle; the anchor is the ctx time of cycle 0 (shared with the pacer via
+   * session elapsed time). Depth ramps independently of the envelope.
+   */
+  setBreath(
+    pattern: BreathPattern,
+    anchorCtxTime: number,
+    depth: number,
+    timeConstant?: number,
+  ): void {
+    this.breath = pattern;
+    this.breathAnchor = anchorCtxTime;
+    this.depth = depth;
+    if (this.mode !== 'breath') return;
+    ramp(this.ctx, this.patternDepthGain.gain, depth, timeConstant);
+    ramp(this.ctx, this.input.gain, 1 - depth, timeConstant);
   }
 
   /**
@@ -161,8 +219,9 @@ export class PulseModulator {
    * scheduler owns eventTime there — a second writer would double-schedule).
    */
   scheduleAheadUntil(until: number): void {
-    if (!this.offline || this.mode !== 'pattern') return;
-    this.scheduleWindow(until);
+    if (!this.offline) return;
+    if (this.mode === 'pattern') this.scheduleWindow(until);
+    else if (this.mode === 'breath') this.scheduleBreathWindow(until);
   }
 
   /**
@@ -205,14 +264,34 @@ export class PulseModulator {
     }
   }
 
-  private startScheduler(): void {
-    if (this.schedulerTimer !== undefined) return;
+  /** Restart the bar from "now" — on entering pattern mode. */
+  private resetBar(): void {
     this.barEvents = buildBar(this.complexity);
     this.eventIdx = 0;
     this.eventTime = this.ctx.currentTime + 0.05;
+  }
+
+  private startScheduler(): void {
     if (this.offline) return; // driven externally via scheduleAheadUntil
+    if (this.schedulerTimer !== undefined) {
+      this.schedulerTick();
+      return;
+    }
     this.schedulerTimer = setInterval(() => this.schedulerTick(), SCHEDULER_TICK_MS);
     this.schedulerTick();
+  }
+
+  /** Drop pending offset automation and pin the value — only across mode switches. */
+  private resetOffsetAutomation(): void {
+    const now = this.ctx.currentTime;
+    const offset = this.patternSource.offset;
+    if (typeof offset.cancelAndHoldAtTime === 'function') {
+      offset.cancelAndHoldAtTime(now);
+    } else {
+      offset.cancelScheduledValues(now);
+    }
+    offset.setValueAtTime(0, now + 0.05);
+    this.scheduledLog = [];
   }
 
   private stopScheduler(): void {
@@ -238,9 +317,66 @@ export class PulseModulator {
   private schedulerTick(): void {
     if (this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime;
+    if (this.mode === 'breath') {
+      this.scheduleBreathWindow(now + SCHEDULE_HORIZON_SEC);
+      return;
+    }
+    if (this.mode !== 'pattern') return;
     // Catch up without scheduling after suspension or a starved interval.
     while (this.eventTime < now) this.advance();
     this.scheduleWindow(now + SCHEDULE_HORIZON_SEC);
+  }
+
+  /**
+   * Schedule every breath cycle that starts before `until`, whole. On a
+   * fresh start (or after a gap — the context was suspended under us) the
+   * envelope is pinned at its current value first and the remainder of the
+   * in-progress cycle is scheduled from there, so a chunk or a resume that
+   * lands mid-cycle is still correct.
+   */
+  private scheduleBreathWindow(until: number): void {
+    const pattern = this.breath;
+    if (!pattern) return;
+    const period = patternPeriodSec(pattern);
+    if (!(period > 0)) return;
+    const now = this.ctx.currentTime;
+    let from = this.breathScheduledUntil;
+    if (from < now) {
+      from = now;
+      this.patternSource.offset.setValueAtTime(
+        breathEnvelopeAt(pattern, now - this.breathAnchor),
+        now,
+      );
+    }
+    while (from < until) {
+      const cycleStart =
+        this.breathAnchor + Math.floor((from - this.breathAnchor) / period) * period;
+      this.scheduleBreathCycle(pattern, cycleStart, from);
+      from = cycleStart + period;
+    }
+    this.breathScheduledUntil = from;
+  }
+
+  /** Ramps for one cycle starting at `cycleStart`, skipping points at or before `from`. */
+  private scheduleBreathCycle(pattern: BreathPattern, cycleStart: number, from: number): void {
+    const offset = this.patternSource.offset;
+    let t = cycleStart;
+    pattern.phases.forEach((phase, index) => {
+      const start = t;
+      const end = t + phase.seconds;
+      t = end;
+      if (end <= from) return;
+      if (phase.label === 'hold') {
+        offset.linearRampToValueAtTime(levelBeforePhase(pattern, index), end);
+        return;
+      }
+      for (let k = 1; k <= BREATH_SEGMENTS; k++) {
+        const time = start + (phase.seconds * k) / BREATH_SEGMENTS;
+        if (time <= from) continue;
+        const e = 0.5 * (1 - Math.cos((Math.PI * k) / BREATH_SEGMENTS));
+        offset.linearRampToValueAtTime(phase.label === 'in' ? e : 1 - e, time);
+      }
+    });
   }
 
   /** Schedule every pulse starting before `until`. Shared realtime/offline. */

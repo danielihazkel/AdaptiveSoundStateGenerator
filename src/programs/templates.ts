@@ -1,5 +1,5 @@
 import { STATES, clamp01, type MentalState } from '../audio/states';
-import type { SoundProfile } from '../audio/types';
+import { cloneProfile, type SoundProfile } from '../audio/types';
 import { newId } from '../storage/id';
 import { defaultProgram, type Program, type ProgramSegment } from './types';
 
@@ -113,7 +113,7 @@ function contextTemplate(
  * warmth is still required on every phase so the evaluator's null-mixing snap
  * path never triggers.
  */
-interface ArcPhaseSpec {
+export interface ArcPhaseSpec {
   endMin: number | null;
   label: string;
   description: string;
@@ -125,6 +125,61 @@ interface ArcPhaseSpec {
   ambienceScale?: number;
   lowpassScale?: number;
   harmonyScale?: number;
+  toneScale?: number;
+}
+
+/**
+ * Build a session-arc program from phase specs: the base state's own
+ * profile (or a supplied one, e.g. a preset) with the pattern pulse enabled,
+ * and phases whose listed intensity is centred at t = 0.5 (±0.1 with t).
+ * Used by the arc templates and by generated interval programs.
+ */
+export function buildArcProgram(
+  baseState: MentalState,
+  intensity: number,
+  phases: ArcPhaseSpec[],
+  options: { name: string; endChime?: boolean; boundaryChime?: boolean; baseProfile?: SoundProfile },
+): Program {
+  const t = clamp01(intensity);
+  const profile = options.baseProfile
+    ? cloneProfile(options.baseProfile)
+    : STATES[baseState].buildProfile(t);
+  // The evaluator's pattern pulse needs the depth source active.
+  profile.isochronic.enabled = true;
+  let cursor = 0;
+  const segments: ProgramSegment[] = phases.map((phase) => {
+    const startMin = cursor;
+    if (phase.endMin !== null) cursor = phase.endMin;
+    const segment: ProgramSegment = {
+      id: newId(),
+      startMin,
+      endMin: phase.endMin,
+      label: phase.label,
+      description: phase.description,
+      intensity: clamp01(phase.intensity + 0.2 * (t - 0.5)),
+      bpmRange: [...phase.bpmRange] as [number, number],
+      complexity: phase.complexity,
+      warmth: phase.warmth,
+    };
+    if (phase.noiseScale !== undefined) segment.noiseScale = phase.noiseScale;
+    if (phase.ambienceScale !== undefined) segment.ambienceScale = phase.ambienceScale;
+    if (phase.lowpassScale !== undefined) segment.lowpassScale = phase.lowpassScale;
+    if (phase.harmonyScale !== undefined) segment.harmonyScale = phase.harmonyScale;
+    if (phase.toneScale !== undefined) segment.toneScale = phase.toneScale;
+    return segment;
+  });
+  const program: Program = {
+    id: newId(),
+    name: options.name,
+    createdAt: new Date().toISOString(),
+    baseState,
+    baseIntensity: t,
+    baseProfile: profile,
+    segments,
+  };
+  if (options.endChime) program.endChime = true;
+  if (options.boundaryChime) program.boundaryChime = true;
+  return program;
 }
 
 /**
@@ -148,43 +203,10 @@ function arcTemplate(
     emoji,
     description,
     build(_state, intensity) {
-      const t = clamp01(intensity);
-      const profile = STATES[baseState].buildProfile(t);
-      // The evaluator's pattern pulse needs the depth source active.
-      profile.isochronic.enabled = true;
-      let cursor = 0;
-      const segments: ProgramSegment[] = phases.map((phase) => {
-        const startMin = cursor;
-        if (phase.endMin !== null) cursor = phase.endMin;
-        const segment: ProgramSegment = {
-          id: newId(),
-          startMin,
-          endMin: phase.endMin,
-          label: phase.label,
-          description: phase.description,
-          // Center the listed value at t=0.5, lifting/lowering ±0.1 with t.
-          intensity: clamp01(phase.intensity + 0.2 * (t - 0.5)),
-          bpmRange: [...phase.bpmRange] as [number, number],
-          complexity: phase.complexity,
-          warmth: phase.warmth,
-        };
-        if (phase.noiseScale !== undefined) segment.noiseScale = phase.noiseScale;
-        if (phase.ambienceScale !== undefined) segment.ambienceScale = phase.ambienceScale;
-        if (phase.lowpassScale !== undefined) segment.lowpassScale = phase.lowpassScale;
-        if (phase.harmonyScale !== undefined) segment.harmonyScale = phase.harmonyScale;
-        return segment;
-      });
-      const program: Program = {
-        id: newId(),
+      return buildArcProgram(baseState, intensity, phases, {
         name: label,
-        createdAt: new Date().toISOString(),
-        baseState,
-        baseIntensity: t,
-        baseProfile: profile,
-        segments,
-      };
-      if (options?.endChime) program.endChime = true;
-      return program;
+        endChime: options?.endChime,
+      });
     },
   };
 }

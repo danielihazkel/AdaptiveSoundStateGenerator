@@ -1,8 +1,12 @@
+import { BREATH_PATTERNS, type BreathingPatternId } from '../audio/breathing';
 import type { MentalState } from '../audio/states';
+import { breathingFor, wakeUpFor } from '../session/sessionOptions';
 import { cloneProfile, normalizeProfile } from '../audio/types';
 import { chooseProfile } from '../personalization/personalizer';
+import { resolveSessionProgram } from '../app/resolveSessionProgram';
+import type { IntervalPlan } from '../programs/intervals';
 import { programMinDurationSec, type Program } from '../programs/types';
-import type { Preset } from '../storage/types';
+import type { Preset, Settings } from '../storage/types';
 import type { ExportSelection } from './offlineRenderer';
 
 export interface SetupExportInput {
@@ -14,6 +18,11 @@ export interface SetupExportInput {
   intensity: number;
   minutes: number;
   chimeEnabled: boolean;
+  /** Interval plan (generates a program) — absent/null = none. */
+  intervals?: IntervalPlan | null;
+  /** Guided breathing / wake-up settings; absent = neither. */
+  breathingPattern?: BreathingPatternId;
+  wakeUp?: Settings['wakeUp'];
 }
 
 /**
@@ -27,31 +36,48 @@ export function resolveSetupExport(input: SetupExportInput): {
   sel: ExportSelection;
   label: string;
 } {
-  const program = input.programs.find((p) => p.id === input.selectedProgramId);
-  const preset = program
-    ? undefined
-    : input.presets.find((p) => p.id === input.selectedPresetId && p.state === input.state);
+  const selectedPreset = input.presets.find(
+    (p) => p.id === input.selectedPresetId && p.state === input.state,
+  );
+  const resolved = resolveSessionProgram({
+    programs: input.programs,
+    selectedProgramId: input.selectedProgramId,
+    intervals: input.intervals ?? null,
+    state: input.state,
+    intensity: input.intensity,
+    presetProfile: selectedPreset?.profile,
+  });
+  const program = resolved.program;
+  const preset = program ? undefined : selectedPreset;
   const chimeEnabled = input.chimeEnabled;
   if (program) {
     return {
       sel: {
         profile: normalizeProfile(program.baseProfile),
         state: program.baseState,
-        durationSec: Math.max(input.minutes * 60, programMinDurationSec(program)),
+        durationSec: resolved.generated
+          ? programMinDurationSec(program)
+          : Math.max(input.minutes * 60, programMinDurationSec(program)),
         program,
         chimeEnabled,
       },
       label: program.name,
     };
   }
+  const durationSec = input.minutes * 60;
+  const breathingId = breathingFor(input.state, input.breathingPattern);
+  const breathing = breathingId ? BREATH_PATTERNS[breathingId] : null;
+  const wakeUp = wakeUpFor(input.state, input.wakeUp, durationSec);
   if (preset) {
     return {
       sel: {
         profile: cloneProfile(preset.profile),
         state: input.state,
-        durationSec: input.minutes * 60,
+        durationSec,
         program: null,
         chimeEnabled,
+        breathing,
+        wakeUp,
       },
       label: preset.name,
     };
@@ -61,9 +87,11 @@ export function resolveSetupExport(input: SetupExportInput): {
     sel: {
       profile: served.profile,
       state: input.state,
-      durationSec: input.minutes * 60,
+      durationSec,
       program: null,
       chimeEnabled,
+      breathing,
+      wakeUp,
     },
     label: input.state,
   };

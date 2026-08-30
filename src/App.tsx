@@ -1,20 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { STATES } from './audio/states';
 import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
 import type { Program } from './programs/types';
 import { deletePreset, deleteProgram, newId, savePreset, saveProgram } from './storage/storage';
-import { modeFor } from './storage/types';
+import { DEFAULT_WAKE_UP, modeFor } from './storage/types';
 import { BiometricsPanel } from './ui/BiometricsPanel';
 import { CoachInput } from './ui/CoachInput';
 import { DataPanel } from './ui/DataPanel';
 import { FeedbackScreen } from './ui/FeedbackScreen';
-import { HistoryScreen } from './ui/HistoryScreen';
-import { InsightsScreen } from './ui/InsightsScreen';
 import { MorningPromptModal } from './ui/MorningPrompt';
 import { DisclaimerModal, FooterDisclaimer } from './ui/SafetyNotices';
-import { LabScreen } from './ui/lab/LabScreen';
-import { ProgramEditor } from './ui/ProgramEditor';
 import { SetupScreen } from './ui/SetupScreen';
 import { SessionView } from './app/SessionView';
 import type { Screen } from './app/types';
@@ -28,6 +24,28 @@ import {
 } from './app/useSessionOrchestrator';
 import { useSetupSelection } from './app/useSetupSelection';
 import { useStoredData } from './app/useStoredData';
+import { useShareImport } from './app/useShareImport';
+import { useTabGuard } from './app/useTabGuard';
+import { ShareImportModal } from './ui/ShareImportModal';
+
+// Power-user screens load on demand so the first paint (setup → session)
+// doesn't carry the lab, editor, history, and insights code.
+const HistoryScreen = lazy(() =>
+  import('./ui/HistoryScreen').then((m) => ({ default: m.HistoryScreen })),
+);
+const InsightsScreen = lazy(() =>
+  import('./ui/InsightsScreen').then((m) => ({ default: m.InsightsScreen })),
+);
+const LabScreen = lazy(() => import('./ui/lab/LabScreen').then((m) => ({ default: m.LabScreen })));
+const ProgramEditor = lazy(() =>
+  import('./ui/ProgramEditor').then((m) => ({ default: m.ProgramEditor })),
+);
+
+const SCREEN_LOADING = (
+  <p className="hint" role="status">
+    Loading…
+  </p>
+);
 
 const STORAGE_NOTICES = {
   write:
@@ -56,10 +74,26 @@ export function App() {
   const selection = useSetupSelection({ onUserOverride: coach.reset });
   const biometrics = useBiometrics();
   const exporter = useMp3Export();
+  const tabGuard = useTabGuard();
+  const share = useShareImport();
+
+  // Screens are conditionally rendered, not routed — move focus to the
+  // heading on each change so keyboard and screen-reader users land at the
+  // top of the new screen instead of on a vanished button.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const firstRenderRef = useRef(true);
+  useEffect(() => {
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      return;
+    }
+    headingRef.current?.focus();
+  }, [screen]);
 
   // The orchestrator and the adaptation loop reference each other; the loop
-  // reaches the orchestrator through a ref that is filled in right below, and
-  // only ever dereferences it at call time (checkpoints), never during render.
+  // reaches the orchestrator through a ref that is synced after each commit
+  // (never written during render), and only ever dereferences it at call
+  // time (checkpoints).
   const sessionRef = useRef<SessionOrchestrator | null>(null);
   const adaptation = useAdaptationLoop({
     getEngine: () => sessionRef.current?.getEngine() ?? null,
@@ -80,7 +114,9 @@ export function App() {
     onFinished: setScreen,
     onSessionStarted: () => setScreen('session'),
   });
-  sessionRef.current = session;
+  useLayoutEffect(() => {
+    sessionRef.current = session;
+  });
   const feedback = useFeedbackHandlers({
     getLastSession: session.getLastSession,
     morningPrompt: data.morningPrompt,
@@ -110,8 +146,11 @@ export function App() {
       selectedPresetId: selection.selectedPresetId,
       state: selection.mentalState,
       intensity: selection.intensity,
-      minutes: selection.minutes,
+      minutes: selection.resolveMinutes(),
       chimeEnabled: settings.chimeEnabled,
+      intervals: selection.intervals,
+      breathingPattern: settings.breathingPattern,
+      wakeUp: settings.wakeUp,
     });
     void exporter.start(sel, label);
   };
@@ -150,7 +189,32 @@ export function App() {
         <MorningPromptModal onRate={feedback.morningRate} onDismiss={feedback.morningDismiss} />
       )}
 
-      <h1>Resonance</h1>
+      {settings.disclaimerAcknowledgedAt && !data.morningPrompt && share.pending && screen === 'setup' && (
+        <ShareImportModal
+          pending={share.pending}
+          onDismiss={share.dismiss}
+          onImport={(payload) => {
+            const now = new Date().toISOString();
+            if (payload.kind === 'program') {
+              const program = { ...payload.program, id: newId(), createdAt: now };
+              saveProgram(program);
+              data.refreshPrograms();
+              selection.selectProgram(program);
+            } else {
+              const preset = { id: newId(), createdAt: now, ...payload.preset };
+              savePreset(preset);
+              data.refreshPresets();
+              selection.selectState(preset.state);
+              selection.selectPreset(preset);
+            }
+            share.dismiss();
+          }}
+        />
+      )}
+
+      <h1 ref={headingRef} tabIndex={-1}>
+        Resonance
+      </h1>
       <p className="subtitle">Generated sound for the state you want.</p>
 
       {data.storageFailure && screen === 'setup' && (
@@ -161,6 +225,23 @@ export function App() {
             className="chip"
             aria-label="Dismiss storage warning"
             onClick={data.dismissStorageFailure}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {tabGuard.otherTab && screen === 'setup' && (
+        <div className="notice warning" role="alert">
+          <span>
+            Resonance is already open in another tab. Sessions and saved data can
+            conflict — use the other tab, or continue here.
+          </span>
+          <button
+            type="button"
+            className="chip"
+            aria-label="Dismiss other-tab warning"
+            onClick={tabGuard.dismiss}
           >
             ✕
           </button>
@@ -179,6 +260,14 @@ export function App() {
           state={selection.mentalState}
           intensity={selection.intensity}
           minutes={selection.minutes}
+          endAt={selection.endAt}
+          onEndAtChange={selection.setEndAt}
+          breathingPattern={settings.breathingPattern ?? 'pulse'}
+          onBreathingPatternChange={(id) => updateSettings({ breathingPattern: id })}
+          wakeUp={settings.wakeUp ?? DEFAULT_WAKE_UP}
+          onWakeUpChange={(wakeUp) => updateSettings({ wakeUp })}
+          intervals={selection.intervals}
+          onIntervalsChange={selection.setIntervals}
           presets={presets}
           selectedPresetId={selection.selectedPresetId}
           programs={programs}
@@ -257,6 +346,7 @@ export function App() {
 
       {screen === 'setup' && <DataPanel onImported={data.reloadAll} />}
 
+      <Suspense fallback={SCREEN_LOADING}>
       {screen === 'insights' && (
         <InsightsScreen insights={data.insights} onBack={() => setScreen('setup')} />
       )}
@@ -313,12 +403,14 @@ export function App() {
           onBack={closeLab}
         />
       )}
+      </Suspense>
 
       {screen === 'session' && controller && session.liveProfile && (
         <SessionView
           controller={controller}
           mentalState={adaptation.getMeta()?.state ?? selection.mentalState}
           program={session.getSessionProgram() ?? undefined}
+          breathing={session.getSessionBreathing() ?? undefined}
           profile={session.liveProfile}
           onProfileChange={session.handleProfileChange}
           onStop={session.stop}

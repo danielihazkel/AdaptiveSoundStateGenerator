@@ -20,6 +20,11 @@ body {
     calc(1.25rem + env(safe-area-inset-left, 0px));
 }
 
+/* Programmatic focus on screen change shouldn't draw a ring on the title. */
+h1:focus {
+  outline: none;
+}
+
 /* Keyboard focus — visible on every interactive element, mouse clicks excluded. */
 :focus-visible {
   outline: 2px solid #4f7cff;
@@ -454,7 +459,7 @@ input[type="checkbox"] {
   min-height: 1rem;
 }
 
-/* Breathing pacer — shown when the pulse is at a breathing rate (calm). */
+/* Breathing pacer — a slow pulse (calm) or a guided pattern (box, 4-7-8). */
 .pacer {
   display: flex;
   flex-direction: column;
@@ -464,17 +469,26 @@ input[type="checkbox"] {
 }
 
 .pacer-circle {
-  --period: 8s;
+  --phase: 4s;
   width: 140px;
   height: 140px;
   border-radius: 50%;
   background: rgba(79, 124, 255, 0.35);
   border: 2px solid #4f7cff;
-  animation: breathe var(--period) ease-in-out infinite;
+  transform: scale(0.55);
+  transition: transform var(--phase) ease-in-out;
+}
+
+.pacer-circle.full {
+  transform: scale(1);
+}
+
+.pacer-circle.empty {
+  transform: scale(0.55);
 }
 
 .pacer-circle.paused {
-  animation-play-state: paused;
+  transition: none;
 }
 
 .pacer-caption {
@@ -483,42 +497,20 @@ input[type="checkbox"] {
   min-height: 1.2em;
 }
 
-@keyframes breathe {
-  0% {
-    transform: scale(0.55);
-  }
-  50% {
-    transform: scale(1);
-  }
-  100% {
-    transform: scale(0.55);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .pacer-circle {
-    animation-name: breathe-fade;
+    transform: none;
+    transition: opacity var(--phase) ease-in-out;
+    opacity: 0.35;
   }
-  @keyframes breathe-fade {
-    0% {
-      opacity: 0.35;
-    }
-    50% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0.35;
-    }
+  .pacer-circle.full {
+    transform: none;
+    opacity: 1;
   }
-}
-
-/* --- Session history -------------------------------------------------------- */
-
-.stat-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 0.6rem;
-  margin: 0.75rem 0 1.25rem;
+  .pacer-circle.empty {
+    transform: none;
+    opacity: 0.35;
+  }
 }
 
 .stat-tile {
@@ -899,4 +891,33 @@ input[type="checkbox"] {
 .timeline-preview input[type="range"] {
   width: 100%;
   accent-color: #4f7cff;
+}
+
+/* Guided breathing / wake-up options on the setup screen. */
+.option-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.option-row input[type="number"] {
+  width: 4.5rem;
+}
+
+.import-confirm {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.share-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.share-row input[type="text"] {
+  width: min(100%, 22rem);
 }

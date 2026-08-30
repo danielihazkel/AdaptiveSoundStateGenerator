@@ -1,4 +1,6 @@
+import type { BreathingPatternId } from '../audio/breathing';
 import type { MentalState } from '../audio/states';
+import type { IntervalPlan } from '../programs/intervals';
 import type { SoundProfile } from '../audio/types';
 
 /**
@@ -23,7 +25,15 @@ export interface Settings {
   adaptationEnabled?: boolean;
   /** ISO timestamp of explicit wearable-data consent (PRD §14); null = none. */
   biometricsConsentAt?: string | null;
+  /** Guided breathing for calm/relax/meditation; absent = follow the pulse. */
+  breathingPattern?: BreathingPatternId;
+  /** Sleep sessions: rise gently over the last `riseMinutes` and end with a chime. */
+  wakeUp?: { enabled: boolean; riseMinutes: number };
 }
+
+export const DEFAULT_WAKE_UP = { enabled: false, riseMinutes: 10 } as const;
+export const MIN_WAKE_RISE_MINUTES = 3;
+export const MAX_WAKE_RISE_MINUTES = 30;
 
 export const defaultSettings: Settings = {
   schemaVersion: SCHEMA_VERSION,
@@ -112,6 +122,12 @@ export interface SessionRecord {
   coachUsed?: boolean;
   /** A biometric source was connected during the session. */
   biometricsUsed?: boolean;
+  /** Guided breathing pattern the mix followed (absent = none / pulse-derived). */
+  breathingPattern?: Exclude<BreathingPatternId, 'pulse'>;
+  /** The session closed with a wake-up rise of this length. */
+  wakeUp?: { riseSec: number };
+  /** Ran a generated interval (Pomodoro) program — programId stays unset. */
+  intervals?: IntervalPlan;
 }
 
 // --- Personalization (Phase 2, PRD §9/§16) ----------------------------------

@@ -1,6 +1,7 @@
 import type { ProgramModulation } from '../programs/evaluator';
 import type { ArcModulation } from '../session/evolution';
 import { loadAmbienceWorklet } from './ambience-processor';
+import type { BreathPattern } from './breathing';
 import { playChime } from './chime';
 import { AmbienceLayer } from './layers/ambienceLayer';
 import { BinauralLayer } from './layers/binauralLayer';
@@ -56,6 +57,8 @@ const AMBIENCE_TRIM: Record<AmbienceType, number> = {
 
 /** Depth floor for the mono-fallback pulse substitution (see below). */
 const MONO_SUBSTITUTE_MIN_DEPTH = 0.35;
+/** Guided breathing must be audible as a swell: relax/meditation pulses are 3-12 % deep. */
+const BREATH_MIN_DEPTH = 0.3;
 
 /**
  * Owns the AudioContext and the full node graph. Create from a user gesture
@@ -94,6 +97,9 @@ export class AudioEngine {
    * the whole session shape.
    */
   private programModulation: ProgramModulation | null = null;
+  /** Guided-breathing side channel (never part of the profile). */
+  private breath: BreathPattern | null = null;
+  private breathAnchor = 0;
 
   /** Listeners for AudioContext state changes (interruption handling). */
   private readonly contextStateListeners = new Set<(state: AudioContextState) => void>();
@@ -280,6 +286,26 @@ export class AudioEngine {
     this.applyAll(timeConstant);
   }
 
+  /**
+   * Guided-breathing entry point: the mix swells with the pattern (see
+   * PulseModulator breath mode). Like the arc/program channels it never
+   * touches the profile. `anchorCtxTime` is the ctx time of cycle 0 —
+   * defaults to now on the first call and is kept across pattern changes so
+   * the on-screen pacer (driven by session elapsed time) stays in step.
+   * Pass null to return the pulse to the profile's rhythm.
+   */
+  setBreathPattern(
+    pattern: BreathPattern | null,
+    anchorCtxTime?: number,
+    timeConstant?: number,
+  ): void {
+    if (pattern && (anchorCtxTime !== undefined || !this.breath)) {
+      this.breathAnchor = anchorCtxTime ?? this.ctx.currentTime;
+    }
+    this.breath = pattern;
+    this.applyAll(timeConstant);
+  }
+
   async start(): Promise<void> {
     clearTimeout(this.stopTimer);
     if (this.ctx.state !== 'running') await this.realtime?.resume();
@@ -367,6 +393,14 @@ export class AudioEngine {
 
   /** Offline chime — call at the checkpoint where silence has landed. */
   playOfflineChime(): void {
+    playChime(this.ctx, this.limiter);
+  }
+
+  /**
+   * Mid-session cue (a program phase boundary). Same chime, into the
+   * limiter — it rides over the mix at a fixed, modest level.
+   */
+  playCue(): void {
     playChime(this.ctx, this.limiter);
   }
 
@@ -623,11 +657,22 @@ export class AudioEngine {
       timeConstant,
     );
     // Mono substitution stays on the simple path: its pulsed-tone stand-in
-    // for binaural must track the beat rate, not a musical BPM grid.
+    // for binaural must track the beat rate, not a musical BPM grid. Guided
+    // breathing comes next: the user asked to breathe with the sound, so the
+    // swell gets a floor even where the state's own pulse is nearly flat.
     const patternRhythm = substitute ? null : (pm?.rhythm ?? null);
     const patternMode =
       !substitute && (patternRhythm !== null || p.rhythm.mode === 'pattern');
-    if (patternMode) {
+    const breath = substitute ? null : this.breath;
+    if (breath) {
+      this.pulse.setMode('breath', timeConstant);
+      this.pulse.setBreath(
+        breath,
+        this.breathAnchor,
+        Math.max(isoEnabled ? isoDepth : 0, BREATH_MIN_DEPTH),
+        timeConstant,
+      );
+    } else if (patternMode) {
       this.pulse.setMode('pattern', timeConstant);
       this.pulse.setPattern(
         patternRhythm?.bpm ?? p.rhythm.bpm,

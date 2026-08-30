@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useStableCallback } from './useStableCallback';
 import { ADAPT_INTERVAL_SEC, END_GUARD_SEC } from '../adaptation/adaptation';
+import { BREATH_PATTERNS, type BreathPattern } from '../audio/breathing';
 import { AudioEngine } from '../audio/engine';
 import type { MentalState } from '../audio/states';
 import { cloneProfile, normalizeProfile, type SoundProfile } from '../audio/types';
@@ -7,6 +9,7 @@ import { chooseProfile, type ServedProfile } from '../personalization/personaliz
 import { playSilentKeepAlive } from '../platform/silentAudio';
 import { programMinDurationSec, type Program } from '../programs/types';
 import { IDENTITY_MODULATION } from '../session/evolution';
+import { breathingFor, wakeUpFor } from '../session/sessionOptions';
 import { SessionController, type SessionResult } from '../session/sessionController';
 import { appendSession, newId, savePreset } from '../storage/storage';
 import { modeFor, type Preset, type SessionRecord, type Settings } from '../storage/types';
@@ -15,6 +18,8 @@ import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
 import type { Coach } from './useCoach';
 import type { SetupSelection } from './useSetupSelection';
+import { resolveSessionProgram } from './resolveSessionProgram';
+import type { IntervalPlan } from '../programs/intervals';
 
 export interface FinishedSession {
   recordId: string;
@@ -61,6 +66,10 @@ export function useSessionOrchestrator(deps: {
   const servedRef = useRef<ServedProfile | null>(null);
   /** Program driving the currently running session, if any. */
   const sessionProgramRef = useRef<Program | null>(null);
+  /** Guided breathing pattern of the running session, if any (drives the pacer). */
+  const sessionBreathingRef = useRef<BreathPattern | null>(null);
+  /** Interval plan behind a generated program (recorded instead of a programId). */
+  const sessionIntervalsRef = useRef<IntervalPlan | null>(null);
 
   const [liveProfile, setLiveProfile] = useState<SoundProfile | null>(null);
   const [starting, setStarting] = useState(false);
@@ -85,7 +94,8 @@ export function useSessionOrchestrator(deps: {
       volumeAdjustments: volumeAdjustmentsRef.current,
       monoMode: engine?.isMonoMode ?? false,
       presetId: result.config.presetId,
-      programId: result.config.program?.id,
+      programId: sessionIntervalsRef.current ? undefined : result.config.program?.id,
+      intervals: sessionIntervalsRef.current ?? undefined,
       replayOfSessionId: result.config.replayOfSessionId,
       profile,
       // The arm id travels in the record so the reward lands on the right arm
@@ -95,10 +105,17 @@ export function useSessionOrchestrator(deps: {
       segments: adaptation.finalizeSegments(result.actualDurationSec),
       coachUsed: meta?.coachUsed || undefined,
       biometricsUsed: biometrics.wasUsed() || undefined,
+      breathingPattern:
+        result.config.breathing && result.config.breathing.id !== 'pulse'
+          ? result.config.breathing.id
+          : undefined,
+      wakeUp: result.config.wakeUp,
     };
     appendSession(record);
     deps.onSessionStored();
     sessionProgramRef.current = null;
+    sessionBreathingRef.current = null;
+    sessionIntervalsRef.current = null;
     lastSessionRef.current = {
       recordId: record.id,
       state: record.state,
@@ -107,16 +124,16 @@ export function useSessionOrchestrator(deps: {
       completed: record.completed,
     };
     // A completed sleep session gets no rating prompt — the user is asleep
-    // (PRD §9; the next-morning prompt arrives with Phase 2 personalization).
-    deps.onFinished(record.completed && record.state === 'sleep' ? 'setup' : 'feedback');
+    // (PRD §9; the next-morning prompt asks instead) — unless it woke them
+    // up on purpose, in which case they can rate it now.
+    const asleep = record.completed && record.state === 'sleep' && !record.wakeUp;
+    deps.onFinished(asleep ? 'setup' : 'feedback');
   };
 
   // The controller's callbacks are assigned once (engine creation / session
   // start) but must always run the latest render's closures.
-  const handleCompleteRef = useRef(handleComplete);
-  handleCompleteRef.current = handleComplete;
-  const onCheckpointRef = useRef(adaptation.onCheckpoint);
-  onCheckpointRef.current = adaptation.onCheckpoint;
+  const stableHandleComplete = useStableCallback(handleComplete);
+  const stableOnCheckpoint = useStableCallback(adaptation.onCheckpoint);
 
   // Release the audio graph and timers if the app root ever unmounts.
   useEffect(
@@ -135,8 +152,8 @@ export function useSessionOrchestrator(deps: {
       engineRef.current = await AudioEngine.create(profile);
       engineRef.current.setMonoMode(settings.monoMode);
       const controller = new SessionController(engineRef.current);
-      controller.onComplete = (result) => handleCompleteRef.current(result);
-      controller.onCheckpoint = (info) => onCheckpointRef.current(info);
+      controller.onComplete = stableHandleComplete;
+      controller.onCheckpoint = stableOnCheckpoint;
       controllerRef.current = controller;
     }
     return engineRef.current;
@@ -150,13 +167,24 @@ export function useSessionOrchestrator(deps: {
     setStarting(true);
     setStartError(null);
     try {
-      const { mentalState, intensity, minutes } = selection;
-      const program = deps.programs.find((p) => p.id === selection.selectedProgramId);
-      const preset = program
-        ? undefined
-        : deps.presets.find(
-            (p) => p.id === selection.selectedPresetId && p.state === mentalState,
-          );
+      const { mentalState, intensity } = selection;
+      const minutes = selection.resolveMinutes();
+      const selectedPreset = deps.presets.find(
+        (p) => p.id === selection.selectedPresetId && p.state === mentalState,
+      );
+      const resolved = resolveSessionProgram({
+        programs: deps.programs,
+        selectedProgramId: selection.selectedProgramId,
+        intervals: selection.intervals,
+        state: mentalState,
+        intensity,
+        presetProfile: selectedPreset?.profile,
+      });
+      const program = resolved.program;
+      // A saved program owns the sound; a generated interval program is
+      // built on the preset, which stays attributed.
+      const preset = program && !resolved.generated ? undefined : selectedPreset;
+      sessionIntervalsRef.current = resolved.generated ? selection.intervals : null;
       // A history replay only applies to the state it was recorded for.
       const replaying = !program && !preset ? selection.replay : null;
       let profile: SoundProfile;
@@ -178,6 +206,9 @@ export function useSessionOrchestrator(deps: {
         servedRef.current = served;
       }
       sessionProgramRef.current = program ?? null;
+      const breathingId = program ? null : breathingFor(mentalState, settings.breathingPattern);
+      const breathing = breathingId ? BREATH_PATTERNS[breathingId] : undefined;
+      sessionBreathingRef.current = breathing ?? null;
 
       await ensureEngine(profile);
       customizedRef.current = false;
@@ -207,8 +238,11 @@ export function useSessionOrchestrator(deps: {
       // A program's closed phases must all play out; extra time extends the
       // open-ended final phase.
       const durationSec = program
-        ? Math.max(minutes * 60, programMinDurationSec(program))
+        ? resolved.generated
+          ? programMinDurationSec(program)
+          : Math.max(minutes * 60, programMinDurationSec(program))
         : minutes * 60;
+      const wakeUp = program ? undefined : (wakeUpFor(sessionState, settings.wakeUp, durationSec) ?? undefined);
       setLiveProfile(profile);
       await controllerRef.current!.start({
         state: sessionState,
@@ -219,6 +253,8 @@ export function useSessionOrchestrator(deps: {
         replayOfSessionId: replaying?.id,
         program,
         chimeEnabled: settings.chimeEnabled,
+        breathing,
+        wakeUp,
         checkpointSec: adaptationOn ? ADAPT_INTERVAL_SEC : undefined,
         endGuardSec: END_GUARD_SEC,
       });
@@ -238,7 +274,9 @@ export function useSessionOrchestrator(deps: {
     }
   };
 
-  const handleProfileChange = (next: SoundProfile) => {
+  // Stable identity so the memoized AdvancedPanel doesn't re-render on every
+  // 500 ms session tick.
+  const handleProfileChange = useStableCallback((next: SoundProfile) => {
     const prev = liveProfile;
     if (prev) {
       if (next.masterVolume !== prev.masterVolume) {
@@ -253,7 +291,7 @@ export function useSessionOrchestrator(deps: {
     }
     setLiveProfile(next);
     engineRef.current?.applyProfile(next);
-  };
+  });
 
   const storePreset = (name: string, source: FinishedSession | null) => {
     const profile = source ? source.profile : liveProfile;
@@ -281,12 +319,14 @@ export function useSessionOrchestrator(deps: {
     }
     engineRef.current?.setArcModulation(IDENTITY_MODULATION);
     engineRef.current?.setProgramModulation(null);
+    engineRef.current?.setBreathPattern(null);
     return true;
   };
 
   const releaseLab = () => {
     engineRef.current?.stop();
     engineRef.current?.setProgramModulation(null);
+    engineRef.current?.setBreathPattern(null);
     engineRef.current?.setArcModulation(IDENTITY_MODULATION);
   };
 
@@ -304,6 +344,7 @@ export function useSessionOrchestrator(deps: {
     storePreset,
     getLastSession: () => lastSessionRef.current,
     getSessionProgram: () => sessionProgramRef.current,
+    getSessionBreathing: () => sessionBreathingRef.current,
     prepareLab,
     releaseLab,
     setMonoMode: (mono: boolean) => engineRef.current?.setMonoMode(mono),

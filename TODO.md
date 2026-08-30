@@ -83,6 +83,16 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Session history screen: weekly stats + streak, per-session badges, one-tap replay of the exact profile (`SessionRecord.replayOfSessionId`) — `src/ui/HistoryScreen.tsx`, `src/personalization/history.ts`
 - [ ] Verify by ear / in-browser: Begin with site sound blocked shows the notice; calm pacer keeps time with the pulse; replayed session sounds identical to the original
 
+## Phase 7 — Breathing, wake-up, intervals, sharing + hardening
+
+- [x] Hardening: two-step import with confirmation + try/catch + programs count + live region (`src/ui/DataPanel.tsx`); offline export engines disposed per chunk and abort listener always removed (`src/export/offlineRenderer.ts`); render-phase ref/side-effect fixes (`src/app/useStableCallback.ts`, `App.tsx`, `useStoredData.ts`); `React.lazy` for lab/editor/history/insights; radio-group state cards + duration chips (`src/ui/useRadioGroup.ts`), `aria-pressed`/`aria-expanded`/progressbar/status regions, focus to the heading on screen change; memoized program readout + `memo(AdvancedPanel)`; second-tab warning (`src/platform/tabGuard.ts`)
+- [x] Guided breathing: box / 4-7-8 / coherent patterns (`src/audio/breathing.ts`), breath mode in `PulseModulator`, `AudioEngine.setBreathPattern` side channel, pattern-driven pacer with phase countdown, per-user `Settings.breathingPattern`, exported into MP3s
+- [x] "End at HH:MM" duration mode (`src/session/wallClock.ts`, `DurationPicker`) resolved at Begin
+- [x] Wake-up ending for sleep: `withWakeUp`/`resolveArc` arc variant, 3 s fade + chime (`src/session/endPolicy.ts`), `Settings.wakeUp`, rating screen instead of the morning prompt, export mirror
+- [x] Interval (Pomodoro) sessions: `src/programs/intervals.ts` → generated Program, `Program.boundaryChime` + `AudioEngine.playCue()` cues in the controller, lab runner and export timeline; `SessionRecord.intervals`; editor checkbox
+- [x] Shareable links: `src/share/shareLink.ts` (deflate + base64url in `#share=`), import modal on open, Share buttons on programs / presets / editor
+- [ ] Verify by ear: calm + box breathing — circle and swell agree, holds are plateaus, no clicks; sleep 10 min with a 3-min wake-up rises then chimes; focus intervals 2/1 ×2 chime at each switch and end after the last block; a 20-min interval export contains the cues; a shared link imports in a private window
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs

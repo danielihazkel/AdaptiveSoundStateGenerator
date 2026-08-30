@@ -1,12 +1,13 @@
 import type { AudioEngine } from '../audio/engine';
 import { EVOLUTION_TIME_CONSTANT } from '../audio/ramp';
-import { STATES, type MentalState } from '../audio/states';
+import type { BreathPattern } from '../audio/breathing';
+import type { MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
-import { evaluateProgram } from '../programs/evaluator';
+import { evaluateProgram, segmentAt } from '../programs/evaluator';
 import type { Program } from '../programs/types';
 import { ElapsedClock } from './elapsedClock';
-import { resolveEndChime } from './endPolicy';
-import { evaluateArc, STATE_ARCS } from './evolution';
+import { resolveEndChime, resolveEndFadeSeconds } from './endPolicy';
+import { evaluateArc, resolveArc, type WakeUp } from './evolution';
 
 export type SessionPhase =
   | 'idle'
@@ -33,6 +34,13 @@ export interface SessionConfig {
   program?: Program;
   /** Only meaningful when the state's end.chime is 'optional'. */
   chimeEnabled: boolean;
+  /**
+   * Guided breathing: the mix swells with this pattern (engine side channel,
+   * never part of the profile). Ignored when a program is set.
+   */
+  breathing?: BreathPattern;
+  /** Close the session with a gentle rise and a chime (sleep alarm). Plain sessions only. */
+  wakeUp?: WakeUp;
   /** Interval between adaptation checkpoints; omit to disable them. */
   checkpointSec?: number;
   /** No checkpoint fires with less than this much session time left. */
@@ -78,6 +86,8 @@ export class SessionController {
   private config: SessionConfig | undefined;
   private nextCheckpointSec = Infinity;
   private checkpointIndex = 0;
+  /** Program phase last seen by tick(), for boundary chimes. */
+  private segmentIndex = 0;
   private startedAt = '';
   private readonly clock = new ElapsedClock();
   private interval: ReturnType<typeof setInterval> | undefined;
@@ -113,7 +123,9 @@ export class SessionController {
     this.clock.start();
     this.nextCheckpointSec = config.checkpointSec ?? Infinity;
     this.checkpointIndex = 0;
+    this.segmentIndex = 0;
     this.engine.applyProfile(config.profile);
+    this.engine.setBreathPattern(config.program ? null : (config.breathing ?? null));
     // Begin at the arc/program's t=0 point rather than jumping after the
     // first tick. A plain session must also clear any leftover program
     // modulation (from a prior program session or a lab preview).
@@ -121,7 +133,7 @@ export class SessionController {
       this.engine.setProgramModulation(evaluateProgram(config.program, 0));
     } else {
       this.engine.setProgramModulation(null);
-      this.engine.setArcModulation(evaluateArc(STATE_ARCS[config.state], 0));
+      this.engine.setArcModulation(evaluateArc(this.arc(config), 0));
     }
     await this.engine.start();
     clearInterval(this.interval);
@@ -179,10 +191,11 @@ export class SessionController {
     if (!config) return;
 
     const remainingMs = config.durationSec * 1000 - this.elapsedMs();
-    const end = STATES[config.state].end;
+    const wakeUp = !config.program && config.wakeUp !== undefined;
+    const fadeSeconds = resolveEndFadeSeconds(config.state, wakeUp);
 
-    if (phase === 'running' && remainingMs <= end.fadeSeconds * 1000) {
-      const chime = resolveEndChime(config.state, config.program, config.chimeEnabled);
+    if (phase === 'running' && remainingMs <= fadeSeconds * 1000) {
+      const chime = resolveEndChime(config.state, config.program, config.chimeEnabled, wakeUp);
       this.engine.endSession(Math.max(remainingMs / 1000, 0.1), chime);
       this.setPhase('ending');
       return;
@@ -221,17 +234,25 @@ export class SessionController {
           evaluateProgram(config.program, this.elapsedMs() / 1000),
           EVOLUTION_TIME_CONSTANT,
         );
+        // Phase boundary cue (interval programs): once per crossing, never
+        // during the end fade (this branch is 'running' only).
+        const { index } = segmentAt(config.program, this.elapsedMs() / 1000);
+        if (index !== this.segmentIndex) {
+          this.segmentIndex = index;
+          if (config.program.boundaryChime) this.engine.playCue();
+        }
       } else {
         this.engine.setArcModulation(
-          evaluateArc(
-            STATE_ARCS[config.state],
-            this.elapsedMs() / (config.durationSec * 1000),
-          ),
+          evaluateArc(this.arc(config), this.elapsedMs() / (config.durationSec * 1000)),
           EVOLUTION_TIME_CONSTANT,
         );
       }
     }
     this.publish(); // refresh elapsed/remaining for the UI
+  }
+
+  private arc(config: SessionConfig) {
+    return resolveArc(config.state, { wakeUp: config.wakeUp, durationSec: config.durationSec });
   }
 
   private elapsedMs(): number {

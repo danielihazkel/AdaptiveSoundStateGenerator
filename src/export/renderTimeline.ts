@@ -1,4 +1,7 @@
-import { STATES, type MentalState } from '../audio/states';
+import type { MentalState } from '../audio/states';
+import type { Program } from '../programs/types';
+import { resolveEndChime, resolveEndFadeSeconds } from '../session/endPolicy';
+import type { WakeUp } from '../session/evolution';
 
 /**
  * 44.1 kHz, not 32 kHz: LOWPASS_OPEN_HZ is 18 kHz and focus/relax/energy run
@@ -36,6 +39,8 @@ const MIN_LAST_CHUNK_SEC = 30;
  * offline cadence is indistinguishable, at half the suspend/resume overhead.
  */
 export const MODULATION_STEP_SEC = 1;
+/** Phase-boundary cues sit this far after their (whole-second) checkpoint. */
+const BOUNDARY_CUE_OFFSET_SEC = 0.01;
 /** Silence appended after the chime (its decay) or after a chime-less fade. */
 const CHIME_TAIL_SEC = 2.5;
 const PLAIN_TAIL_SEC = 0.2;
@@ -66,18 +71,39 @@ export function buildRenderPlan(opts: {
   state: MentalState;
   durationSec: number;
   chimeEnabled: boolean;
-  /** A program's endChime overrides the state (mirrors SessionController). */
-  program?: { endChime?: boolean } | null;
+  /**
+   * A program's endChime overrides the state, and boundaryChime adds a cue
+   * at every closed phase boundary (mirrors SessionController).
+   */
+  program?: Partial<Pick<Program, 'endChime' | 'boundaryChime' | 'segments'>> | null;
+  /** Wake-up ending: short fade and always a chime (plain sessions only). */
+  wakeUp?: WakeUp | null;
 }): RenderPlan {
   const capped = opts.durationSec > EXPORT_MAX_SECONDS;
   const durationSec = capped ? EXPORT_MAX_SECONDS : opts.durationSec;
-  const end = STATES[opts.state].end;
-  const fadeStart = Math.max(0, durationSec - end.fadeSeconds);
-  const chime = opts.program?.endChime ?? (end.chime === 'optional' && opts.chimeEnabled);
+  const wakeUp = !opts.program && Boolean(opts.wakeUp);
+  const fadeStart = Math.max(0, durationSec - resolveEndFadeSeconds(opts.state, wakeUp));
+  const chime = resolveEndChime(
+    opts.state,
+    (opts.program as Program | undefined) ?? undefined,
+    opts.chimeEnabled,
+    wakeUp,
+  );
 
   const events: RenderEvent[] = [];
   for (let t = MODULATION_STEP_SEC; t < fadeStart; t += MODULATION_STEP_SEC) {
     events.push({ time: t, kind: 'modulation' });
+  }
+  if (opts.program?.boundaryChime && opts.program.segments) {
+    // Boundaries land on whole seconds, i.e. on modulation checkpoints —
+    // nudge each cue just past its checkpoint so event times stay strictly
+    // increasing (the offline driver suspends once per event).
+    for (const segment of opts.program.segments.slice(0, -1)) {
+      if (segment.endMin === null) continue;
+      const time = segment.endMin * 60 + BOUNDARY_CUE_OFFSET_SEC;
+      if (time > 0 && time < fadeStart) events.push({ time, kind: 'chime' });
+    }
+    events.sort((a, b) => a.time - b.time);
   }
   events.push({ time: fadeStart, kind: 'endFade', fadeSeconds: durationSec - fadeStart });
   if (chime) events.push({ time: durationSec, kind: 'chime' });

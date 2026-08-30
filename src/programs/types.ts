@@ -50,6 +50,8 @@ export interface Program {
    * request a wake chime. Absent = defer to the state (the historic behavior).
    */
   endChime?: boolean;
+  /** Play the chime at every phase boundary (interval programs). Absent = no. */
+  boundaryChime?: boolean;
 }
 
 const MIN_BPM = 30;
@@ -168,6 +170,7 @@ export function normalizeProgram(raw: unknown): Program {
   // Only materialize an explicit true — absent stays absent so old programs
   // round-trip identically through the normalizer.
   if (p.endChime === true) program.endChime = true;
+  if (p.boundaryChime === true) program.boundaryChime = true;
   return program;
 }
 

@@ -84,6 +84,11 @@ export function HistoryScreen(props: {
               {!s.completed && <span className="badge early">stopped early</span>}
               {program && <span className="badge">{program.name}</span>}
               {s.programId && !program && <span className="badge">program (deleted)</span>}
+              {s.intervals && (
+                <span className="badge">
+                  intervals {s.intervals.workMin}/{s.intervals.breakMin} ×{s.intervals.cycles}
+                </span>
+              )}
               {preset && <span className="badge">{preset.name}</span>}
               {adapted && <span className="badge">adapted</span>}
               {s.coachUsed && <span className="badge">coach</span>}

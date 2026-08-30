@@ -14,14 +14,21 @@ export function ExportRow(props: {
   hideMessage?: boolean;
 }) {
   const { progress, message } = props.exporter;
+  const pct = progress ? Math.round(progress.fraction * 100) : 0;
   return (
     <>
       <div className="download-row">
         {progress ? (
           <>
-            <span className="hint download-progress">
-              {progress.phase === 'rendering' ? 'Rendering' : 'Encoding'}…{' '}
-              {Math.round(progress.fraction * 100)}%
+            <span
+              className="hint download-progress"
+              role="progressbar"
+              aria-label={progress.phase === 'rendering' ? 'Rendering' : 'Encoding'}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={pct}
+            >
+              {progress.phase === 'rendering' ? 'Rendering' : 'Encoding'}… {pct}%
             </span>
             <button type="button" className="link-button" onClick={props.exporter.cancel}>
               Cancel
@@ -38,7 +45,12 @@ export function ExportRow(props: {
           </button>
         )}
       </div>
-      {!props.hideMessage && message && <p className="hint">{message}</p>}
+      {/* Always mounted so the outcome is announced when it arrives. */}
+      {!props.hideMessage && (
+        <p className="hint" role="status" aria-live="polite">
+          {message ?? ''}
+        </p>
+      )}
     </>
   );
 }

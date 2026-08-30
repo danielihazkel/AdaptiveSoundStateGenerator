@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { STATES, type MentalState } from '../audio/states';
 import { COLD_START_SESSIONS, eligibleSessionCount } from '../personalization/bandit';
 import { CANDIDATE_SET_VERSION } from '../personalization/candidates';
@@ -85,12 +85,19 @@ export function useStoredData(screen: Screen) {
       : [];
   }, [screen, dataVersion]);
 
+  // Persist settings in an effect, not inside the state updater (updaters
+  // must be pure — StrictMode runs them twice). The flag keeps the initial
+  // mount from writing: loadSettings() deliberately leaves a newer-schema
+  // payload untouched, and an unconditional save-on-change would clobber it.
+  const settingsDirtyRef = useRef(false);
+  useEffect(() => {
+    if (!settingsDirtyRef.current) return;
+    settingsDirtyRef.current = false;
+    saveSettings(settings);
+  }, [settings]);
   const updateSettings = (change: Partial<Settings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...change };
-      saveSettings(next);
-      return next;
-    });
+    settingsDirtyRef.current = true;
+    setSettings((prev) => ({ ...prev, ...change }));
   };
 
   return {

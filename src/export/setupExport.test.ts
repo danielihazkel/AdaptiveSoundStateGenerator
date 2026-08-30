@@ -84,3 +84,21 @@ describe('resolveSetupExport', () => {
     expect(a.sel.chimeEnabled).toBe(true);
   });
 });
+
+describe('resolveSetupExport with intervals', () => {
+  it('generates the interval program and uses its exact length', () => {
+    const { sel, label } = resolveSetupExport(
+      input({ minutes: 5, intervals: { workMin: 10, breakMin: 2, cycles: 2, boundaryChime: true } }),
+    );
+    expect(sel.program?.boundaryChime).toBe(true);
+    expect(sel.durationSec).toBe(22 * 60);
+    expect(label).toBe('Intervals 10/2 ×2');
+  });
+
+  it('a saved program still wins over intervals', () => {
+    const { sel } = resolveSetupExport(
+      input({ selectedProgramId: program.id, minutes: 1, intervals: { workMin: 10, breakMin: 2, cycles: 2, boundaryChime: true } }),
+    );
+    expect(sel.program?.id).toBe(program.id);
+  });
+});

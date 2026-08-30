@@ -1,4 +1,5 @@
 import type { CheckpointResponse } from '../adaptation/types';
+import type { BreathPattern } from '../audio/breathing';
 import { STATES, type MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
 import { useSessionPlatform } from '../platform/useSessionPlatform';
@@ -12,6 +13,8 @@ export function SessionView(props: {
   controller: SessionController;
   mentalState: MentalState;
   program?: Program;
+  /** Guided breathing pattern the mix follows (pacer), if any. */
+  breathing?: BreathPattern;
   profile: SoundProfile;
   onProfileChange: (next: SoundProfile) => void;
   onStop: () => void;
@@ -34,6 +37,7 @@ export function SessionView(props: {
       stateDef={STATES[props.mentalState]}
       snapshot={snapshot}
       program={props.program}
+      breathing={props.breathing}
       profile={props.profile}
       onProfileChange={props.onProfileChange}
       onPause={() => void props.controller.pause()}

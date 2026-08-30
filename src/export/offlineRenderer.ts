@@ -1,3 +1,4 @@
+import type { BreathPattern } from '../audio/breathing';
 import { AudioEngine } from '../audio/engine';
 import type { PulseHandover } from '../audio/pulseModulator';
 import { EVOLUTION_TIME_CONSTANT } from '../audio/ramp';
@@ -5,7 +6,7 @@ import type { MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
 import { evaluateProgram } from '../programs/evaluator';
 import type { Program } from '../programs/types';
-import { evaluateArc, STATE_ARCS } from '../session/evolution';
+import { evaluateArc, resolveArc, type WakeUp } from '../session/evolution';
 import {
   buildRenderPlan,
   CHUNK_LEAD_SEC,
@@ -28,6 +29,10 @@ export interface ExportSelection {
   durationSec: number;
   program: Program | null;
   chimeEnabled: boolean;
+  /** Guided breathing swell (plain sessions only) — see SessionConfig. */
+  breathing?: BreathPattern | null;
+  /** Wake-up rise + chime (plain sessions only) — see SessionConfig. */
+  wakeUp?: WakeUp | null;
 }
 
 /** Pattern pulses are scheduled this far past the next checkpoint. */
@@ -50,7 +55,8 @@ const PULSE_HORIZON_SEC = 1.5;
  * the previous chunk hands over its scheduled pulses and next-pulse state.
  *
  * Aborting stops the render at the next checkpoint (never resumed) and
- * rejects with an AbortError; the abandoned context is simply GC'd.
+ * rejects with an AbortError; the engine is disposed and the abandoned
+ * context is left to GC.
  */
 export async function renderSessionChunks(
   sel: ExportSelection,
@@ -82,17 +88,37 @@ async function renderChunk(
     sampleRate: EXPORT_SAMPLE_RATE,
   });
   const engine = await AudioEngine.createOffline(sel.profile, ctx);
+  try {
+    return await driveChunk(engine, ctx, sel, plan, chunk, handover, onProgress, signal);
+  } finally {
+    // Each chunk builds a full node graph (worklets, oscillators); release it
+    // explicitly rather than leaving 16 of them to GC during a 4 h export.
+    engine.dispose();
+  }
+}
+
+async function driveChunk(
+  engine: AudioEngine,
+  ctx: OfflineAudioContext,
+  sel: ExportSelection,
+  plan: RenderPlan,
+  chunk: RenderChunk,
+  handover: PulseHandover | null,
+  onProgress: (fraction01: number) => void,
+  signal?: AbortSignal,
+): Promise<{ audio: AudioBuffer; handover: PulseHandover | null }> {
   const toAbs = (ctxTime: number) => chunk.originSec + ctxTime;
   const toCtx = (absTime: number) => absTime - chunk.originSec;
+  const arc = resolveArc(sel.state, {
+    wakeUp: sel.program ? undefined : (sel.wakeUp ?? undefined),
+    durationSec: plan.durationSec,
+  });
 
   const applyModulation = (absSec: number, timeConstant?: number) => {
     if (sel.program) {
       engine.setProgramModulation(evaluateProgram(sel.program, absSec), timeConstant);
     } else {
-      engine.setArcModulation(
-        evaluateArc(STATE_ARCS[sel.state], absSec / plan.durationSec),
-        timeConstant,
-      );
+      engine.setArcModulation(evaluateArc(arc, absSec / plan.durationSec), timeConstant);
     }
   };
 
@@ -117,6 +143,8 @@ async function renderChunk(
   // t=0 setup — before rendering starts, mirroring SessionController.start()
   // for the first chunk; later chunks snap (default quick ramp) onto the
   // session's values at their origin and pick up the rhythm mid-bar.
+  // Breath cycle 0 is session t=0, i.e. ctx time −originSec in this chunk.
+  if (!sel.program && sel.breathing) engine.setBreathPattern(sel.breathing, -chunk.originSec);
   applyModulation(chunk.originSec);
   if (handover) engine.importPulseHandover(handover, -chunk.originSec);
   engine.schedulePulsesUntil(MODULATION_STEP_SEC + PULSE_HORIZON_SEC);
@@ -132,9 +160,10 @@ async function renderChunk(
     engine.beginOffline({ fadeIn: chunk.index === 0 });
   }
 
+  let abort: (() => void) | undefined;
   const audio = await new Promise<AudioBuffer>((resolve, reject) => {
     let eventIdx = 0;
-    const abort = () =>
+    abort = () =>
       reject(signal?.reason ?? new DOMException('Export cancelled', 'AbortError'));
     signal?.addEventListener('abort', abort, { once: true });
 
@@ -154,10 +183,9 @@ async function renderChunk(
     };
     scheduleNext();
 
-    ctx.startRendering().then((buffer) => {
-      signal?.removeEventListener('abort', abort);
-      resolve(buffer);
-    }, reject);
+    ctx.startRendering().then(resolve, reject);
+  }).finally(() => {
+    if (abort) signal?.removeEventListener('abort', abort);
   });
 
   // Pulses that spill past the next chunk's origin, plus where the bar is.

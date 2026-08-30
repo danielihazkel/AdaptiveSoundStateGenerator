@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { MentalState } from '../audio/states';
 import type { CoachPlan } from '../coach/mapToSession';
+import { INTERVAL_STATES, type IntervalPlan } from '../programs/intervals';
 import type { Program } from '../programs/types';
+import { minutesUntil } from '../session/wallClock';
 import type { Preset, SessionRecord } from '../storage/types';
 
 /**
@@ -17,10 +19,14 @@ export function useSetupSelection(opts: {
   const [mentalState, setMentalState] = useState<MentalState>('focus');
   const [intensity, setIntensityState] = useState(0.5);
   const [minutes, setMinutes] = useState(30);
+  /** "End at HH:MM" — when set, the duration is resolved from the wall clock at Begin. */
+  const [endAt, setEndAt] = useState<string | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>();
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>();
   /** Session from history whose exact profile the next session replays. */
   const [replay, setReplay] = useState<SessionRecord | null>(null);
+  /** Interval (Pomodoro) plan; generates a program at Begin. Exclusive with programs. */
+  const [intervals, setIntervalsState] = useState<IntervalPlan | null>(null);
 
   return {
     mentalState,
@@ -31,11 +37,28 @@ export function useSetupSelection(opts: {
     /** Only meaningful for the state it was recorded for. */
     replay: replay?.state === mentalState ? replay : null,
     setMinutes,
+    endAt,
+    setEndAt,
+    /**
+     * Minutes the next session will run. Resolved at call time — the setup
+     * screen may sit open for a while, and "end at 07:00" must mean 07:00.
+     */
+    resolveMinutes: (now = new Date()): number =>
+      (endAt !== null ? minutesUntil(endAt, now) : null) ?? minutes,
+    intervals: INTERVAL_STATES.has(mentalState) ? intervals : null,
+    setIntervals: (plan: IntervalPlan | null) => {
+      setIntervalsState(plan);
+      if (plan) {
+        setSelectedProgramId(undefined);
+        setReplay(null);
+      }
+    },
     selectState: (s: MentalState) => {
       setMentalState(s);
       setSelectedPresetId(undefined);
       setSelectedProgramId(undefined);
       setReplay(null);
+      if (!INTERVAL_STATES.has(s)) setIntervalsState(null);
       // Picking a state manually overrides whatever the coach set up.
       opts.onUserOverride();
     },
@@ -61,6 +84,7 @@ export function useSetupSelection(opts: {
       if (program) {
         setSelectedPresetId(undefined);
         setReplay(null);
+        setIntervalsState(null);
         // The program owns the base sound — keep the visible state in sync
         // so warnings and end behavior read correctly.
         setMentalState(program.baseState);
@@ -72,6 +96,8 @@ export function useSetupSelection(opts: {
     /** Replay the exact sound of an earlier session (history screen). */
     replayFrom: (record: SessionRecord) => {
       setReplay(record);
+      setEndAt(null);
+      setIntervalsState(null);
       setMentalState(record.state);
       setIntensityState(record.intensity);
       setSelectedPresetId(undefined);
@@ -83,6 +109,7 @@ export function useSetupSelection(opts: {
       setMentalState(plan.state);
       setIntensityState(plan.intensity);
       setMinutes(plan.minutes);
+      setEndAt(null);
       setSelectedPresetId(undefined);
     },
   };

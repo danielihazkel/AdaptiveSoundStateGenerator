@@ -22,6 +22,13 @@ describe('normalizeProgram', () => {
     expect(normalizeProgram({ ...plain, endChime: 'yes' }).endChime).toBeUndefined();
   });
 
+  it('preserves an explicit boundaryChime the same way', () => {
+    const plain = defaultProgram('focus', 0.5);
+    expect(normalizeProgram(plain).boundaryChime).toBeUndefined();
+    expect(normalizeProgram({ ...plain, boundaryChime: true }).boundaryChime).toBe(true);
+    expect(normalizeProgram({ ...plain, boundaryChime: false }).boundaryChime).toBeUndefined();
+  });
+
   it('turns non-objects into a usable one-segment program', () => {
     for (const raw of [null, undefined, 42, 'program']) {
       const p = normalizeProgram(raw);

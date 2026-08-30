@@ -9,6 +9,7 @@ import {
   type ProgramSegment,
 } from '../programs/types';
 import { ExportRow } from './ExportRow';
+import { ShareButton } from './ShareButton';
 import { Slider } from './Slider';
 import { StatePicker } from './StatePicker';
 
@@ -175,6 +176,7 @@ function SegmentRow(props: {
       <button
         type="button"
         className="advanced-toggle"
+        aria-expanded={showTexture}
         onClick={() => setShowTexture((v) => !v)}
       >
         {showTexture ? '▾ Hide texture' : '▸ Texture'}
@@ -392,6 +394,22 @@ export function ProgramEditor(props: {
         + Add phase
       </button>
 
+      <label className="mono-toggle">
+        <input
+          type="checkbox"
+          checked={draft.boundaryChime === true}
+          onChange={(e) =>
+            setDraft((d) => {
+              const next = { ...d };
+              if (e.target.checked) next.boundaryChime = true;
+              else delete next.boundaryChime;
+              return next;
+            })
+          }
+        />
+        Chime at each phase change
+      </label>
+
       <div className="transport begin-row">
         <button
           type="button"
@@ -404,6 +422,12 @@ export function ProgramEditor(props: {
         <button type="button" className="stop-button" onClick={props.onCancel}>
           Cancel
         </button>
+      </div>
+      <div className="preset-strip program-actions">
+        <ShareButton
+          label="⇪ Share link"
+          getPayload={() => ({ v: 1, kind: 'program', program: commit() })}
+        />
       </div>
       <ExportRow
         exporter={props.exporter}

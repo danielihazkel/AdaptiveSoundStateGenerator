@@ -46,7 +46,7 @@ function smoothstep(x: number): number {
   return x * x * (3 - 2 * x);
 }
 
-function evaluateTrack(track: ArcTrack, t: number): number {
+export function evaluateTrack(track: ArcTrack, t: number): number {
   const points = track.points;
   if (points.length === 0) return 1;
   if (t <= points[0].at) return points[0].value;
@@ -72,6 +72,59 @@ export function evaluateArc(def: ArcDefinition, t01: number): ArcModulation {
 }
 
 const FLAT: ArcTrack = { points: [{ at: 0, value: 1 }] };
+
+/** Where a wake-up rise lands: full intensity, open filter, a faster beat. */
+export const WAKE_UP_TARGET: ArcModulation = {
+  intensity: 1,
+  beatOffsetHz: 3,
+  lowpassScale: 1,
+};
+
+/** Sampling step used to preserve a sparse base track's shape up to the knee. */
+const RISE_SAMPLE_STEP = 0.05;
+
+function withRise(track: ArcTrack, knee: number, target: number): ArcTrack {
+  // Re-sample the base up to the knee: a base segment that straddles the knee
+  // (sleep's single 0 → 1 descent) would otherwise be re-eased between its
+  // last kept point and the knee and change shape before the rise begins.
+  const points: ArcPoint[] = [];
+  for (let at = 0; at < knee - 1e-9; at += RISE_SAMPLE_STEP) {
+    points.push({ at, value: evaluateTrack(track, at) });
+  }
+  points.push({ at: knee, value: evaluateTrack(track, knee) }, { at: 1, value: target });
+  return { points };
+}
+
+/**
+ * Wake-up variant of an arc: identical up to the knee at 1 - riseFraction,
+ * then a smooth rise to WAKE_UP_TARGET over the last part of the session
+ * (louder, brighter, a faster beat - sleep's tracking pulse follows it). The
+ * base arc's own tail is dropped: a sleep arc that only ever descends would
+ * otherwise fight the rise.
+ */
+export function withWakeUp(base: ArcDefinition, riseFraction: number): ArcDefinition {
+  const knee = 1 - Math.min(0.9, Math.max(0.01, riseFraction));
+  return {
+    intensity: withRise(base.intensity, knee, WAKE_UP_TARGET.intensity),
+    beatOffsetHz: withRise(base.beatOffsetHz, knee, WAKE_UP_TARGET.beatOffsetHz),
+    lowpassScale: withRise(base.lowpassScale, knee, WAKE_UP_TARGET.lowpassScale),
+  };
+}
+
+export interface WakeUp {
+  /** Length of the closing rise, in seconds. */
+  riseSec: number;
+}
+
+/** The arc a plain (non-program) session follows; the state's own arc when no wake-up. */
+export function resolveArc(
+  state: MentalState,
+  opts: { wakeUp?: WakeUp; durationSec: number },
+): ArcDefinition {
+  const base = STATE_ARCS[state];
+  if (!opts.wakeUp || opts.durationSec <= 0) return base;
+  return withWakeUp(base, opts.wakeUp.riseSec / opts.durationSec);
+}
 
 /**
  * Per-state arcs. Offsets stay small so `beat + offset` remains inside each

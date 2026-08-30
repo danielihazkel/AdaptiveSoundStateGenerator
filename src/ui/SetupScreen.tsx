@@ -1,13 +1,31 @@
 import { useState } from 'react';
+import { BREATH_PATTERNS, type BreathingPatternId } from '../audio/breathing';
 import { STATES, type MentalState } from '../audio/states';
+import { BREATH_STATES, WAKE_UP_STATES } from '../session/sessionOptions';
 import { EXPORT_MAX_SECONDS } from '../export/renderTimeline';
 import type { Mp3Exporter } from '../export/useMp3Export';
+import {
+  DEFAULT_INTERVALS,
+  INTERVAL_LIMITS,
+  INTERVAL_STATES,
+  intervalTotalSec,
+  type IntervalPlan,
+} from '../programs/intervals';
 import { PROGRAM_TEMPLATES, type ProgramTemplate } from '../programs/templates';
+import { formatMinutes, minutesUntil } from '../session/wallClock';
 import { programMinDurationSec, type Program } from '../programs/types';
-import type { PersonalizationMode, Preset, SessionRecord } from '../storage/types';
+import {
+  MAX_WAKE_RISE_MINUTES,
+  MIN_WAKE_RISE_MINUTES,
+  type PersonalizationMode,
+  type Preset,
+  type SessionRecord,
+  type Settings,
+} from '../storage/types';
 import { ExportRow } from './ExportRow';
 import { DurationPicker } from './DurationPicker';
 import { HeadphoneHint, NoDrivingWarning } from './SafetyNotices';
+import { ShareButton } from './ShareButton';
 import { StatePicker } from './StatePicker';
 
 /** Screen-reader text for the depth slider — the labels are the design, never numbers. */
@@ -22,6 +40,16 @@ export function SetupScreen(props: {
   state: MentalState;
   intensity: number;
   minutes: number;
+  /** "End at HH:MM" mode, or null for a fixed length. */
+  endAt: string | null;
+  onEndAtChange: (endAt: string | null) => void;
+  breathingPattern: BreathingPatternId;
+  onBreathingPatternChange: (id: BreathingPatternId) => void;
+  wakeUp: NonNullable<Settings['wakeUp']>;
+  onWakeUpChange: (wakeUp: NonNullable<Settings['wakeUp']>) => void;
+  /** Interval (Pomodoro) plan, when working in intervals. */
+  intervals: IntervalPlan | null;
+  onIntervalsChange: (plan: IntervalPlan | null) => void;
   presets: Preset[];
   selectedPresetId: string | undefined;
   programs: Program[];
@@ -69,7 +97,15 @@ export function SetupScreen(props: {
   const programMinMinutes = selectedProgram
     ? Math.ceil(programMinDurationSec(selectedProgram) / 60)
     : 0;
-  const sessionMinutes = Math.max(props.minutes, programMinMinutes);
+  const intervals = !selectedProgram && INTERVAL_STATES.has(props.state) ? props.intervals : null;
+  const chosenMinutes =
+    (props.endAt !== null ? minutesUntil(props.endAt, new Date()) : null) ?? props.minutes;
+  const sessionMinutes = intervals
+    ? intervalTotalSec(intervals) / 60
+    : Math.max(chosenMinutes, programMinMinutes);
+  const showIntervals = !selectedProgram && INTERVAL_STATES.has(props.state);
+  const showBreathing = !selectedProgram && BREATH_STATES.has(props.state);
+  const showWakeUp = !selectedProgram && WAKE_UP_STATES.has(props.state);
   const exportCapped = sessionMinutes * 60 > EXPORT_MAX_SECONDS;
   const exportMinutes = exportCapped ? EXPORT_MAX_SECONDS / 60 : sessionMinutes;
 
@@ -100,16 +136,141 @@ export function SetupScreen(props: {
         </section>
       )}
 
+      {showIntervals && (
+        <section className="setup-section">
+          <h2 className="setup-question">Work in intervals?</h2>
+          <div className="preset-strip">
+            <button
+              type="button"
+              className={`chip${intervals ? ' selected' : ''}`}
+              aria-pressed={intervals !== null}
+              onClick={() => props.onIntervalsChange(intervals ? null : DEFAULT_INTERVALS)}
+            >
+              🍅 Intervals
+            </button>
+          </div>
+          {intervals && (
+            <>
+              <div className="option-row hint">
+                <IntervalField
+                  label="Work"
+                  value={intervals.workMin}
+                  range={INTERVAL_LIMITS.work}
+                  onChange={(workMin) => props.onIntervalsChange({ ...intervals, workMin })}
+                />
+                <IntervalField
+                  label="Break"
+                  value={intervals.breakMin}
+                  range={INTERVAL_LIMITS.break}
+                  onChange={(breakMin) => props.onIntervalsChange({ ...intervals, breakMin })}
+                />
+                <IntervalField
+                  label="Cycles"
+                  value={intervals.cycles}
+                  range={INTERVAL_LIMITS.cycles}
+                  onChange={(cycles) => props.onIntervalsChange({ ...intervals, cycles })}
+                  unit=""
+                />
+              </div>
+              <label className="mono-toggle">
+                <input
+                  type="checkbox"
+                  checked={intervals.boundaryChime}
+                  onChange={(e) =>
+                    props.onIntervalsChange({ ...intervals, boundaryChime: e.target.checked })
+                  }
+                />
+                Chime at each switch
+              </label>
+              <p className="hint">
+                {intervals.cycles} × {intervals.workMin} min work with {intervals.breakMin} min
+                breaks — {formatMinutes(intervalTotalSec(intervals) / 60)} in total. Breaks keep
+                the sound going, softer and slower.
+              </p>
+            </>
+          )}
+        </section>
+      )}
+
+      {!intervals && (
       <section className="setup-section">
         <h2 className="setup-question">For how long?</h2>
-        <DurationPicker minutes={props.minutes} onChange={props.onMinutesChange} />
-        {selectedProgram && props.minutes < programMinMinutes && (
+        <DurationPicker
+          minutes={props.minutes}
+          onChange={props.onMinutesChange}
+          endAt={props.endAt}
+          onEndAtChange={props.onEndAtChange}
+        />
+        {selectedProgram && chosenMinutes < programMinMinutes && (
           <p className="hint">
             “{selectedProgram.name}” needs at least {programMinMinutes} min — the
             session will run that long; extra time extends the final phase.
           </p>
         )}
       </section>
+      )}
+
+      {showBreathing && (
+        <section className="setup-section">
+          <h2 className="setup-question">Breathe with</h2>
+          <div className="preset-strip">
+            {(['pulse', 'box', 'relax478', 'coherent'] as BreathingPatternId[]).map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={`chip${props.breathingPattern === id ? ' selected' : ''}`}
+                aria-pressed={props.breathingPattern === id}
+                onClick={() => props.onBreathingPatternChange(id)}
+              >
+                {id === 'pulse' ? 'Follow the pulse' : BREATH_PATTERNS[id].label}
+              </button>
+            ))}
+          </div>
+          <p className="hint">
+            {props.breathingPattern === 'pulse'
+              ? 'The pacer follows the sound’s own slow pulse where it has one.'
+              : 'The whole mix swells with each breath and the pacer shows every phase.'}
+          </p>
+        </section>
+      )}
+
+      {showWakeUp && (
+        <section className="setup-section">
+          <label className="mono-toggle wake-toggle">
+            <input
+              type="checkbox"
+              checked={props.wakeUp.enabled}
+              onChange={(e) => props.onWakeUpChange({ ...props.wakeUp, enabled: e.target.checked })}
+            />
+            Wake me up — rise gently at the end and finish with a chime
+          </label>
+          {props.wakeUp.enabled && (
+            <label className="option-row hint">
+              Rise over the last
+              <input
+                type="number"
+                min={MIN_WAKE_RISE_MINUTES}
+                max={MAX_WAKE_RISE_MINUTES}
+                value={props.wakeUp.riseMinutes}
+                aria-label="Wake-up rise length in minutes"
+                onChange={(e) => {
+                  const raw = Math.round(Number(e.target.value));
+                  if (Number.isFinite(raw)) {
+                    props.onWakeUpChange({
+                      ...props.wakeUp,
+                      riseMinutes: Math.min(
+                        MAX_WAKE_RISE_MINUTES,
+                        Math.max(MIN_WAKE_RISE_MINUTES, raw),
+                      ),
+                    });
+                  }
+                }}
+              />
+              minutes
+            </label>
+          )}
+        </section>
+      )}
 
       {props.replay && (
         <div className="notice replay-row">
@@ -143,6 +304,7 @@ export function SetupScreen(props: {
                 <button
                   type="button"
                   className="preset-name"
+                  aria-pressed={preset.id === props.selectedPresetId}
                   onClick={() =>
                     props.onSelectPreset(
                       preset.id === props.selectedPresetId ? undefined : preset,
@@ -163,7 +325,25 @@ export function SetupScreen(props: {
             ))}
           </div>
           {props.selectedPresetId && (
-            <p className="hint">Replaying your saved sound for this state.</p>
+            <div className="preset-strip program-actions">
+              <span className="hint">Replaying your saved sound for this state.</span>
+              <ShareButton
+                ariaLabel="Share this sound"
+                getPayload={() => {
+                  const preset = statePresets.find((p) => p.id === props.selectedPresetId)!;
+                  return {
+                    v: 1,
+                    kind: 'preset',
+                    preset: {
+                      name: preset.name,
+                      state: preset.state,
+                      intensity: preset.intensity,
+                      profile: preset.profile,
+                    },
+                  };
+                }}
+              />
+            </div>
           )}
         </section>
       )}
@@ -182,6 +362,7 @@ export function SetupScreen(props: {
                 <button
                   type="button"
                   className="preset-name"
+                  aria-pressed={program.id === props.selectedProgramId}
                   onClick={() =>
                     props.onSelectProgram(
                       program.id === props.selectedProgramId ? undefined : program,
@@ -206,18 +387,25 @@ export function SetupScreen(props: {
           <button
             type="button"
             className={`chip${showTemplates ? ' selected' : ''}`}
+            aria-expanded={showTemplates}
             onClick={() => setShowTemplates((v) => !v)}
           >
             + New program
           </button>
           {selectedProgram && (
-            <button
-              type="button"
-              className="chip"
-              onClick={() => props.onEditProgram(selectedProgram)}
-            >
-              Edit “{selectedProgram.name}”
-            </button>
+            <>
+              <button
+                type="button"
+                className="chip"
+                onClick={() => props.onEditProgram(selectedProgram)}
+              >
+                Edit “{selectedProgram.name}”
+              </button>
+              <ShareButton
+                ariaLabel={`Share program ${selectedProgram.name}`}
+                getPayload={() => ({ v: 1, kind: 'program', program: selectedProgram })}
+              />
+            </>
           )}
         </div>
         {showTemplates && (
@@ -294,7 +482,9 @@ export function SetupScreen(props: {
         >
           {props.starting
             ? 'Starting…'
-            : `► Begin ${Math.max(props.minutes, programMinMinutes)} min`}
+            : props.endAt !== null && !selectedProgram && !intervals
+              ? `► Begin · ends ${props.endAt}`
+              : `► Begin ${formatMinutes(sessionMinutes)}`}
         </button>
       </div>
       {props.startError && (
@@ -331,5 +521,32 @@ export function SetupScreen(props: {
         Sound lab →
       </button>
     </>
+  );
+}
+
+function IntervalField(props: {
+  label: string;
+  value: number;
+  range: readonly [number, number];
+  onChange: (value: number) => void;
+  unit?: string;
+}) {
+  const [min, max] = props.range;
+  return (
+    <label className="option-row">
+      {props.label}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={props.value}
+        aria-label={`${props.label} ${props.unit ?? 'minutes'}`.trim()}
+        onChange={(e) => {
+          const raw = Math.round(Number(e.target.value));
+          if (Number.isFinite(raw)) props.onChange(Math.min(max, Math.max(min, raw)));
+        }}
+      />
+      {props.unit ?? 'min'}
+    </label>
   );
 }

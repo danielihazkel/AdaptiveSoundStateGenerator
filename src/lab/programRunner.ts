@@ -1,7 +1,7 @@
 import type { AudioEngine } from '../audio/engine';
 import { EVOLUTION_TIME_CONSTANT } from '../audio/ramp';
 import { STATES } from '../audio/states';
-import { evaluateProgram } from '../programs/evaluator';
+import { evaluateProgram, segmentAt } from '../programs/evaluator';
 import { programMinDurationSec, type Program } from '../programs/types';
 import { ElapsedClock } from '../session/elapsedClock';
 import { resolveEndChime } from '../session/endPolicy';
@@ -35,6 +35,8 @@ export class LabProgramRunner {
   private program: Program | null = null;
   private engine: AudioEngine | null = null;
   private totalSec: number | null = null;
+  /** Program phase last seen by tick(), for boundary chimes. */
+  private segmentIndex = 0;
   private readonly clock = new ElapsedClock();
   private interval: ReturnType<typeof setInterval> | undefined;
   private unsubscribeContextState: (() => void) | undefined;
@@ -58,6 +60,7 @@ export class LabProgramRunner {
   };
 
   async start(program: Program, engine: AudioEngine): Promise<void> {
+    this.segmentIndex = 0;
     clearInterval(this.interval);
     this.program = program;
     this.engine = engine;
@@ -150,6 +153,13 @@ export class LabProgramRunner {
     }
 
     engine.setProgramModulation(evaluateProgram(program, elapsedSec), EVOLUTION_TIME_CONSTANT);
+    if (program.boundaryChime) {
+      const { index } = segmentAt(program, elapsedSec);
+      if (index !== this.segmentIndex) {
+        this.segmentIndex = index;
+        engine.playCue();
+      }
+    }
     this.publish();
   }
 

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CheckpointResponse } from '../adaptation/types';
+import { pulseDerivedPattern, type BreathPattern } from '../audio/breathing';
 import type { StateDefinition } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
 import { evaluateProgram, segmentAt } from '../programs/evaluator';
@@ -23,6 +24,8 @@ export function SessionScreen(props: {
   onSavePreset: (name: string) => void;
   /** Timed program driving this session, if any — shows the phase readout. */
   program?: Program;
+  /** Guided breathing the mix is swelling with; else the pacer follows a slow pulse. */
+  breathing?: BreathPattern;
   /** Adaptation check-in, when one is pending (Phase 3, PRD §17). */
   microPrompt?: {
     onRespond: (response: CheckpointResponse) => void;
@@ -31,11 +34,18 @@ export function SessionScreen(props: {
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { phase, remainingSec, elapsedSec } = props.snapshot;
-  const programPhase = props.program ? segmentAt(props.program, elapsedSec) : null;
-  const programBpm = props.program
-    ? evaluateProgram(props.program, elapsedSec).rhythm?.bpm
-    : undefined;
+  // elapsedSec is already whole seconds, so this coalesces the two 500 ms
+  // ticks per second into one evaluation.
+  const { programPhase, programBpm } = useMemo(
+    () => ({
+      programPhase: props.program ? segmentAt(props.program, elapsedSec) : null,
+      programBpm: props.program ? evaluateProgram(props.program, elapsedSec).rhythm?.bpm : undefined,
+    }),
+    [props.program, elapsedSec],
+  );
   const pacerRate = pacerRateFor(props.profile);
+  const breathPattern =
+    props.breathing ?? (pacerRate !== null ? pulseDerivedPattern(pacerRate) : null);
 
   return (
     <>
@@ -44,7 +54,9 @@ export function SessionScreen(props: {
           {props.stateDef.emoji} {props.stateDef.label}
           {props.program && ` · ${props.program.name}`}
         </span>
-        <div className="session-clock">{formatClock(remainingSec)}</div>
+        <div className="session-clock" aria-label="Time remaining">
+          {formatClock(remainingSec)}
+        </div>
         <p className="hint session-phase">
           {phase === 'paused' && 'Paused'}
           {phase === 'ending' && 'Winding down…'}
@@ -62,8 +74,12 @@ export function SessionScreen(props: {
         )}
       </div>
 
-      {pacerRate !== null && (phase === 'running' || phase === 'paused') && (
-        <BreathingPacer rateHz={pacerRate} paused={phase !== 'running'} />
+      {breathPattern && (phase === 'running' || phase === 'paused') && (
+        <BreathingPacer
+          pattern={breathPattern}
+          elapsedSec={elapsedSec}
+          paused={phase !== 'running'}
+        />
       )}
 
       {phase === 'running' && props.microPrompt && (
@@ -103,18 +119,20 @@ export function SessionScreen(props: {
       <button
         type="button"
         className="advanced-toggle"
+        aria-expanded={showAdvanced}
+        aria-controls="session-advanced"
         onClick={() => setShowAdvanced((v) => !v)}
       >
         {showAdvanced ? '▾ Hide sound parameters' : '▸ Sound parameters'}
       </button>
       {showAdvanced && (
-        <>
+        <div id="session-advanced">
           <AdvancedPanel profile={props.profile} onChange={props.onProfileChange} />
           <PresetSaveRow
             defaultName={`${props.stateDef.label} custom`}
             onSave={props.onSavePreset}
           />
-        </>
+        </div>
       )}
     </>
   );

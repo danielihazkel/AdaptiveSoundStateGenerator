@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   AMBIENCE_TYPES,
   cloneProfile,
@@ -29,7 +30,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
  * Every edit produces a full new profile; the caller pushes it to the engine
  * via applyProfile, so all changes ramp click-free.
  */
-export function AdvancedPanel(props: {
+export const AdvancedPanel = memo(function AdvancedPanel(props: {
   profile: SoundProfile;
   onChange: (next: SoundProfile) => void;
 }) {
@@ -335,4 +336,4 @@ export function AdvancedPanel(props: {
       </section>
     </div>
   );
-}
+});

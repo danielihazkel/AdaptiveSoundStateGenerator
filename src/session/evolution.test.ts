@@ -3,7 +3,10 @@ import { STATE_LIST } from '../audio/states';
 import {
   evaluateArc,
   IDENTITY_MODULATION,
+  resolveArc,
   STATE_ARCS,
+  WAKE_UP_TARGET,
+  withWakeUp,
   type ArcDefinition,
 } from './evolution';
 
@@ -93,5 +96,41 @@ describe('STATE_ARCS', () => {
     expect(mid.beatOffsetHz).toBeCloseTo(0); // plateau plays the base profile
     expect(end.intensity).toBeLessThan(mid.intensity);
     expect(end.beatOffsetHz).toBeLessThan(mid.beatOffsetHz);
+  });
+});
+
+describe('withWakeUp / resolveArc', () => {
+  it('resolveArc without a wake-up is the state arc itself', () => {
+    expect(resolveArc('sleep', { durationSec: 3600 })).toBe(STATE_ARCS.sleep);
+  });
+
+  it('keeps the base arc before the knee and rises to the target at the end', () => {
+    const arc = withWakeUp(STATE_ARCS.sleep, 0.25);
+    for (const t of T_GRID.filter((t) => t <= 0.75)) {
+      const base = evaluateArc(STATE_ARCS.sleep, t);
+      const got = evaluateArc(arc, t);
+      expect(got.intensity).toBeCloseTo(base.intensity, 1);
+      expect(got.beatOffsetHz).toBeCloseTo(base.beatOffsetHz, 1);
+      expect(got.lowpassScale).toBeCloseTo(base.lowpassScale, 1);
+    }
+    expect(evaluateArc(arc, 1)).toEqual(WAKE_UP_TARGET);
+  });
+
+  it('rises monotonically across the rise window', () => {
+    const arc = resolveArc('sleep', { wakeUp: { riseSec: 600 }, durationSec: 3600 });
+    let prev = evaluateArc(arc, 1 - 600 / 3600);
+    for (const t of T_GRID.filter((t) => t > 1 - 600 / 3600)) {
+      const cur = evaluateArc(arc, t);
+      expect(cur.intensity).toBeGreaterThanOrEqual(prev.intensity - 1e-9);
+      expect(cur.beatOffsetHz).toBeGreaterThanOrEqual(prev.beatOffsetHz - 1e-9);
+      expect(cur.lowpassScale).toBeGreaterThanOrEqual(prev.lowpassScale - 1e-9);
+      prev = cur;
+    }
+  });
+
+  it('clamps an absurd rise fraction so the knee stays inside the session', () => {
+    const arc = withWakeUp(STATE_ARCS.sleep, 5);
+    expect(evaluateArc(arc, 0).intensity).toBe(1);
+    expect(evaluateArc(arc, 0.05).intensity).toBeLessThanOrEqual(1);
   });
 });

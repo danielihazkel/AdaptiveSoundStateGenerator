@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AudioEngine } from '../audio/engine';
 import { STATES } from '../audio/states';
 import { evaluateProgram } from '../programs/evaluator';
+import { BREATH_PATTERNS } from '../audio/breathing';
 import { defaultProgram } from '../programs/types';
 import { SessionController, type SessionConfig } from './sessionController';
 
@@ -20,6 +21,8 @@ function stubEngine() {
     applyProfile: vi.fn(),
     setArcModulation: vi.fn(),
     setProgramModulation: vi.fn(),
+    setBreathPattern: vi.fn(),
+    playCue: vi.fn(),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn(),
     pause: vi.fn().mockResolvedValue(undefined),
@@ -95,6 +98,32 @@ describe('SessionController', () => {
     await vi.advanceTimersByTimeAsync(61_000);
     expect(controller.phase).toBe('ending');
     expect(engine.endSession).toHaveBeenCalledWith(expect.any(Number), true);
+  });
+
+  it('a wake-up sleep session fades over 3 s and chimes', async () => {
+    await controller.start(
+      config({ state: 'sleep', durationSec: 120, chimeEnabled: false, wakeUp: { riseSec: 30 } }),
+    );
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(controller.phase).toBe('running'); // sleep's 60 s fade is replaced
+    await vi.advanceTimersByTimeAsync(56_500);
+    expect(controller.phase).toBe('ending');
+    expect(engine.endSession).toHaveBeenCalledWith(expect.any(Number), true);
+  });
+
+  it('hands the breathing pattern to the engine on start, and clears it otherwise', async () => {
+    await controller.start(config({ state: 'calm', breathing: BREATH_PATTERNS.box }));
+    expect(engine.setBreathPattern).toHaveBeenLastCalledWith(BREATH_PATTERNS.box);
+    controller.stop();
+    await controller.start(config({ state: 'calm' }));
+    expect(engine.setBreathPattern).toHaveBeenLastCalledWith(null);
+  });
+
+  it('a program session never breathes', async () => {
+    await controller.start(
+      config({ program: defaultProgram('calm', 0.5), breathing: BREATH_PATTERNS.box }),
+    );
+    expect(engine.setBreathPattern).toHaveBeenLastCalledWith(null);
   });
 
   it('pause freezes the clock, resume continues it', async () => {
@@ -266,6 +295,25 @@ describe('SessionController', () => {
       await controller.start(config());
       expect(engine.setProgramModulation).toHaveBeenCalledWith(null);
       expect(engine.setArcModulation).toHaveBeenCalled();
+    });
+
+    it('chimes once at each phase boundary when the program asks for it', async () => {
+      const program = { ...defaultProgram('focus', 0.5), boundaryChime: true };
+      await controller.start(config({ durationSec: 30 * 60, program }));
+      await vi.advanceTimersByTimeAsync(2 * 60_000 + 500);
+      expect(engine.playCue).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60_000 + 500); // crosses 3:00
+      expect(engine.playCue).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(engine.playCue).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(4 * 60_000 + 500); // crosses 8:00
+      expect(engine.playCue).toHaveBeenCalledTimes(2);
+    });
+
+    it('never cues without boundaryChime', async () => {
+      await controller.start(config({ durationSec: 30 * 60, program: defaultProgram('focus', 0.5) }));
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(engine.playCue).not.toHaveBeenCalled();
     });
 
     it('the end fade still comes from the base state, with no program updates', async () => {

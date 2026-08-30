@@ -17,6 +17,53 @@ describe('buildRenderPlan', () => {
     expect(plan.renderSeconds).toBeCloseTo(1800.2);
   });
 
+  it('a wake-up sleep export ends with a 3 s fade and the chime', () => {
+    const plan = buildRenderPlan({
+      state: 'sleep',
+      durationSec: 1800,
+      chimeEnabled: false,
+      wakeUp: { riseSec: 300 },
+    });
+    expect(plan.events.find((e) => e.kind === 'endFade')).toMatchObject({
+      time: 1797,
+      fadeSeconds: 3,
+    });
+    expect(plan.events.find((e) => e.kind === 'chime')).toMatchObject({ time: 1800 });
+  });
+
+  it('a program ignores the wake-up option', () => {
+    const plan = buildRenderPlan({
+      state: 'sleep',
+      durationSec: 1800,
+      chimeEnabled: true,
+      program: {},
+      wakeUp: { riseSec: 300 },
+    });
+    expect(plan.events.find((e) => e.kind === 'endFade')).toMatchObject({ fadeSeconds: 60 });
+    expect(plan.events.some((e) => e.kind === 'chime')).toBe(false);
+  });
+
+  it('cues each phase boundary of a boundaryChime program, strictly increasing', () => {
+    const plan = buildRenderPlan({
+      state: 'focus',
+      durationSec: 60 * 60,
+      chimeEnabled: false,
+      program: {
+        boundaryChime: true,
+        segments: [
+          { startMin: 0, endMin: 25 },
+          { startMin: 25, endMin: 30 },
+          { startMin: 30, endMin: null },
+        ] as never,
+      },
+    });
+    const cues = plan.events.filter((e) => e.kind === 'chime').map((e) => e.time);
+    expect(cues).toEqual([25 * 60 + 0.01, 30 * 60 + 0.01]);
+    for (let i = 1; i < plan.events.length; i++) {
+      expect(plan.events[i].time).toBeGreaterThan(plan.events[i - 1].time);
+    }
+  });
+
   it('puts the optional focus chime at the session end with a decay tail', () => {
     const plan = buildRenderPlan({ state: 'focus', durationSec: 900, chimeEnabled: true });
     const chime = plan.events.find((e) => e.kind === 'chime');
