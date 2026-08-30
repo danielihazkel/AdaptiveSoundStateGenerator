@@ -39,11 +39,42 @@ function readJson(key: string): unknown {
   }
 }
 
+export interface StorageFailure {
+  key: string;
+  at: number; // epoch ms
+}
+
+let lastFailure: StorageFailure | null = null;
+let failureListener: ((failure: StorageFailure) => void) | null = null;
+
+/**
+ * Writes stay non-fatal (a full disk must never kill a session), but the app
+ * is told so it can warn the user that history may not be recorded. Single
+ * subscriber — the App root; returns an unsubscribe.
+ */
+export function onStorageFailure(listener: (failure: StorageFailure) => void): () => void {
+  failureListener = listener;
+  return () => {
+    if (failureListener === listener) failureListener = null;
+  };
+}
+
+export function getStorageFailure(): StorageFailure | null {
+  return lastFailure;
+}
+
+/** Test hook / after the user has resolved the problem. */
+export function clearStorageFailure(): void {
+  lastFailure = null;
+}
+
 function writeJson(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
     // Quota exceeded / storage unavailable — deliberately non-fatal.
+    lastFailure = { key, at: Date.now() };
+    failureListener?.(lastFailure);
   }
 }
 

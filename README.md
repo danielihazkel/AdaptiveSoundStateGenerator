@@ -27,7 +27,10 @@ Other scripts:
 npm run build     # type-check + production build (output in dist/)
 npm run preview   # serve the production build locally
 npm test          # run the unit tests (Vitest)
+npm run lint      # ESLint (typescript-eslint + react-hooks)
 ```
+
+CI (`.github/workflows/ci.yml`) runs lint, tests, and the production build on every push and pull request.
 
 ## How it works
 
@@ -56,7 +59,11 @@ New programs start from a **template**: blank, the 5-phase build arc, or one of 
 
 **Sound lab** (`src/ui/lab/`, or open the app with `?lab`): a test bench with no session timer — instant play/stop, every engine parameter live (including the new tempo/complexity controls), state defaults and saved presets as starting points, a program timeline you can scrub to audition any minute instantly (or play through from that point), a bounded randomizer, and one-tap audition of the personalizer's candidate arms.
 
-**Persistence** (`src/storage/`): local-first, no account — presets, session records, and ratings live in `localStorage`. Session records double as training rows (state → configuration → outcome, plus implicit signals) for the personalizer. A JSON export/import ("Your data" on the setup screen) moves everything between devices manually; the learned statistics are rebuilt from the merged session history on import, so importing is idempotent.
+**Session history** (`src/ui/HistoryScreen.tsx`): every session the device has played — when, which state, how long, how it was rated, and whether it ran a program, a preset, the coach, or adapted mid-way — with weekly totals and a day streak (`src/personalization/history.ts`). Any non-program session can be **replayed**: the exact profile it played is loaded into the next session (the personalizer and mid-session adaptation stay out of the way, as with presets), and the new record links back via `replayOfSessionId`.
+
+**Breathing pacer**: when the pulse runs at a breathing rate (the `calm` state's 0.1–0.15 Hz pulse, or any simple-mode pulse ≤ 0.5 Hz), the session screen shows an expanding/contracting circle with "Breathe in / Breathe out" cues at the same period (`src/ui/BreathingPacer.tsx`); it honours `prefers-reduced-motion`.
+
+**Persistence** (`src/storage/`): local-first, no account — presets, session records, and ratings live in `localStorage`. If a write fails (storage full), the app keeps running but shows a warning suggesting a JSON export. Session records double as training rows (state → configuration → outcome, plus implicit signals) for the personalizer. A JSON export/import ("Your data" on the setup screen) moves everything between devices manually; the learned statistics are rebuilt from the merged session history on import, so importing is idempotent.
 
 **Personalization** (`src/personalization/`): a Thompson-sampling multi-armed bandit learns which sound variation works best for you, per state. Arms are perturbation *recipes* (slower/faster beat, alternate noise color, softer binaural layer, …) applied to the state's default profile at serve time. Rewards blend explicit 1–5 ratings with implicit signals — completion fraction, repeated volume tweaks, skipped ratings. The first ~6 sessions per state serve the pure §8 defaults (cold start); afterwards the app experiments unless you flip the per-state "lock what works" toggle. Completed sleep sessions are rated via a next-morning prompt on the next app open. Once a state has 5+ sessions, the "Your sound profile" screen shows what's working: most effective layers, preferred beat range, noise color, volume, and typical duration.
 

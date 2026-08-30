@@ -61,7 +61,6 @@ export function TimelinePreview(props: {
   // A timed run takes over the program channel — stop rolling, don't clear it.
   useEffect(() => {
     if (props.disabled) stopRolling();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.disabled]);
 
   const applyAt = (t: number, timeConstant: number) => {

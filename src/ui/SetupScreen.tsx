@@ -4,11 +4,18 @@ import { EXPORT_MAX_SECONDS } from '../export/renderTimeline';
 import type { Mp3Exporter } from '../export/useMp3Export';
 import { PROGRAM_TEMPLATES, type ProgramTemplate } from '../programs/templates';
 import { programMinDurationSec, type Program } from '../programs/types';
-import type { PersonalizationMode, Preset } from '../storage/types';
+import type { PersonalizationMode, Preset, SessionRecord } from '../storage/types';
 import { ExportRow } from './ExportRow';
 import { DurationPicker } from './DurationPicker';
 import { HeadphoneHint, NoDrivingWarning } from './SafetyNotices';
 import { StatePicker } from './StatePicker';
+
+/** Screen-reader text for the depth slider — the labels are the design, never numbers. */
+export function intensityValueText(labels: readonly [string, string], intensity: number): string {
+  if (intensity < 0.33) return labels[0];
+  if (intensity > 0.66) return labels[1];
+  return `between ${labels[0].toLowerCase()} and ${labels[1].toLowerCase()}`;
+}
 
 /** PRD §4: state → intensity → duration → generate. */
 export function SetupScreen(props: {
@@ -28,6 +35,14 @@ export function SetupScreen(props: {
   personalizationMode: PersonalizationMode;
   /** True once any state has enough data for the insights screen (PRD §10). */
   insightsAvailable: boolean;
+  /** True once at least one session has been recorded. */
+  historyAvailable: boolean;
+  /** Session being replayed from history, if any. */
+  replay: SessionRecord | null;
+  onClearReplay: () => void;
+  /** Why the last Begin failed, if it did. */
+  startError: string | null;
+  onShowHistory: () => void;
   onStateChange: (state: MentalState) => void;
   onIntensityChange: (intensity: number) => void;
   onMinutesChange: (minutes: number) => void;
@@ -76,6 +91,8 @@ export function SetupScreen(props: {
               max={1}
               step={0.01}
               value={props.intensity}
+              aria-label="How deep"
+              aria-valuetext={intensityValueText(stateDef.intensityLabels, props.intensity)}
               onChange={(e) => props.onIntensityChange(Number(e.target.value))}
             />
             <span className="intensity-label">{stateDef.intensityLabels[1]}</span>
@@ -93,6 +110,24 @@ export function SetupScreen(props: {
           </p>
         )}
       </section>
+
+      {props.replay && (
+        <div className="notice replay-row">
+          <span>
+            ↺ Replaying your {STATES[props.replay.state].label.toLowerCase()} session
+            from {new Date(props.replay.startedAt).toLocaleDateString()} — the exact
+            sound it played.
+          </span>
+          <button
+            type="button"
+            className="chip"
+            aria-label="Stop replaying"
+            onClick={props.onClearReplay}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {statePresets.length > 0 && (
         <section className="setup-section">
@@ -262,6 +297,11 @@ export function SetupScreen(props: {
             : `► Begin ${Math.max(props.minutes, programMinMinutes)} min`}
         </button>
       </div>
+      {props.startError && (
+        <p className="notice warning" role="alert">
+          {props.startError}
+        </p>
+      )}
 
       <ExportRow
         exporter={props.exporter}
@@ -278,6 +318,12 @@ export function SetupScreen(props: {
       {props.insightsAvailable && (
         <button type="button" className="link-button" onClick={props.onShowInsights}>
           Your sound profile →
+        </button>
+      )}
+
+      {props.historyAvailable && (
+        <button type="button" className="link-button" onClick={props.onShowHistory}>
+          Session history →
         </button>
       )}
 

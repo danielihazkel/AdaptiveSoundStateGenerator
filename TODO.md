@@ -70,6 +70,19 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Context program templates (intimate / romantic / sensual / playful / fantasy / passionate + blank + build arc) with emotional-progression arcs; template picker in the "New program" flow — `src/programs/templates.ts`, `src/ui/SetupScreen.tsx`
 - [ ] Verify by ear: richness 0→1 thickens at constant loudness; movement adds slow shimmer; bass sweep doesn't pump the limiter; the Intimate template's peak (20–30 min) is audibly richer/fuller than its opening; pad chopped by deep pulses still sounds intentional (if not, re-route harmony post-pulse like ambience — one line in engine.create)
 
+## Phase 6 — Polish: robustness, accessibility, history
+
+- [x] Engine start failures surfaced to the user (setup + lab) instead of an unhandled rejection — `src/App.tsx` `begin()`, `src/ui/lab/LabScreen.tsx`, `START_ERROR_MESSAGE` in `src/ui/SafetyNotices.tsx`
+- [x] Mono-switch timer cleared on `AudioEngine.dispose()` — `src/audio/engine.ts`
+- [x] Keyboard focus styles (`:focus-visible`), safe-area insets for notched phones, `prefers-reduced-motion` — `src/index.css`
+- [x] Accessible modals: `role="dialog"`, focus trap, Escape, focus restore — `src/ui/useDialog.ts`, `DisclaimerModal`, `MorningPromptModal`
+- [x] `aria-valuetext` on every slider (depth slider speaks the state's labels), live region on the mid-session check-in — `src/ui/Slider.tsx`, `SetupScreen.tsx`, `MicroPrompt.tsx`
+- [x] localStorage write failures reported to the UI (warning + export nudge) — `onStorageFailure` in `src/storage/storage.ts`
+- [x] ESLint + GitHub Actions CI (lint, test, build); `*.tsbuildinfo` ignored — `eslint.config.js`, `.github/workflows/ci.yml`
+- [x] Breathing pacer on the session screen for breathing-rate pulses (calm) — `src/ui/BreathingPacer.tsx`, `src/ui/breathing.ts`
+- [x] Session history screen: weekly stats + streak, per-session badges, one-tap replay of the exact profile (`SessionRecord.replayOfSessionId`) — `src/ui/HistoryScreen.tsx`, `src/personalization/history.ts`
+- [ ] Verify by ear / in-browser: Begin with site sound blocked shows the notice; calm pacer keeps time with the pulse; replayed session sounds identical to the original
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs

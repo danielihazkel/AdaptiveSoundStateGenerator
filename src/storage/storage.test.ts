@@ -3,6 +3,9 @@ import { STATES } from '../audio/states';
 import { defaultProgram } from '../programs/types';
 import {
   appendSession,
+  clearStorageFailure,
+  getStorageFailure,
+  onStorageFailure,
   attachFeedback,
   deletePreset,
   deleteProgram,
@@ -224,5 +227,33 @@ describe('personalization mode', () => {
     const { personalizationMode: _drop, ...legacy } = defaultSettings;
     localStorage.setItem('resonance.v1.settings', JSON.stringify(legacy));
     expect(modeFor(loadSettings(), 'focus')).toBe('explore');
+  });
+});
+
+describe('storage failure reporting', () => {
+  it('reports a failed write to the listener and getStorageFailure', () => {
+    clearStorageFailure();
+    const throwing = fakeLocalStorage();
+    throwing.setItem = () => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    };
+    globalThis.localStorage = throwing;
+    const seen: string[] = [];
+    const off = onStorageFailure((f) => seen.push(f.key));
+    saveSettings(defaultSettings);
+    expect(seen).toHaveLength(1);
+    expect(getStorageFailure()?.key).toBe(seen[0]);
+    off();
+    saveSettings(defaultSettings);
+    expect(seen).toHaveLength(1); // unsubscribed
+    clearStorageFailure();
+    expect(getStorageFailure()).toBeNull();
+  });
+
+  it('stays null when writes succeed', () => {
+    clearStorageFailure();
+    globalThis.localStorage = fakeLocalStorage();
+    saveSettings(defaultSettings);
+    expect(getStorageFailure()).toBeNull();
   });
 });

@@ -16,6 +16,7 @@ export function Slider(props: {
         max={props.max}
         step={props.step}
         value={props.value}
+        aria-valuetext={props.display}
         onChange={(e) => props.onChange(Number(e.target.value))}
       />
       <span className="value">{props.display}</span>

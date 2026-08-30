@@ -90,6 +90,8 @@ export interface SessionRecord {
    * touch the bandit or mid-session adaptation — servedArmId/servedBy absent.
    */
   programId?: string;
+  /** Replayed the exact profile of this earlier session (history screen). */
+  replayOfSessionId?: string;
   /** Full configuration the session actually played — Phase 2 optimizer input. */
   profile: SoundProfile;
   feedback?: {

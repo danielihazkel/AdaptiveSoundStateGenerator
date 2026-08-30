@@ -1,10 +1,25 @@
+import { useDialog } from './useDialog';
+
 /** Safety surfaces required by PRD §13 and §7. */
 
+/** Shown when the audio engine fails to start (blocked autoplay, worklet, no device). */
+export const START_ERROR_MESSAGE =
+  "Couldn't start audio. Check that sound isn't blocked for this site and try again.";
+
 export function DisclaimerModal(props: { onAcknowledge: () => void }) {
+  // Not dismissible — acknowledging is the only way out, so no Escape handler.
+  const dialogRef = useDialog<HTMLDivElement>();
   return (
     <div className="modal-backdrop">
-      <div className="modal">
-        <h2>Before you listen</h2>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="disclaimer-title"
+        ref={dialogRef}
+        tabIndex={-1}
+      >
+        <h2 id="disclaimer-title">Before you listen</h2>
         <ul className="disclaimer-list">
           <li>
             Resonance is <strong>not a medical device</strong> and does not diagnose or

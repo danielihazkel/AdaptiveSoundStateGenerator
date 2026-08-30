@@ -6,16 +6,11 @@ import { evaluateProgram, segmentAt } from '../programs/evaluator';
 import type { Program } from '../programs/types';
 import type { SessionSnapshot } from '../session/sessionController';
 import { AdvancedPanel } from './AdvancedPanel';
+import { BreathingPacer } from './BreathingPacer';
+import { pacerRateFor } from './breathing';
+import { formatClock } from './format';
 import { MicroPrompt } from './MicroPrompt';
 import { PresetSaveRow } from './PresetSaveRow';
-
-function formatClock(totalSec: number): string {
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
-  return `${h > 0 ? `${h}:` : ''}${mm}:${String(s).padStart(2, '0')}`;
-}
 
 export function SessionScreen(props: {
   stateDef: StateDefinition;
@@ -42,6 +37,7 @@ export function SessionScreen(props: {
   const programBpm = props.program
     ? evaluateProgram(props.program, elapsedSec).rhythm?.bpm
     : undefined;
+  const pacerRate = pacerRateFor(props.profile);
 
   return (
     <>
@@ -67,6 +63,10 @@ export function SessionScreen(props: {
           </p>
         )}
       </div>
+
+      {pacerRate !== null && (phase === 'running' || phase === 'paused') && (
+        <BreathingPacer rateHz={pacerRate} paused={phase !== 'running'} />
+      )}
 
       {phase === 'running' && props.microPrompt && (
         <MicroPrompt

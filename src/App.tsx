@@ -71,6 +71,7 @@ import {
   loadSettings,
   markFeedbackSkipped,
   newId,
+  onStorageFailure,
   savePreset,
   saveProgram,
   saveSettings,
@@ -88,15 +89,27 @@ import { BiometricsPanel } from './ui/BiometricsPanel';
 import { CoachInput } from './ui/CoachInput';
 import { DataPanel } from './ui/DataPanel';
 import { FeedbackScreen } from './ui/FeedbackScreen';
+import { HistoryScreen } from './ui/HistoryScreen';
 import { InsightsScreen } from './ui/InsightsScreen';
 import { MorningPromptModal } from './ui/MorningPrompt';
-import { DisclaimerModal, FooterDisclaimer } from './ui/SafetyNotices';
+import {
+  DisclaimerModal,
+  FooterDisclaimer,
+  START_ERROR_MESSAGE,
+} from './ui/SafetyNotices';
 import { LabScreen } from './ui/lab/LabScreen';
 import { ProgramEditor } from './ui/ProgramEditor';
 import { SessionScreen } from './ui/SessionScreen';
 import { SetupScreen } from './ui/SetupScreen';
 
-type Screen = 'setup' | 'session' | 'feedback' | 'insights' | 'programEditor' | 'lab';
+type Screen =
+  | 'setup'
+  | 'session'
+  | 'feedback'
+  | 'insights'
+  | 'history'
+  | 'programEditor'
+  | 'lab';
 
 interface FinishedSession {
   recordId: string;
@@ -208,7 +221,14 @@ export function App() {
   const [minutes, setMinutes] = useState(30);
   const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>();
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>();
+  /** Session from history whose exact profile the next session replays. */
+  const [replay, setReplay] = useState<SessionRecord | null>(null);
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  /** A localStorage write failed — history may be silently lost (A9). */
+  const [storageWarning, setStorageWarning] = useState(false);
+
+  useEffect(() => onStorageFailure(() => setStorageWarning(true)), []);
   const exporter = useMp3Export();
   const [liveProfile, setLiveProfile] = useState<SoundProfile | null>(null);
   const [microPrompt, setMicroPrompt] = useState<CheckpointInfo | null>(null);
@@ -237,11 +257,12 @@ export function App() {
     bumpData();
   }, []);
 
-  const { activeStates, insightsAvailable } = useMemo(() => {
+  const { activeStates, insightsAvailable, historyAvailable } = useMemo(() => {
     void dataVersion; // memo key: stored data changed
     const personalization = loadPersonalization(CANDIDATE_SET_VERSION);
     const counts = new Map<MentalState, number>();
-    for (const s of loadSessions()) counts.set(s.state, (counts.get(s.state) ?? 0) + 1);
+    const stored = loadSessions();
+    for (const s of stored) counts.set(s.state, (counts.get(s.state) ?? 0) + 1);
     const active = new Set<MentalState>();
     for (const state of Object.keys(STATES) as MentalState[]) {
       if (eligibleSessionCount(personalization, state) >= COLD_START_SESSIONS) {
@@ -253,14 +274,27 @@ export function App() {
       insightsAvailable: [...counts.values()].some(
         (c) => c >= MIN_SESSIONS_FOR_INSIGHTS,
       ),
+      historyAvailable: stored.length > 0,
     };
   }, [dataVersion]);
 
+  // dataVersion is the memo key for "stored data changed" (see bumpData) —
+  // localStorage isn't reactive, so the lint rule can't see the dependency.
+  const historySessions = useMemo(
+    () => {
+      void dataVersion;
+      return screen === 'history' ? loadSessions() : [];
+    },
+    [screen, dataVersion],
+  );
+
   const insights = useMemo(
-    () =>
-      screen === 'insights'
+    () => {
+      void dataVersion;
+      return screen === 'insights'
         ? computeInsights(loadSessions(), loadPersonalization(CANDIDATE_SET_VERSION))
-        : [],
+        : [];
+    },
     [screen, dataVersion],
   );
 
@@ -413,6 +447,7 @@ export function App() {
       monoMode: engine?.isMonoMode ?? false,
       presetId: result.config.presetId,
       programId: result.config.program?.id,
+      replayOfSessionId: result.config.replayOfSessionId,
       profile,
       // The arm id travels in the record so the reward lands on the right arm
       // even if the app reloads before the rating arrives.
@@ -537,11 +572,14 @@ export function App() {
     // the keep-alive is what lets the session survive a locked screen.
     playSilentKeepAlive();
     setStarting(true);
+    setStartError(null);
     try {
       const program = programs.find((p) => p.id === selectedProgramId);
       const preset = program
         ? undefined
         : presets.find((p) => p.id === selectedPresetId && p.state === mentalState);
+      // A history replay only applies to the state it was recorded for.
+      const replaying = !program && !preset && replay?.state === mentalState ? replay : null;
       let profile: SoundProfile;
       if (program) {
         // Program sessions play the program's snapshot; like presets they
@@ -550,6 +588,10 @@ export function App() {
         servedRef.current = null;
       } else if (preset) {
         profile = cloneProfile(preset.profile);
+        servedRef.current = null;
+      } else if (replaying) {
+        // Stored profiles may predate schema additions — complete them.
+        profile = normalizeProfile(replaying.profile);
         servedRef.current = null;
       } else {
         const served = chooseProfile(
@@ -603,7 +645,8 @@ export function App() {
       // Presets adapt away from the exact sound the user chose — never do
       // that. The toggle turns checkpoints off entirely. Program sessions
       // never adapt either (v1): the program owns the session's shape.
-      const adaptationOn = !preset && !program && settings.adaptationEnabled !== false;
+      const adaptationOn =
+        !preset && !program && !replaying && settings.adaptationEnabled !== false;
       // A program's closed phases must all play out; extra time extends the
       // open-ended final phase.
       const durationSec = program
@@ -616,12 +659,23 @@ export function App() {
         durationSec,
         profile,
         presetId: preset?.id,
+        replayOfSessionId: replaying?.id,
         program,
         chimeEnabled: settings.chimeEnabled,
         checkpointSec: adaptationOn ? ADAPT_INTERVAL_SEC : undefined,
         endGuardSec: END_GUARD_SEC,
       });
       setScreen('session');
+    } catch (err) {
+      // AudioContext blocked, worklet failed to load, no output device… The
+      // controller may be mid-start; stop it so the next Begin starts clean.
+      console.error('Session failed to start', err);
+      try {
+        controllerRef.current?.stop();
+      } catch {
+        // already idle
+      }
+      setStartError(START_ERROR_MESSAGE);
     } finally {
       setStarting(false);
     }
@@ -809,6 +863,24 @@ export function App() {
       <h1>Resonance</h1>
       <p className="subtitle">Generated sound for the state you want.</p>
 
+      {storageWarning && screen === 'setup' && (
+        <div className="notice warning" role="alert">
+          <span>
+            Couldn't save to this device's storage (it may be full). Your session
+            history may not be recorded — export your data from “Your data” below
+            to keep it safe.
+          </span>
+          <button
+            type="button"
+            className="chip"
+            aria-label="Dismiss storage warning"
+            onClick={() => setStorageWarning(false)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {screen === 'setup' && (
         <CoachInput onSubmit={(text) => void handleCoach(text)} message={coachMessage} />
       )}
@@ -830,6 +902,7 @@ export function App() {
             setMentalState(s);
             setSelectedPresetId(undefined);
             setSelectedProgramId(undefined);
+            setReplay(null);
             // Picking a state manually overrides whatever the coach set up.
             coachAppliedRef.current = false;
             setCoachMessage(null);
@@ -837,6 +910,7 @@ export function App() {
           onIntensityChange={(v) => {
             setIntensity(v);
             setSelectedPresetId(undefined);
+            setReplay(null);
           }}
           onMinutesChange={setMinutes}
           onSelectPreset={(preset) => {
@@ -844,6 +918,7 @@ export function App() {
             if (preset) {
               setIntensity(preset.intensity);
               setSelectedProgramId(undefined);
+              setReplay(null);
             }
           }}
           onDeletePreset={(id) => {
@@ -855,6 +930,7 @@ export function App() {
             setSelectedProgramId(program?.id);
             if (program) {
               setSelectedPresetId(undefined);
+              setReplay(null);
               // The program owns the base sound — keep the visible state in
               // sync so warnings and end behavior read correctly.
               setMentalState(program.baseState);
@@ -883,6 +959,11 @@ export function App() {
           personalizationActive={activeStates.has(mentalState)}
           personalizationMode={modeFor(settings, mentalState)}
           insightsAvailable={insightsAvailable}
+          historyAvailable={historyAvailable}
+          replay={replay?.state === mentalState ? replay : null}
+          onClearReplay={() => setReplay(null)}
+          startError={startError}
+          onShowHistory={() => setScreen('history')}
           onModeChange={(mode) =>
             updateSettings({
               personalizationMode: {
@@ -925,6 +1006,32 @@ export function App() {
 
       {screen === 'insights' && (
         <InsightsScreen insights={insights} onBack={() => setScreen('setup')} />
+      )}
+
+      {screen === 'history' && (
+        <HistoryScreen
+          sessions={historySessions}
+          programs={programs}
+          presets={presets}
+          onReplay={(record) => {
+            setReplay(record);
+            setMentalState(record.state);
+            setIntensity(record.intensity);
+            setSelectedPresetId(undefined);
+            setSelectedProgramId(undefined);
+            coachAppliedRef.current = false;
+            setCoachMessage(null);
+            setScreen('setup');
+          }}
+          onUseProgram={(program) => {
+            setSelectedProgramId(program.id);
+            setSelectedPresetId(undefined);
+            setReplay(null);
+            setMentalState(program.baseState);
+            setScreen('setup');
+          }}
+          onBack={() => setScreen('setup')}
+        />
       )}
 
       {screen === 'programEditor' && editingProgram && (

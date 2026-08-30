@@ -79,6 +79,8 @@ export class AudioEngine {
   private playing = false;
   private monoMode = false;
   private stopTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Pending channel-count flip from setMonoMode — cleared on dispose. */
+  private monoTimer: ReturnType<typeof setTimeout> | undefined;
   /**
    * Session-evolution arc (PRD §12), composed into effective values inside
    * applyAll and never written into the profile: presets, the bandit, and
@@ -372,6 +374,7 @@ export class AudioEngine {
   setMonoMode(on: boolean): void {
     if (this.monoMode === on) return;
     this.monoMode = on;
+    clearTimeout(this.monoTimer);
     if (!this.playing) {
       this.monoGate.channelCount = on ? 1 : 2;
       this.applyAll();
@@ -379,7 +382,7 @@ export class AudioEngine {
     }
     // Reconfiguring channel counts can glitch — hide it in a quick dip.
     fadeTo(this.ctx, this.master.gain, 0, MONO_SWITCH_DIP_SECONDS);
-    setTimeout(() => {
+    this.monoTimer = setTimeout(() => {
       this.monoGate.channelCount = on ? 1 : 2;
       this.applyAll();
       if (this.playing) {
@@ -515,6 +518,7 @@ export class AudioEngine {
 
   dispose(): void {
     clearTimeout(this.stopTimer);
+    clearTimeout(this.monoTimer);
     this.ctx.onstatechange = null;
     this.tone.dispose();
     this.binaural.dispose();

@@ -19,6 +19,7 @@ import { StatePicker } from '../StatePicker';
 import { ExplorePanel } from './ExplorePanel';
 import { ProgramRunPanel } from './ProgramRunPanel';
 import { TimelinePreview } from './TimelinePreview';
+import { START_ERROR_MESSAGE } from '../SafetyNotices';
 
 /**
  * The sound lab (a grown-up Phase 0 test bench): instant audio, every
@@ -44,6 +45,7 @@ export function LabScreen(props: {
   );
   const [playing, setPlaying] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const startingRef = useRef(false);
 
   const runnerRef = useRef<LabProgramRunner | null>(null);
@@ -78,12 +80,16 @@ export function LabScreen(props: {
     if (startingRef.current) return;
     startingRef.current = true;
     setStarting(true);
+    setStartError(null);
     try {
       if (runner.status !== 'idle') runner.stop();
       const engine = await props.ensureEngine(profile);
       engine.applyProfile(profile);
       await engine.start();
       setPlaying(true);
+    } catch (err) {
+      console.error('Lab playback failed to start', err);
+      setStartError(START_ERROR_MESSAGE);
     } finally {
       startingRef.current = false;
       setStarting(false);
@@ -110,6 +116,12 @@ export function LabScreen(props: {
         Instant audio or a timed program run — try any combination, then save
         what works.
       </p>
+
+      {startError && (
+        <p className="notice warning" role="alert">
+          {startError}
+        </p>
+      )}
 
       {!runActive && (
         <div className="transport">

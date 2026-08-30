@@ -1,4 +1,5 @@
 import type { Rating } from '../storage/types';
+import { useDialog } from './useDialog';
 
 const RATINGS: Rating[] = [1, 2, 3, 4, 5];
 
@@ -10,10 +11,18 @@ export function MorningPromptModal(props: {
   onRate: (rating: Rating) => void;
   onDismiss: () => void;
 }) {
+  const dialogRef = useDialog<HTMLDivElement>({ onClose: props.onDismiss });
   return (
     <div className="modal-backdrop">
-      <div className="modal">
-        <h2>Good morning</h2>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="morning-title"
+        ref={dialogRef}
+        tabIndex={-1}
+      >
+        <h2 id="morning-title">Good morning</h2>
         <p className="setup-question">
           How did you sleep after last night's session?
         </p>

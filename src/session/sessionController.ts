@@ -23,6 +23,8 @@ export interface SessionConfig {
   durationSec: number;
   profile: SoundProfile;
   presetId?: string;
+  /** Replaying the exact sound of an earlier session (history screen). */
+  replayOfSessionId?: string;
   /**
    * Timed program driving the session shape. When set it replaces the
    * per-state evolution arc; `state` should be the program's baseState so the

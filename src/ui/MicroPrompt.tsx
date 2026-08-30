@@ -11,9 +11,9 @@ export function MicroPrompt(props: {
   onDismiss: () => void;
 }) {
   return (
-    <div className="notice micro-prompt">
+    <div className="notice micro-prompt" role="status" aria-live="polite">
       <span>How's it feeling?</span>
-      <div className="micro-prompt-actions">
+      <div className="micro-prompt-actions" role="group" aria-label="Check-in">
         <button type="button" className="chip" onClick={() => props.onRespond('better')}>
           Better
         </button>
