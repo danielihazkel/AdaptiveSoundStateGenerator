@@ -17,11 +17,15 @@ import { programMinDurationSec, type Program } from '../programs/types';
 import {
   MAX_WAKE_RISE_MINUTES,
   MIN_WAKE_RISE_MINUTES,
+  THEMES,
   type PersonalizationMode,
   type Preset,
   type SessionRecord,
   type Settings,
+  type Theme,
 } from '../storage/types';
+import { formatDuration } from './format';
+import { useRadioGroup } from './useRadioGroup';
 import { ExportRow } from './ExportRow';
 import { DurationPicker } from './DurationPicker';
 import { HeadphoneHint, NoDrivingWarning } from './SafetyNotices';
@@ -84,6 +88,11 @@ export function SetupScreen(props: {
   onToggleMono: (mono: boolean) => void;
   onToggleChime: (chime: boolean) => void;
   onToggleAdaptation: (enabled: boolean) => void;
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
+  /** Most recent session, for one-tap replay; null with no history. */
+  lastSession: SessionRecord | null;
+  onPlayLast: () => void;
   onModeChange: (mode: PersonalizationMode) => void;
   onShowInsights: () => void;
   onBegin: () => void;
@@ -108,9 +117,31 @@ export function SetupScreen(props: {
   const showWakeUp = !selectedProgram && WAKE_UP_STATES.has(props.state);
   const exportCapped = sessionMinutes * 60 > EXPORT_MAX_SECONDS;
   const exportMinutes = exportCapped ? EXPORT_MAX_SECONDS / 60 : sessionMinutes;
+  const themeGroup = useRadioGroup<Theme>({
+    items: THEMES,
+    value: props.theme,
+    onChange: props.onThemeChange,
+    getKey: (t) => t,
+  });
+  const last = props.lastSession;
 
   return (
     <>
+      {last && !props.replay && (
+        <button
+          type="button"
+          className="play-last"
+          disabled={props.starting}
+          onClick={props.onPlayLast}
+        >
+          <span className="play-last-title">▶ Play last</span>
+          <span className="hint">
+            {STATES[last.state].emoji} {STATES[last.state].label} ·{' '}
+            {formatDuration(last.plannedDurationSec)} · {relativeDay(last.startedAt)}
+          </span>
+        </button>
+      )}
+
       <section className="setup-section">
         <h2 className="setup-question">What do you want to feel?</h2>
         <StatePicker value={props.state} onChange={props.onStateChange} />
@@ -461,6 +492,24 @@ export function SetupScreen(props: {
       </label>
 
       <HeadphoneHint monoMode={props.monoMode} onToggleMono={props.onToggleMono} />
+      <div className="option-row theme-row">
+        <span className="hint" id="theme-label">
+          Appearance
+        </span>
+        <div className="preset-strip" {...themeGroup.groupProps} aria-labelledby="theme-label">
+          {THEMES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`chip${props.theme === t ? ' selected' : ''}`}
+              {...themeGroup.itemProps(t)}
+              onClick={() => props.onThemeChange(t)}
+            >
+              {THEME_LABELS[t]}
+            </button>
+          ))}
+        </div>
+      </div>
       {stateDef.end.chime === 'optional' && (
         <label className="mono-toggle chime-toggle">
           <input
@@ -522,6 +571,20 @@ export function SetupScreen(props: {
       </button>
     </>
   );
+}
+
+const THEME_LABELS: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' };
+
+/** "today" / "yesterday" / "3 days ago" / a date. */
+function relativeDay(iso: string, now = new Date()): string {
+  const days = Math.floor(
+    (new Date(now.toDateString()).getTime() - new Date(new Date(iso).toDateString()).getTime()) /
+      86_400_000,
+  );
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 14) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 function IntervalField(props: {

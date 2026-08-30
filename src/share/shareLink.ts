@@ -81,9 +81,12 @@ async function pipe(Ctor: StreamCtor, bytes: Uint8Array): Promise<Uint8Array> {
   const stream = new Ctor('deflate');
   const writer = stream.writable.getWriter();
   const done = writer.write(bytes).then(() => writer.close());
-  const out = new Uint8Array(await new Response(stream.readable).arrayBuffer());
-  await done;
-  return out;
+  // A damaged token makes the readable side reject first; `done` then rejects
+  // too, with nobody awaiting it yet — observe it so the failure surfaces
+  // once (through the reader) rather than as an unhandled rejection.
+  done.catch(() => {});
+  const [buffer] = await Promise.all([new Response(stream.readable).arrayBuffer(), done]);
+  return new Uint8Array(buffer);
 }
 
 // --- encode / decode -------------------------------------------------------------

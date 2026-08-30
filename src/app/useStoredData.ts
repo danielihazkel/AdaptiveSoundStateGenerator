@@ -5,8 +5,12 @@ import { CANDIDATE_SET_VERSION } from '../personalization/candidates';
 import { computeInsights, MIN_SESSIONS_FOR_INSIGHTS } from '../personalization/insights';
 import { findPendingMorningPrompt } from '../personalization/morningPrompt';
 import { resolvePendingOutcomes } from '../personalization/personalizer';
+import { recoverSession } from '../session/inProgress';
 import {
+  appendSession,
+  clearInProgress,
   getStorageFailure,
+  loadInProgress,
   loadPersonalization,
   loadPresets,
   loadPrograms,
@@ -30,6 +34,8 @@ export function useStoredData(screen: Screen) {
   const [presets, setPresets] = useState(() => loadPresets());
   const [programs, setPrograms] = useState(() => loadPrograms());
   const [morningPrompt, setMorningPrompt] = useState<SessionRecord | null>(null);
+  /** A session the app died in the middle of was just added to history. */
+  const [recoveredSession, setRecoveredSession] = useState<SessionRecord | null>(null);
   /** Bumped whenever stored sessions/personalization change, to refresh memos. */
   const [dataVersion, setDataVersion] = useState(0);
   const bumpData = () => setDataVersion((v) => v + 1);
@@ -47,12 +53,22 @@ export function useStoredData(screen: Screen) {
   // Settle any sessions whose rating opportunity has passed (implicit-only),
   // then check whether last night's sleep session needs its morning rating.
   useEffect(() => {
+    // A leftover checkpoint means the last session never finished writing.
+    const checkpoint = loadInProgress();
+    if (checkpoint) {
+      const recovered = recoverSession(checkpoint);
+      clearInProgress();
+      if (recovered) {
+        appendSession(recovered);
+        setRecoveredSession(recovered);
+      }
+    }
     resolvePendingOutcomes();
     setMorningPrompt(findPendingMorningPrompt(loadSessions(), new Date()));
     bumpData();
   }, []);
 
-  const { activeStates, insightsAvailable, historyAvailable } = useMemo(() => {
+  const { activeStates, insightsAvailable, historyAvailable, lastSession } = useMemo(() => {
     void dataVersion; // memo key: stored data changed
     const personalization = loadPersonalization(CANDIDATE_SET_VERSION);
     const counts = new Map<MentalState, number>();
@@ -68,6 +84,8 @@ export function useStoredData(screen: Screen) {
       activeStates: active,
       insightsAvailable: [...counts.values()].some((c) => c >= MIN_SESSIONS_FOR_INSIGHTS),
       historyAvailable: stored.length > 0,
+      // Newest non-recovered session, for "Play last" (records are newest-first).
+      lastSession: stored.find((s) => !s.recovered) ?? null,
     };
   }, [dataVersion]);
 
@@ -120,6 +138,9 @@ export function useStoredData(screen: Screen) {
     activeStates,
     insightsAvailable,
     historyAvailable,
+    lastSession,
+    recoveredSession,
+    dismissRecoveredSession: () => setRecoveredSession(null),
     historySessions,
     insights,
     morningPrompt,

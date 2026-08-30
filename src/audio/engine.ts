@@ -26,6 +26,8 @@ const FADE_OUT_SECONDS = 1.0;
 const PAUSE_FADE_SECONDS = 0.3;
 const MONO_SWITCH_DIP_SECONDS = 0.15;
 const CHIME_SECONDS = 2.0;
+/** Wake-up alarm: the chime repeats at this spacing until dismissed. */
+export const ALARM_REPEAT_SECONDS = 4;
 
 /**
  * Per-layer trim so equal slider values sound roughly equally loud (a sine at
@@ -84,6 +86,7 @@ export class AudioEngine {
   private stopTimer: ReturnType<typeof setTimeout> | undefined;
   /** Pending channel-count flip from setMonoMode — cleared on dispose. */
   private monoTimer: ReturnType<typeof setTimeout> | undefined;
+  private alarmTimer: ReturnType<typeof setInterval> | undefined;
   /**
    * Session-evolution arc (PRD §12), composed into effective values inside
    * applyAll and never written into the profile: presets, the bandit, and
@@ -340,6 +343,35 @@ export class AudioEngine {
     }, (fadeSeconds + 0.1) * 1000);
   }
 
+  /**
+   * Wake-up alarm (realtime only): once the end fade has landed, repeat the
+   * chime until stopAlarm(). The context stays running; the master gain is
+   * already at 0, and the chime feeds the limiter directly.
+   */
+  startAlarm(): void {
+    clearTimeout(this.stopTimer);
+    clearInterval(this.alarmTimer);
+    this.playing = false;
+    const ring = () => {
+      if (this.ctx.state !== 'running') void this.realtime?.resume();
+      playChime(this.ctx, this.limiter);
+    };
+    ring();
+    this.alarmTimer = setInterval(ring, ALARM_REPEAT_SECONDS * 1000);
+  }
+
+  /** Silence the alarm. Suspends unless the session is resuming (snooze). */
+  stopAlarm(opts: { suspend?: boolean } = {}): void {
+    if (this.alarmTimer === undefined) return;
+    clearInterval(this.alarmTimer);
+    this.alarmTimer = undefined;
+    if (opts.suspend !== false && !this.playing) {
+      this.stopTimer = setTimeout(() => {
+        if (!this.playing) void this.realtime?.suspend();
+      }, CHIME_SECONDS * 1000);
+    }
+  }
+
   async pause(): Promise<void> {
     clearTimeout(this.stopTimer);
     fadeTo(this.ctx, this.master.gain, 0, PAUSE_FADE_SECONDS);
@@ -569,6 +601,7 @@ export class AudioEngine {
   dispose(): void {
     clearTimeout(this.stopTimer);
     clearTimeout(this.monoTimer);
+    clearInterval(this.alarmTimer);
     this.ctx.onstatechange = null;
     this.contextStateListeners.clear();
     this.tone.dispose();

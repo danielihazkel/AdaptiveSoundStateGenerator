@@ -29,7 +29,12 @@ export interface Settings {
   breathingPattern?: BreathingPatternId;
   /** Sleep sessions: rise gently over the last `riseMinutes` and end with a chime. */
   wakeUp?: { enabled: boolean; riseMinutes: number };
+  /** Color theme; absent = follow the OS. */
+  theme?: Theme;
 }
+
+export type Theme = 'system' | 'light' | 'dark';
+export const THEMES: readonly Theme[] = ['system', 'light', 'dark'];
 
 export const DEFAULT_WAKE_UP = { enabled: false, riseMinutes: 10 } as const;
 export const MIN_WAKE_RISE_MINUTES = 3;
@@ -128,6 +133,37 @@ export interface SessionRecord {
   wakeUp?: { riseSec: number };
   /** Ran a generated interval (Pomodoro) program — programId stays unset. */
   intervals?: IntervalPlan;
+  /**
+   * Reconstructed from the in-progress checkpoint after the app died
+   * mid-session. Not the user's choice to stop, so it carries no bandit
+   * signal (reward.ts) and is never offered for rating.
+   */
+  recovered?: true;
+}
+
+/**
+ * Checkpoint of the session currently playing, rewritten every
+ * CHECKPOINT_EVERY_SEC (session/inProgress.ts). Exactly what handleComplete
+ * needs to build a SessionRecord if the app never gets to.
+ */
+export interface InProgressSession {
+  startedAt: string; // ISO
+  state: MentalState;
+  intensity: number;
+  plannedDurationSec: number;
+  profile: SoundProfile;
+  monoMode: boolean;
+  presetId?: string;
+  programId?: string;
+  intervals?: IntervalPlan;
+  replayOfSessionId?: string;
+  servedArmId?: string;
+  servedBy?: SessionRecord['servedBy'];
+  breathingPattern?: SessionRecord['breathingPattern'];
+  wakeUp?: { riseSec: number };
+  /** Listening time at the last checkpoint. */
+  elapsedSec: number;
+  updatedAt: string; // ISO
 }
 
 // --- Personalization (Phase 2, PRD §9/§16) ----------------------------------

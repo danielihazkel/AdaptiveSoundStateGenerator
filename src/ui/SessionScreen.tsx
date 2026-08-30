@@ -21,6 +21,11 @@ export function SessionScreen(props: {
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
+  /** "+15 min" — absent for programs (fixed shape) or once the cap is reached. */
+  onExtend?: () => void;
+  /** Wake-up alarm controls (phase 'alarm'). */
+  onDismissAlarm: () => void;
+  onSnooze: () => void;
   onSavePreset: (name: string) => void;
   /** Timed program driving this session, if any — shows the phase readout. */
   program?: Program;
@@ -33,7 +38,7 @@ export function SessionScreen(props: {
   };
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const { phase, remainingSec, elapsedSec } = props.snapshot;
+  const { phase, remainingSec, elapsedSec, resumeFailed } = props.snapshot;
   // elapsedSec is already whole seconds, so this coalesces the two 500 ms
   // ticks per second into one evaluation.
   const { programPhase, programBpm } = useMemo(
@@ -57,10 +62,12 @@ export function SessionScreen(props: {
         <div className="session-clock" aria-label="Time remaining">
           {formatClock(remainingSec)}
         </div>
-        <p className="hint session-phase">
+        <p className="hint session-phase" aria-live="polite">
           {phase === 'paused' && 'Paused'}
+          {phase === 'interrupted' && 'Interrupted'}
           {phase === 'ending' && 'Winding down…'}
           {phase === 'running' && 'Playing'}
+          {phase === 'alarm' && 'Time to wake up'}
         </p>
         {programPhase && (
           <p className="hint program-phase-readout">
@@ -98,6 +105,27 @@ export function SessionScreen(props: {
         </div>
       )}
 
+      {resumeFailed && (phase === 'paused' || phase === 'interrupted') && (
+        <p className="notice warning" role="alert">
+          Couldn't resume audio — tap Resume again. If it keeps failing, check that no
+          other app is holding the sound output.
+        </p>
+      )}
+
+      {phase === 'alarm' && (
+        <div className="alarm-panel" role="alert" aria-live="assertive">
+          <p className="alarm-title">☀️ Good morning</p>
+          <div className="transport">
+            <button type="button" className="play-button" onClick={props.onDismissAlarm}>
+              Dismiss
+            </button>
+            <button type="button" className="chip" onClick={props.onSnooze}>
+              Snooze 5 min
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="transport session-transport">
         {phase === 'running' && (
           <button type="button" className="play-button playing" onClick={props.onPause}>
@@ -112,6 +140,11 @@ export function SessionScreen(props: {
         {(phase === 'running' || phase === 'paused' || phase === 'interrupted') && (
           <button type="button" className="stop-button" onClick={props.onStop}>
             ■ Stop
+          </button>
+        )}
+        {props.onExtend && (phase === 'running' || phase === 'ending') && (
+          <button type="button" className="chip" onClick={props.onExtend}>
+            +15 min
           </button>
         )}
       </div>

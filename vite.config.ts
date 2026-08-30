@@ -8,7 +8,7 @@ export default defineConfig({
     // Installable + offline: every build asset is precached, so the app
     // opens with no network (the audio was always synthesized locally).
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['icon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
         name: 'Resonance',
@@ -16,9 +16,29 @@ export default defineConfig({
         description: 'Adaptive sound states for focus, relaxation, sleep and energy.',
         theme_color: '#12141a',
         background_color: '#12141a',
+        id: '/',
+        scope: '/',
         display: 'standalone',
-        orientation: 'portrait',
         start_url: '/',
+        shortcuts: [
+          {
+            name: 'Focus 25 min',
+            short_name: 'Focus',
+            url: '/?start=focus&minutes=25',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Sleep',
+            url: '/?start=sleep',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Play last session',
+            short_name: 'Play last',
+            url: '/?start=last',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+          },
+        ],
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

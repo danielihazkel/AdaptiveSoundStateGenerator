@@ -3,6 +3,7 @@ import { normalizeProgram, type Program } from '../programs/types';
 import {
   defaultSettings,
   SCHEMA_VERSION,
+  type InProgressSession,
   type PersonalizationState,
   type Preset,
   type Rating,
@@ -15,6 +16,7 @@ const PRESETS_KEY = 'resonance.v1.presets';
 const SESSIONS_KEY = 'resonance.v1.sessions';
 const PROGRAMS_KEY = 'resonance.v1.programs';
 const PERSONALIZATION_KEY = 'resonance.v1.personalization';
+const IN_PROGRESS_KEY = 'resonance.v1.inProgress';
 
 /** Oldest records are dropped past this — plenty for Phase 2 training. */
 const MAX_SESSION_RECORDS = 500;
@@ -281,6 +283,37 @@ export function appendSession(record: SessionRecord): void {
   const sessions = loadSessions();
   sessions.unshift(record);
   writeList(SESSIONS_KEY, sessions.slice(0, MAX_SESSION_RECORDS));
+}
+
+// --- In-progress checkpoint ---------------------------------------------------
+
+/** The running session's checkpoint, or null. Anything unreadable is dropped. */
+export function loadInProgress(): InProgressSession | null {
+  const value = parse(readRaw(IN_PROGRESS_KEY));
+  if (
+    value &&
+    typeof value === 'object' &&
+    typeof (value as InProgressSession).startedAt === 'string' &&
+    typeof (value as InProgressSession).elapsedSec === 'number' &&
+    (value as InProgressSession).profile
+  ) {
+    const record = value as InProgressSession;
+    return { ...record, profile: normalizeProfile(record.profile) };
+  }
+  if (value !== null) clearInProgress();
+  return null;
+}
+
+export function saveInProgress(checkpoint: InProgressSession): void {
+  writeJson(IN_PROGRESS_KEY, checkpoint);
+}
+
+export function clearInProgress(): void {
+  try {
+    localStorage.removeItem(IN_PROGRESS_KEY);
+  } catch {
+    /* unavailable — nothing to clear */
+  }
 }
 
 /** Bulk replace after an import merge (transfer.ts) — not for general use. */

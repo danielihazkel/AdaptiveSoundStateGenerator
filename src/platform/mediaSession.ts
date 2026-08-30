@@ -13,24 +13,38 @@ export interface MediaSessionHandlers {
 const supported = (): boolean =>
   typeof navigator !== 'undefined' && 'mediaSession' in navigator;
 
-export function setMediaSession(
-  meta: { title: string; subtitle?: string },
-  handlers: MediaSessionHandlers,
-): void {
+/** Title/subtitle only — safe to call again mid-session. */
+export function setMediaMetadata(meta: { title: string; subtitle?: string }): void {
   if (!supported()) return;
-  const session = navigator.mediaSession;
   try {
-    session.metadata = new MediaMetadata({
+    navigator.mediaSession.metadata = new MediaMetadata({
       title: meta.title,
       artist: meta.subtitle ?? 'Resonance',
       album: 'Resonance',
     });
+  } catch {
+    /* ignore */
+  }
+}
+
+export function setMediaHandlers(handlers: MediaSessionHandlers): void {
+  if (!supported()) return;
+  const session = navigator.mediaSession;
+  try {
     session.setActionHandler('pause', handlers.onPause);
     session.setActionHandler('play', handlers.onResume);
     session.setActionHandler('stop', handlers.onStop);
   } catch {
     // Older implementations throw on unknown actions — ignore.
   }
+}
+
+export function setMediaSession(
+  meta: { title: string; subtitle?: string },
+  handlers: MediaSessionHandlers,
+): void {
+  setMediaMetadata(meta);
+  setMediaHandlers(handlers);
 }
 
 export function setMediaPlaybackState(state: 'playing' | 'paused' | 'none'): void {

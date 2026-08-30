@@ -27,8 +27,9 @@ describe('resolveEndChime', () => {
     expect(resolveEndChime('focus', silent, true)).toBe(false);
   });
 
-  it('a wake-up forces the chime for sleep, but a program endChime false still wins', () => {
-    expect(resolveEndChime('sleep', undefined, false, true)).toBe(true);
+  it('a wake-up plays no end chime (the alarm phase rings instead); programs are unaffected', () => {
+    expect(resolveEndChime('sleep', undefined, false, true)).toBe(false);
+    expect(resolveEndChime('sleep', undefined, true, true)).toBe(false);
     const silent = { ...defaultProgram('sleep', 0.5), endChime: false };
     expect(resolveEndChime('sleep', silent, true, true)).toBe(false);
   });

@@ -15,6 +15,8 @@ export type SessionPhase =
   | 'paused'
   | 'interrupted'
   | 'ending'
+  /** Wake-up alarm ringing after the end fade; ends on dismiss/snooze/timeout. */
+  | 'alarm'
   | 'finished'
   | 'stoppedEarly';
 
@@ -65,9 +67,17 @@ export interface SessionSnapshot {
   phase: SessionPhase;
   elapsedSec: number;
   remainingSec: number;
+  /** The last resume() could not restart audio (context refused to resume). */
+  resumeFailed?: boolean;
 }
 
 const TICK_MS = 500;
+/** "+15 min" from the session screen. */
+export const EXTEND_SEC = 15 * 60;
+/** Snooze length after the wake-up alarm. */
+export const SNOOZE_SEC = 5 * 60;
+/** The alarm gives up (session completes) if nobody dismisses it. */
+export const ALARM_MAX_SEC = 120;
 
 /**
  * Owns the session lifecycle: wall-clock timer, pause/resume, interruption
@@ -91,6 +101,8 @@ export class SessionController {
   private startedAt = '';
   private readonly clock = new ElapsedClock();
   private interval: ReturnType<typeof setInterval> | undefined;
+  private alarmTimeout: ReturnType<typeof setTimeout> | undefined;
+  private resumeFailed = false;
   private listeners = new Set<() => void>();
   private snapshot: SessionSnapshot = { phase: 'idle', elapsedSec: 0, remainingSec: 0 };
   private readonly unsubscribeContextState: () => void;
@@ -119,6 +131,7 @@ export class SessionController {
 
   async start(config: SessionConfig): Promise<void> {
     this.config = config;
+    this.resumeFailed = false;
     this.startedAt = new Date().toISOString();
     this.clock.start();
     this.nextCheckpointSec = config.checkpointSec ?? Infinity;
@@ -151,14 +164,69 @@ export class SessionController {
   async resume(): Promise<void> {
     const phase = this.snapshot.phase;
     if (phase !== 'paused' && phase !== 'interrupted') return;
-    await this.engine.resume();
+    try {
+      await this.engine.resume();
+    } catch (err) {
+      // iOS refuses resume() while 'interrupted'; any browser refuses one
+      // that isn't tied to a gesture. Stay put and let the UI say so.
+      console.warn('Audio could not resume', err);
+      this.resumeFailed = true;
+      this.publish();
+      return;
+    }
+    this.resumeFailed = false;
     this.clock.resume();
+    this.setPhase('running');
+  }
+
+  /**
+   * Add listening time to a plain session ("+15 min"). During the wind-down
+   * the end fade is cancelled and the sound fades back in. Programs have a
+   * fixed shape and are not extendable.
+   */
+  async extend(sec: number = EXTEND_SEC): Promise<void> {
+    const phase = this.snapshot.phase;
+    const config = this.config;
+    if (!config || config.program || (phase !== 'running' && phase !== 'ending')) return;
+    config.durationSec += sec;
+    if (phase === 'ending') {
+      await this.engine.start();
+      this.setPhase('running');
+    } else {
+      this.publish();
+    }
+  }
+
+  /** The wake-up alarm was heard: end the session as completed. */
+  dismissAlarm(): void {
+    if (this.snapshot.phase !== 'alarm') return;
+    clearTimeout(this.alarmTimeout);
+    this.engine.stopAlarm();
+    this.setPhase('finished');
+    this.emitResult(true);
+  }
+
+  /** Silence the alarm and keep sleeping a little longer; it rings again after. */
+  async snooze(sec: number = SNOOZE_SEC): Promise<void> {
+    const config = this.config;
+    if (!config || this.snapshot.phase !== 'alarm') return;
+    clearTimeout(this.alarmTimeout);
+    this.engine.stopAlarm({ suspend: false });
+    config.durationSec += sec;
+    this.clock.resume();
+    await this.engine.start();
+    clearInterval(this.interval);
+    this.interval = setInterval(() => this.tick(), TICK_MS);
     this.setPhase('running');
   }
 
   /** Early stop — counts as an implicit negative-ish signal (PRD §9). */
   stop(): void {
     const phase = this.snapshot.phase;
+    if (phase === 'alarm') {
+      this.dismissAlarm();
+      return;
+    }
     if (phase !== 'running' && phase !== 'paused' && phase !== 'interrupted') return;
     this.clock.pause();
     clearInterval(this.interval);
@@ -180,6 +248,7 @@ export class SessionController {
 
   dispose(): void {
     clearInterval(this.interval);
+    clearTimeout(this.alarmTimeout);
     this.unsubscribeContextState();
     this.listeners.clear();
   }
@@ -203,6 +272,13 @@ export class SessionController {
     if (phase === 'ending' && remainingMs <= 0) {
       clearInterval(this.interval);
       this.clock.pause();
+      if (wakeUp) {
+        // The rise has landed: ring until dismissed (or the cap), then finish.
+        this.engine.startAlarm();
+        this.setPhase('alarm');
+        this.alarmTimeout = setTimeout(() => this.dismissAlarm(), ALARM_MAX_SEC * 1000);
+        return;
+      }
       this.setPhase('finished');
       this.emitResult(true);
       return;
@@ -282,6 +358,7 @@ export class SessionController {
       phase,
       elapsedSec,
       remainingSec: Math.max((this.config?.durationSec ?? 0) - elapsedSec, 0),
+      ...(this.resumeFailed ? { resumeFailed: true } : {}),
     };
     for (const listener of this.listeners) listener();
   }

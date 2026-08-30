@@ -9,10 +9,23 @@ import { chooseProfile, type ServedProfile } from '../personalization/personaliz
 import { playSilentKeepAlive } from '../platform/silentAudio';
 import { programMinDurationSec, type Program } from '../programs/types';
 import { IDENTITY_MODULATION } from '../session/evolution';
+import { CHECKPOINT_EVERY_SEC } from '../session/inProgress';
 import { breathingFor, wakeUpFor } from '../session/sessionOptions';
 import { SessionController, type SessionResult } from '../session/sessionController';
-import { appendSession, newId, savePreset } from '../storage/storage';
-import { modeFor, type Preset, type SessionRecord, type Settings } from '../storage/types';
+import {
+  appendSession,
+  clearInProgress,
+  newId,
+  saveInProgress,
+  savePreset,
+} from '../storage/storage';
+import {
+  modeFor,
+  type InProgressSession,
+  type Preset,
+  type SessionRecord,
+  type Settings,
+} from '../storage/types';
 import { START_ERROR_MESSAGE } from '../ui/SafetyNotices';
 import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
@@ -70,6 +83,9 @@ export function useSessionOrchestrator(deps: {
   const sessionBreathingRef = useRef<BreathPattern | null>(null);
   /** Interval plan behind a generated program (recorded instead of a programId). */
   const sessionIntervalsRef = useRef<IntervalPlan | null>(null);
+  /** Checkpoint of the running session (minus elapsed), rewritten as it plays. */
+  const checkpointRef = useRef<Omit<InProgressSession, 'elapsedSec' | 'updatedAt'> | null>(null);
+  const unsubscribeCheckpointRef = useRef<(() => void) | null>(null);
 
   const [liveProfile, setLiveProfile] = useState<SoundProfile | null>(null);
   const [starting, setStarting] = useState(false);
@@ -77,7 +93,37 @@ export function useSessionOrchestrator(deps: {
 
   const { settings, selection, adaptation, biometrics, coach } = deps;
 
+  const stopCheckpointing = () => {
+    unsubscribeCheckpointRef.current?.();
+    unsubscribeCheckpointRef.current = null;
+    checkpointRef.current = null;
+    clearInProgress();
+  };
+
+  /**
+   * Keep a checkpoint of the running session so a tab kill or crash still
+   * leaves a history record (useStoredData recovers it on the next launch).
+   */
+  const startCheckpointing = (controller: SessionController) => {
+    let lastBucket = -1;
+    const write = (elapsedSec: number) => {
+      const base = checkpointRef.current;
+      if (!base) return;
+      saveInProgress({ ...base, elapsedSec, updatedAt: new Date().toISOString() });
+    };
+    write(0);
+    unsubscribeCheckpointRef.current = controller.subscribe(() => {
+      const { elapsedSec } = controller.getSnapshot();
+      const bucket = Math.floor(elapsedSec / CHECKPOINT_EVERY_SEC);
+      if (bucket !== lastBucket) {
+        lastBucket = bucket;
+        write(elapsedSec);
+      }
+    });
+  };
+
   const handleComplete = (result: SessionResult) => {
+    stopCheckpointing();
     const engine = engineRef.current;
     const profile = engine?.getProfile() ?? result.config.profile;
     const served = servedRef.current;
@@ -138,6 +184,7 @@ export function useSessionOrchestrator(deps: {
   // Release the audio graph and timers if the app root ever unmounts.
   useEffect(
     () => () => {
+      unsubscribeCheckpointRef.current?.();
       controllerRef.current?.dispose();
       engineRef.current?.dispose();
       controllerRef.current = null;
@@ -159,7 +206,12 @@ export function useSessionOrchestrator(deps: {
     return engineRef.current;
   };
 
-  const begin = async () => {
+  /**
+   * Start a session from the setup selection — or, with `replayOf`, replay
+   * that record directly ("Play last"), bypassing the selection so it can be
+   * called in the same gesture as the tap without waiting for a re-render.
+   */
+  const begin = async (opts: { replayOf?: SessionRecord } = {}) => {
     if (starting) return;
     // Synchronously inside the tap: iOS only starts media from a gesture, and
     // the keep-alive is what lets the session survive a locked screen.
@@ -167,15 +219,21 @@ export function useSessionOrchestrator(deps: {
     setStarting(true);
     setStartError(null);
     try {
-      const { mentalState, intensity } = selection;
-      const minutes = selection.resolveMinutes();
-      const selectedPreset = deps.presets.find(
-        (p) => p.id === selection.selectedPresetId && p.state === mentalState,
-      );
+      const direct = opts.replayOf ?? null;
+      const mentalState = direct?.state ?? selection.mentalState;
+      const intensity = direct?.intensity ?? selection.intensity;
+      const minutes = direct
+        ? Math.max(1, Math.round(direct.plannedDurationSec / 60))
+        : selection.resolveMinutes();
+      const selectedPreset = direct
+        ? undefined
+        : deps.presets.find(
+            (p) => p.id === selection.selectedPresetId && p.state === mentalState,
+          );
       const resolved = resolveSessionProgram({
         programs: deps.programs,
-        selectedProgramId: selection.selectedProgramId,
-        intervals: selection.intervals,
+        selectedProgramId: direct ? undefined : selection.selectedProgramId,
+        intervals: direct ? null : selection.intervals,
         state: mentalState,
         intensity,
         presetProfile: selectedPreset?.profile,
@@ -186,7 +244,7 @@ export function useSessionOrchestrator(deps: {
       const preset = program && !resolved.generated ? undefined : selectedPreset;
       sessionIntervalsRef.current = resolved.generated ? selection.intervals : null;
       // A history replay only applies to the state it was recorded for.
-      const replaying = !program && !preset ? selection.replay : null;
+      const replaying = direct ?? (!program && !preset ? selection.replay : null);
       let profile: SoundProfile;
       if (program) {
         // Program sessions play the program's snapshot; like presets they
@@ -244,7 +302,8 @@ export function useSessionOrchestrator(deps: {
         : minutes * 60;
       const wakeUp = program ? undefined : (wakeUpFor(sessionState, settings.wakeUp, durationSec) ?? undefined);
       setLiveProfile(profile);
-      await controllerRef.current!.start({
+      const controller = controllerRef.current!;
+      await controller.start({
         state: sessionState,
         intensity: sessionIntensity,
         durationSec,
@@ -258,11 +317,29 @@ export function useSessionOrchestrator(deps: {
         checkpointSec: adaptationOn ? ADAPT_INTERVAL_SEC : undefined,
         endGuardSec: END_GUARD_SEC,
       });
+      checkpointRef.current = {
+        startedAt: new Date().toISOString(),
+        state: sessionState,
+        intensity: sessionIntensity,
+        plannedDurationSec: durationSec,
+        profile: cloneProfile(profile),
+        monoMode: engineRef.current?.isMonoMode ?? false,
+        presetId: preset?.id,
+        programId: sessionIntervalsRef.current ? undefined : program?.id,
+        intervals: sessionIntervalsRef.current ?? undefined,
+        replayOfSessionId: replaying?.id,
+        servedArmId: servedRef.current?.armId,
+        servedBy: preset ? 'preset' : servedRef.current?.servedBy,
+        breathingPattern: breathing && breathing.id !== 'pulse' ? breathing.id : undefined,
+        wakeUp,
+      };
+      startCheckpointing(controller);
       deps.onSessionStarted();
     } catch (err) {
       // AudioContext blocked, worklet failed to load, no output device… The
       // controller may be mid-start; stop it so the next Begin starts clean.
       console.error('Session failed to start', err);
+      stopCheckpointing();
       try {
         controllerRef.current?.stop();
       } catch {

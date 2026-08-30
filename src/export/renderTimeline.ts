@@ -83,12 +83,16 @@ export function buildRenderPlan(opts: {
   const durationSec = capped ? EXPORT_MAX_SECONDS : opts.durationSec;
   const wakeUp = !opts.program && Boolean(opts.wakeUp);
   const fadeStart = Math.max(0, durationSec - resolveEndFadeSeconds(opts.state, wakeUp));
-  const chime = resolveEndChime(
-    opts.state,
-    (opts.program as Program | undefined) ?? undefined,
-    opts.chimeEnabled,
-    wakeUp,
-  );
+  // A file has no alarm phase to ring after the rise, so a wake-up export
+  // keeps the single closing chime the live session replaces with the alarm.
+  const chime =
+    wakeUp ||
+    resolveEndChime(
+      opts.state,
+      (opts.program as Program | undefined) ?? undefined,
+      opts.chimeEnabled,
+      wakeUp,
+    );
 
   const events: RenderEvent[] = [];
   for (let t = MODULATION_STEP_SEC; t < fadeStart; t += MODULATION_STEP_SEC) {

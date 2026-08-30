@@ -11,10 +11,14 @@ export function resolveEndChime(
   state: MentalState,
   program: Program | undefined,
   chimeEnabled: boolean,
-  /** A wake-up session always ends with the chime - that is the alarm. */
+  /**
+   * A wake-up session never chimes at the end of its fade: the repeating
+   * alarm (SessionController 'alarm' phase) takes over from there.
+   */
   wakeUp = false,
 ): boolean {
-  return program?.endChime ?? (wakeUp || (STATES[state].end.chime === 'optional' && chimeEnabled));
+  if (wakeUp && program === undefined) return false;
+  return program?.endChime ?? (STATES[state].end.chime === 'optional' && chimeEnabled);
 }
 
 /** A wake-up session has already risen - it ends with a short fade, not sleep's minute. */

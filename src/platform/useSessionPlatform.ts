@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react';
 import type { SessionController, SessionSnapshot } from '../session/sessionController';
 import {
   clearMediaSession,
+  setMediaHandlers,
+  setMediaMetadata,
   setMediaPlaybackState,
   setMediaPosition,
-  setMediaSession,
 } from './mediaSession';
 import { playSilentKeepAlive, stopSilentKeepAlive } from './silentAudio';
 import { WakeLockHolder } from './wakeLock';
@@ -23,34 +24,44 @@ export function useSessionPlatform(
   const wakeLock = useRef<WakeLockHolder | null>(null);
   wakeLock.current ??= new WakeLockHolder();
 
-  // Metadata + handlers: once per session (title changes only with a new session).
+  // Lifecycle: handlers once per controller; teardown only when the session
+  // view goes away. Metadata changes must never run this cleanup — dropping
+  // the keep-alive element mid-session is what kills iOS background audio.
   useEffect(() => {
-    setMediaSession(
-      { title: meta.title, subtitle: meta.subtitle },
-      {
-        onPause: () => void controller.pause(),
-        onResume: () => void controller.resume(),
-        onStop: () => controller.stop(),
+    setMediaHandlers({
+      onPause: () => {
+        if (controller.phase === 'alarm') controller.dismissAlarm();
+        else void controller.pause();
       },
-    );
+      onResume: () => void controller.resume(),
+      onStop: () => {
+        if (controller.phase === 'alarm') controller.dismissAlarm();
+        else controller.stop();
+      },
+    });
+    const lock = wakeLock.current;
     return () => {
       clearMediaSession();
       stopSilentKeepAlive();
-      wakeLock.current?.release();
+      lock?.release();
     };
-  }, [controller, meta.title, meta.subtitle]);
+  }, [controller]);
+
+  useEffect(() => {
+    setMediaMetadata({ title: meta.title, subtitle: meta.subtitle });
+  }, [meta.title, meta.subtitle]);
 
   // Phase-driven state.
   const { phase, elapsedSec } = snapshot;
   useEffect(() => {
-    const live = phase === 'running' || phase === 'paused' || phase === 'interrupted';
+    const live =
+      phase === 'running' || phase === 'paused' || phase === 'interrupted' || phase === 'alarm';
+    const audible = phase === 'running' || phase === 'ending' || phase === 'alarm';
     if (live) playSilentKeepAlive();
     else stopSilentKeepAlive();
-    if (phase === 'running' || phase === 'ending') void wakeLock.current?.acquire();
+    if (audible) void wakeLock.current?.acquire();
     else wakeLock.current?.release();
-    setMediaPlaybackState(
-      phase === 'running' || phase === 'ending' ? 'playing' : live ? 'paused' : 'none',
-    );
+    setMediaPlaybackState(audible ? 'playing' : live ? 'paused' : 'none');
   }, [phase]);
 
   useEffect(() => {

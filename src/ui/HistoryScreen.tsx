@@ -81,7 +81,8 @@ export function HistoryScreen(props: {
                   {s.feedback ? `${'★'.repeat(s.feedback.rating)}` : 'unrated'}
                 </span>
               </span>
-              {!s.completed && <span className="badge early">stopped early</span>}
+              {!s.completed && !s.recovered && <span className="badge early">stopped early</span>}
+              {s.recovered && <span className="badge">ended unexpectedly</span>}
               {program && <span className="badge">{program.name}</span>}
               {s.programId && !program && <span className="badge">program (deleted)</span>}
               {s.intervals && (

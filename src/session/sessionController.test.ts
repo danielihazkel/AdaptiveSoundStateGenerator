@@ -4,7 +4,7 @@ import { STATES } from '../audio/states';
 import { evaluateProgram } from '../programs/evaluator';
 import { BREATH_PATTERNS } from '../audio/breathing';
 import { defaultProgram } from '../programs/types';
-import { SessionController, type SessionConfig } from './sessionController';
+import { ALARM_MAX_SEC, SessionController, type SessionConfig } from './sessionController';
 
 function stubEngine() {
   const contextListeners = new Set<(state: AudioContextState) => void>();
@@ -100,7 +100,7 @@ describe('SessionController', () => {
     expect(engine.endSession).toHaveBeenCalledWith(expect.any(Number), true);
   });
 
-  it('a wake-up sleep session fades over 3 s and chimes', async () => {
+  it('a wake-up sleep session fades over 3 s without a chime (the alarm rings after)', async () => {
     await controller.start(
       config({ state: 'sleep', durationSec: 120, chimeEnabled: false, wakeUp: { riseSec: 30 } }),
     );
@@ -108,7 +108,7 @@ describe('SessionController', () => {
     expect(controller.phase).toBe('running'); // sleep's 60 s fade is replaced
     await vi.advanceTimersByTimeAsync(56_500);
     expect(controller.phase).toBe('ending');
-    expect(engine.endSession).toHaveBeenCalledWith(expect.any(Number), true);
+    expect(engine.endSession).toHaveBeenCalledWith(expect.any(Number), false);
   });
 
   it('hands the breathing pattern to the engine on start, and clears it otherwise', async () => {
@@ -326,5 +326,124 @@ describe('SessionController', () => {
       await vi.advanceTimersByTimeAsync(1_000);
       expect(engine.setProgramModulation).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('SessionController — resume failure, extend, wake-up alarm', () => {
+  let engine: ReturnType<typeof stubEngine> & { startAlarm: ReturnType<typeof vi.fn>; stopAlarm: ReturnType<typeof vi.fn> };
+  let controller: SessionController;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] });
+    engine = { ...stubEngine(), startAlarm: vi.fn(), stopAlarm: vi.fn() };
+    controller = new SessionController(engine as unknown as AudioEngine);
+  });
+
+  afterEach(() => {
+    controller.dispose();
+    vi.useRealTimers();
+  });
+
+  it('a rejected engine.resume() keeps the phase and flags resumeFailed until a resume succeeds', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await controller.start(config());
+    await controller.pause();
+    engine.resume.mockRejectedValueOnce(new Error('InvalidStateError'));
+    await expect(controller.resume()).resolves.toBeUndefined();
+    expect(controller.phase).toBe('paused');
+    expect(controller.getSnapshot().resumeFailed).toBe(true);
+
+    await controller.resume();
+    expect(controller.phase).toBe('running');
+    expect(controller.getSnapshot().resumeFailed).toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it('extend() adds time while running', async () => {
+    await controller.start(config({ durationSec: 60 }));
+    await vi.advanceTimersByTimeAsync(10_000);
+    await controller.extend(120);
+    expect(controller.getSnapshot().remainingSec).toBe(170);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(controller.phase).toBe('running');
+  });
+
+  it('extend() during the wind-down cancels the fade and fades back in', async () => {
+    await controller.start(config({ durationSec: 60 }));
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(controller.phase).toBe('ending');
+    engine.start.mockClear();
+    await controller.extend(60);
+    expect(engine.start).toHaveBeenCalledTimes(1);
+    expect(controller.phase).toBe('running');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(controller.phase).toBe('running');
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(controller.phase).toBe('finished');
+  });
+
+  it('extend() is ignored for program sessions', async () => {
+    await controller.start(config({ program: defaultProgram('focus', 0.5), durationSec: 600 }));
+    await controller.extend(60);
+    expect(controller.getSnapshot().remainingSec).toBe(600);
+  });
+
+  it('a wake-up session rings an alarm after the fade instead of finishing', async () => {
+    const results: boolean[] = [];
+    controller.onComplete = (r) => results.push(r.completed);
+    await controller.start(
+      config({ state: 'sleep', durationSec: 120, chimeEnabled: false, wakeUp: { riseSec: 30 } }),
+    );
+    await vi.advanceTimersByTimeAsync(121_000);
+    expect(controller.phase).toBe('alarm');
+    expect(engine.endSession).toHaveBeenCalledWith(expect.any(Number), false);
+    expect(engine.startAlarm).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([]);
+
+    controller.dismissAlarm();
+    expect(engine.stopAlarm).toHaveBeenCalled();
+    expect(controller.phase).toBe('finished');
+    expect(results).toEqual([true]);
+  });
+
+  it('the alarm gives up after ALARM_MAX_SEC and completes the session', async () => {
+    const results: boolean[] = [];
+    controller.onComplete = (r) => results.push(r.completed);
+    await controller.start(
+      config({ state: 'sleep', durationSec: 120, wakeUp: { riseSec: 30 } }),
+    );
+    await vi.advanceTimersByTimeAsync(121_000);
+    expect(controller.phase).toBe('alarm');
+    await vi.advanceTimersByTimeAsync(ALARM_MAX_SEC * 1000 + 100);
+    expect(controller.phase).toBe('finished');
+    expect(results).toEqual([true]);
+  });
+
+  it('snooze() plays on for the snooze length, then rings again', async () => {
+    await controller.start(
+      config({ state: 'sleep', durationSec: 120, wakeUp: { riseSec: 30 } }),
+    );
+    await vi.advanceTimersByTimeAsync(121_000);
+    expect(controller.phase).toBe('alarm');
+    engine.startAlarm.mockClear();
+    await controller.snooze(60);
+    expect(engine.stopAlarm).toHaveBeenCalledWith({ suspend: false });
+    expect(controller.phase).toBe('running');
+    expect(controller.getSnapshot().remainingSec).toBe(60);
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(controller.phase).toBe('alarm');
+    expect(engine.startAlarm).toHaveBeenCalledTimes(1);
+  });
+
+  it('stop() during the alarm counts as a dismissal (completed)', async () => {
+    const results: boolean[] = [];
+    controller.onComplete = (r) => results.push(r.completed);
+    await controller.start(
+      config({ state: 'sleep', durationSec: 120, wakeUp: { riseSec: 30 } }),
+    );
+    await vi.advanceTimersByTimeAsync(121_000);
+    controller.stop();
+    expect(controller.phase).toBe('finished');
+    expect(results).toEqual([true]);
   });
 });

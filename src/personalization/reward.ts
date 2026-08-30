@@ -97,6 +97,8 @@ export interface ArmCredit {
  */
 export function computeCredits(record: SessionRecord): ArmCredit[] {
   if (!record.servedArmId || record.servedBy === 'preset') return [];
+  // The app died mid-session: the truncated length says nothing about the sound.
+  if (record.recovered) return [];
   const segments = record.segments;
   if (!segments || segments.length === 0) {
     const reward = computeReward(record);

@@ -4,7 +4,7 @@ import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
 import type { Program } from './programs/types';
 import { deletePreset, deleteProgram, newId, savePreset, saveProgram } from './storage/storage';
-import { DEFAULT_WAKE_UP, modeFor } from './storage/types';
+import { DEFAULT_WAKE_UP, modeFor, type Theme } from './storage/types';
 import { BiometricsPanel } from './ui/BiometricsPanel';
 import { CoachInput } from './ui/CoachInput';
 import { DataPanel } from './ui/DataPanel';
@@ -13,6 +13,7 @@ import { MorningPromptModal } from './ui/MorningPrompt';
 import { DisclaimerModal, FooterDisclaimer } from './ui/SafetyNotices';
 import { SetupScreen } from './ui/SetupScreen';
 import { SessionView } from './app/SessionView';
+import { setReloadBusy } from './app/reloadGate';
 import type { Screen } from './app/types';
 import { useAdaptationLoop } from './app/useAdaptationLoop';
 import { useBiometrics } from './app/useBiometrics';
@@ -24,6 +25,7 @@ import {
 } from './app/useSessionOrchestrator';
 import { useSetupSelection } from './app/useSetupSelection';
 import { useStoredData } from './app/useStoredData';
+import { useQuickStart } from './app/useQuickStart';
 import { useShareImport } from './app/useShareImport';
 import { useTabGuard } from './app/useTabGuard';
 import { ShareImportModal } from './ui/ShareImportModal';
@@ -56,6 +58,24 @@ const STORAGE_NOTICES = {
     'Some saved data on this device was damaged and has been set aside. Everything else is intact.',
 } as const;
 
+/** Background the browser chrome should match per resolved theme (index.css --bg). */
+const THEME_COLOR = { dark: '#12141a', light: '#f5f6fa' } as const;
+
+function applyTheme(theme: Theme): void {
+  const root = document.documentElement;
+  if (theme === 'system') delete root.dataset.theme;
+  else root.dataset.theme = theme;
+  const resolved =
+    theme === 'system'
+      ? window.matchMedia?.('(prefers-color-scheme: light)').matches
+        ? 'light'
+        : 'dark'
+      : theme;
+  document
+    .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    ?.setAttribute('content', THEME_COLOR[resolved]);
+}
+
 /**
  * Screen routing and wiring. The behavior lives in src/app/: stored data,
  * setup selection, the coach, biometrics, the adaptation loop, and the
@@ -76,6 +96,18 @@ export function App() {
   const exporter = useMp3Export();
   const tabGuard = useTabGuard();
   const share = useShareImport();
+  useQuickStart(selection);
+
+  // Theme: explicit choice stamps data-theme; 'system' leaves it to the OS.
+  const theme = settings.theme ?? 'system';
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== 'system' || !window.matchMedia) return;
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    const onChange = () => applyTheme('system');
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, [theme]);
 
   // Screens are conditionally rendered, not routed — move focus to the
   // heading on each change so keyboard and screen-reader users land at the
@@ -128,6 +160,10 @@ export function App() {
   // Closing the tab mid-session drops the session record; mid-export it
   // drops the render. Ask first.
   const guardUnload = screen === 'session' || exporter.progress !== null;
+  // A waiting service-worker update reloads only once this goes false.
+  useEffect(() => {
+    setReloadBusy(guardUnload);
+  }, [guardUnload]);
   useEffect(() => {
     if (!guardUnload) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -153,6 +189,14 @@ export function App() {
       wakeUp: settings.wakeUp,
     });
     void exporter.start(sel, label);
+  };
+
+  const playLast = () => {
+    if (!data.lastSession) return;
+    // Mirror the selection (so the setup screen reads right if start fails)
+    // and start directly from the record inside this same tap gesture.
+    selection.replayFrom(data.lastSession);
+    void session.begin({ replayOf: data.lastSession });
   };
 
   const openLab = () => {
@@ -225,6 +269,23 @@ export function App() {
             className="chip"
             aria-label="Dismiss storage warning"
             onClick={data.dismissStorageFailure}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {data.recoveredSession && screen === 'setup' && (
+        <div className="notice" role="status">
+          <span>
+            Your last {STATES[data.recoveredSession.state].label.toLowerCase()} session ended
+            unexpectedly — it has been added to your history.
+          </span>
+          <button
+            type="button"
+            className="chip"
+            aria-label="Dismiss recovered session notice"
+            onClick={data.dismissRecoveredSession}
           >
             ✕
           </button>
@@ -306,6 +367,10 @@ export function App() {
           }}
           onToggleChime={(chime) => updateSettings({ chimeEnabled: chime })}
           onToggleAdaptation={(enabled) => updateSettings({ adaptationEnabled: enabled })}
+          theme={theme}
+          onThemeChange={(next) => updateSettings({ theme: next })}
+          lastSession={data.lastSession}
+          onPlayLast={playLast}
           personalizationActive={data.activeStates.has(selection.mentalState)}
           personalizationMode={modeFor(settings, selection.mentalState)}
           insightsAvailable={data.insightsAvailable}
