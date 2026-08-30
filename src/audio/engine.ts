@@ -8,7 +8,7 @@ import { HarmonyLayer } from './layers/harmonyLayer';
 import { NoiseLayer } from './layers/noiseLayer';
 import { ToneLayer } from './layers/toneLayer';
 import { loadNoiseWorklet } from './noise-processor';
-import { PulseModulator } from './pulseModulator';
+import { PulseModulator, type PulseHandover } from './pulseModulator';
 import { fadeTo, ramp } from './ramp';
 import { MAX_PULSE_RATE_HZ } from './states';
 import { StereoWidthNode } from './stereoWidth';
@@ -316,10 +316,29 @@ export class AudioEngine {
   // the offline driver calls them at t=0 or inside frozen suspend
   // checkpoints, where ctx.currentTime is the checkpoint time.
 
-  /** Offline t=0: schedule the standard session fade-in. */
-  beginOffline(): void {
+  /**
+   * Offline t=0. The first render chunk gets the standard session fade-in;
+   * later chunks pick up mid-session and jump straight to `gainFraction` of
+   * master volume (1 = playing normally, <1 = inside the end fade).
+   */
+  beginOffline(opts: { fadeIn?: boolean; gainFraction?: number } = {}): void {
     this.playing = true;
-    fadeTo(this.ctx, this.master.gain, this.profile.masterVolume, FADE_IN_SECONDS);
+    const target = this.profile.masterVolume * (opts.gainFraction ?? 1);
+    if (opts.fadeIn === false) {
+      this.master.gain.setValueAtTime(target, this.ctx.currentTime);
+    } else {
+      fadeTo(this.ctx, this.master.gain, target, FADE_IN_SECONDS);
+    }
+  }
+
+  /** Offline chunk handover — see PulseModulator.exportHandover. */
+  exportPulseHandover(fromCtxTime: number, ctxToAbs: number): PulseHandover {
+    return this.pulse.exportHandover(fromCtxTime, ctxToAbs);
+  }
+
+  /** Offline chunk handover — call after the origin modulation is applied. */
+  importPulseHandover(handover: PulseHandover, absToCtx: number): void {
+    this.pulse.importHandover(handover, absToCtx);
   }
 
   /** Offline end fade — call at the fade's start checkpoint. */

@@ -7,12 +7,29 @@ import { STATES, type MentalState } from '../audio/states';
  */
 export const EXPORT_SAMPLE_RATE = 44100;
 /**
- * Hard cap on rendered audio. OfflineAudioContext renders into one monolithic
- * Float32 AudioBuffer: 44.1 kHz stereo is ~20 MiB per minute, so 60 min is
- * already ~1.2 GiB of process memory; 180 min (~3.5 GiB) cannot allocate.
- * Longer selections export their first hour, closed with the state's end fade.
+ * Hard cap on exported audio — a wall-clock guard now, not a memory one:
+ * exports render in EXPORT_CHUNK_SECONDS pieces (see splitRenderPlan), so
+ * peak memory is one chunk regardless of length. Four hours covers a full
+ * night's sleep program at a few minutes of render time.
  */
-export const EXPORT_MAX_SECONDS = 3600;
+export const EXPORT_MAX_SECONDS = 4 * 3600;
+/**
+ * Each chunk is one OfflineAudioContext, which renders into a monolithic
+ * Float32 buffer (~20 MiB per minute at 44.1 kHz stereo): 15 min ≈ 300 MiB,
+ * comfortably under what a phone tab can allocate.
+ */
+export const EXPORT_CHUNK_SECONDS = 15 * 60;
+/**
+ * Every chunk after the first starts this far *before* its nominal start: a
+ * fresh engine needs ~0.25 s for its τ=0.05 s ramps to settle onto the
+ * session's current values, then CHUNK_CROSSFADE_SEC of overlap with the
+ * previous chunk's tail hides the seam (free-running oscillators restart at
+ * phase 0 per chunk — the equal-power crossfade masks that).
+ */
+export const CHUNK_LEAD_SEC = 3;
+export const CHUNK_CROSSFADE_SEC = 2;
+/** A trailing chunk shorter than this is folded into the previous one. */
+const MIN_LAST_CHUNK_SEC = 30;
 /**
  * Checkpoint cadence for replaying the session evolution offline. Realtime
  * ticks every 500 ms; under the τ=2 s EVOLUTION_TIME_CONSTANT smoothing a 1 s
@@ -71,4 +88,77 @@ export function buildRenderPlan(opts: {
     capped,
     events,
   };
+}
+
+/** One OfflineAudioContext's worth of a render. Times inside are ctx time. */
+export interface RenderChunk {
+  index: number;
+  last: boolean;
+  /** Absolute session time at this chunk's ctx t=0 (= startSec − leadSec). */
+  originSec: number;
+  /** Absolute time where this chunk's audio takes over from the previous one. */
+  startSec: number;
+  /** Absolute end of this chunk's audio. */
+  endSec: number;
+  leadSec: number;
+  /** Render length in ctx seconds (endSec − originSec). */
+  lengthSec: number;
+  /** Master-plan events inside (originSec, endSec), re-timed to ctx time (> 0). */
+  events: RenderEvent[];
+  /**
+   * Non-null when the end fade began at or before originSec: the chunk must
+   * start at `gainFraction` of master volume and finish the fade over
+   * `remainingSec` (0 = silence already reached — chime/tail only).
+   */
+  fadeInProgress: { remainingSec: number; gainFraction: number } | null;
+}
+
+/**
+ * Split a plan into consecutive chunks of at most EXPORT_CHUNK_SECONDS. A
+ * plan that fits in one chunk yields exactly one chunk with no lead —
+ * byte-identical to a monolithic render. Later chunks overlap the previous
+ * one by CHUNK_LEAD_SEC so the encoder can crossfade across the seam.
+ */
+export function splitRenderPlan(plan: RenderPlan): RenderChunk[] {
+  const total = plan.renderSeconds;
+  let count = Math.max(1, Math.ceil(total / EXPORT_CHUNK_SECONDS));
+  if (count > 1 && total - (count - 1) * EXPORT_CHUNK_SECONDS < MIN_LAST_CHUNK_SEC) {
+    count -= 1;
+  }
+  const endFade = plan.events.find((e) => e.kind === 'endFade');
+  const fadeStart = endFade?.time ?? plan.durationSec;
+  const fadeSeconds = endFade && endFade.kind === 'endFade' ? endFade.fadeSeconds : 0;
+
+  const chunks: RenderChunk[] = [];
+  for (let k = 0; k < count; k++) {
+    const last = k === count - 1;
+    const startSec = k * EXPORT_CHUNK_SECONDS;
+    const endSec = last ? total : (k + 1) * EXPORT_CHUNK_SECONDS;
+    const leadSec = k === 0 ? 0 : CHUNK_LEAD_SEC;
+    const originSec = startSec - leadSec;
+    const events = plan.events
+      .filter((e) => e.time > originSec && e.time < endSec)
+      .map((e) => ({ ...e, time: e.time - originSec }));
+
+    let fadeInProgress: RenderChunk['fadeInProgress'] = null;
+    if (originSec >= fadeStart) {
+      const remainingSec = Math.max(0, fadeStart + fadeSeconds - originSec);
+      fadeInProgress = {
+        remainingSec,
+        gainFraction: fadeSeconds > 0 ? remainingSec / fadeSeconds : 0,
+      };
+    }
+    chunks.push({
+      index: k,
+      last,
+      originSec,
+      startSec,
+      endSec,
+      leadSec,
+      lengthSec: endSec - originSec,
+      events,
+      fadeInProgress,
+    });
+  }
+  return chunks;
 }

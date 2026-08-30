@@ -2,10 +2,13 @@ import { useState, useSyncExternalStore } from 'react';
 import type { AudioEngine } from '../../audio/engine';
 import type { MentalState } from '../../audio/states';
 import { normalizeProfile, type SoundProfile } from '../../audio/types';
+import { programExportSelection } from '../../export/programExport';
+import type { Mp3Exporter } from '../../export/useMp3Export';
 import type { LabProgramRunner } from '../../lab/programRunner';
 import { segmentAt } from '../../programs/evaluator';
 import { PROGRAM_TEMPLATES } from '../../programs/templates';
 import type { Program } from '../../programs/types';
+import { ExportRow } from '../ExportRow';
 import { formatMinSec } from '../format';
 
 /**
@@ -22,6 +25,8 @@ export function ProgramRunPanel(props: {
   ensureEngine: (profile: SoundProfile) => Promise<AudioEngine>;
   /** Applies the program's base sound to the lab, like the preview does. */
   onApplyBase: (profile: SoundProfile) => void;
+  exporter: Mp3Exporter;
+  chimeEnabled: boolean;
 }) {
   const [selection, setSelection] = useState('');
   const [starting, setStarting] = useState(false);
@@ -130,6 +135,18 @@ export function ProgramRunPanel(props: {
           </button>
         )}
       </div>
+      {!active && selection !== '' && (
+        <ExportRow
+          exporter={props.exporter}
+          label="⤓ Download MP3"
+          onDownload={() => {
+            const program = resolveProgram();
+            if (!program) return;
+            const { sel, label } = programExportSelection(program, props.chimeEnabled);
+            void props.exporter.start(sel, label);
+          }}
+        />
+      )}
     </section>
   );
 }

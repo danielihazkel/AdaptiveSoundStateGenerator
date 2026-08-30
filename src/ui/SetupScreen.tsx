@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { STATES, type MentalState } from '../audio/states';
-import type { ExportProgress } from '../export/exportSession';
 import { EXPORT_MAX_SECONDS } from '../export/renderTimeline';
+import type { Mp3Exporter } from '../export/useMp3Export';
 import { PROGRAM_TEMPLATES, type ProgramTemplate } from '../programs/templates';
 import { programMinDurationSec, type Program } from '../programs/types';
 import type { PersonalizationMode, Preset } from '../storage/types';
+import { ExportRow } from './ExportRow';
 import { DurationPicker } from './DurationPicker';
 import { HeadphoneHint, NoDrivingWarning } from './SafetyNotices';
 import { StatePicker } from './StatePicker';
@@ -43,11 +44,8 @@ export function SetupScreen(props: {
   onModeChange: (mode: PersonalizationMode) => void;
   onShowInsights: () => void;
   onBegin: () => void;
-  /** Non-null while an MP3 export is running. */
-  exportProgress: ExportProgress | null;
-  exportMessage: string | null;
+  exporter: Mp3Exporter;
   onDownload: () => void;
-  onCancelExport: () => void;
 }) {
   const stateDef = STATES[props.state];
   const statePresets = props.presets.filter((p) => p.state === props.state);
@@ -265,30 +263,17 @@ export function SetupScreen(props: {
         </button>
       </div>
 
-      <div className="download-row">
-        {props.exportProgress ? (
-          <>
-            <span className="hint download-progress">
-              {props.exportProgress.phase === 'rendering' ? 'Rendering' : 'Encoding'}…{' '}
-              {Math.round(props.exportProgress.fraction * 100)}%
-            </span>
-            <button type="button" className="link-button" onClick={props.onCancelExport}>
-              Cancel
-            </button>
-          </>
-        ) : (
-          <button type="button" className="chip" onClick={props.onDownload}>
-            ⤓ Download {exportMinutes} min MP3
-          </button>
-        )}
-      </div>
-      {exportCapped && !props.exportProgress && (
+      <ExportRow
+        exporter={props.exporter}
+        label={`⤓ Download ${exportMinutes} min MP3`}
+        onDownload={props.onDownload}
+      />
+      {exportCapped && !props.exporter.progress && (
         <p className="hint">
           Downloads are capped at {EXPORT_MAX_SECONDS / 60} minutes — the file will
           cover the first {exportMinutes} min of this session.
         </p>
       )}
-      {props.exportMessage && <p className="hint">{props.exportMessage}</p>}
 
       {props.insightsAvailable && (
         <button type="button" className="link-button" onClick={props.onShowInsights}>

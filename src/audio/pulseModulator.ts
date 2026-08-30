@@ -18,6 +18,25 @@ const SCHEDULE_HORIZON_SEC = 1.2;
 /** Segments per raised-cosine pulse envelope (linear-ramp approximation). */
 const ENVELOPE_SEGMENTS = 8;
 
+/** One scheduled pulse, in absolute (session) seconds. */
+interface ScheduledPulse {
+  start: number;
+  width: number;
+  peak: number;
+}
+
+/**
+ * Rhythm state carried from one offline render chunk to the next: pulses
+ * already scheduled past the seam (re-issued verbatim in the next chunk) and
+ * the next unscheduled pulse, so the bar continues exactly where it was.
+ * Bar phase is the integral of a drifting BPM — a fresh engine cannot
+ * re-derive it from absolute time alone.
+ */
+export interface PulseHandover {
+  scheduled: ScheduledPulse[];
+  next: { eventIdx: number; eventTime: number; barEvents: PulseEvent[] } | null;
+}
+
 /**
  * Isochronic-style amplitude modulation (PRD §6C) with two modes.
  *
@@ -54,6 +73,8 @@ export class PulseModulator {
   private eventIdx = 0;
   /** AudioContext time of barEvents[eventIdx] — the next unscheduled pulse. */
   private eventTime = 0;
+  /** Offline only: every envelope scheduled (ctx time), for chunk handover. */
+  private scheduledLog: ScheduledPulse[] = [];
 
   constructor(
     private readonly ctx: BaseAudioContext,
@@ -144,6 +165,46 @@ export class PulseModulator {
     this.scheduleWindow(until);
   }
 
+  /**
+   * Offline chunk handover, part 1: pulses whose envelope reaches past
+   * `fromCtxTime` and the next-pulse state, converted to absolute time via
+   * `ctxToAbs` (absolute = ctx + ctxToAbs).
+   */
+  exportHandover(fromCtxTime: number, ctxToAbs: number): PulseHandover {
+    const scheduled = this.scheduledLog
+      .filter((p) => p.start + p.width >= fromCtxTime)
+      .map((p) => ({ ...p, start: p.start + ctxToAbs }));
+    const next =
+      this.offline && this.mode === 'pattern'
+        ? {
+            eventIdx: this.eventIdx,
+            eventTime: this.eventTime + ctxToAbs,
+            barEvents: this.barEvents.map((e) => ({ ...e })),
+          }
+        : null;
+    return { scheduled, next };
+  }
+
+  /**
+   * Offline chunk handover, part 2: call after the profile/modulation for the
+   * chunk's origin has been applied (so the mode is settled). Re-issues the
+   * handed-over pulses that start inside this context and resumes the bar
+   * from the handed-over next-pulse state. No-op unless in pattern mode.
+   */
+  importHandover(handover: PulseHandover, absToCtx: number): void {
+    if (!this.offline || this.mode !== 'pattern') return;
+    const now = this.ctx.currentTime;
+    for (const p of handover.scheduled) {
+      const start = p.start + absToCtx;
+      if (start >= now) this.scheduleEnvelope(start, p.width, p.peak);
+    }
+    if (handover.next) {
+      this.eventIdx = handover.next.eventIdx;
+      this.eventTime = handover.next.eventTime + absToCtx;
+      this.barEvents = handover.next.barEvents.map((e) => ({ ...e }));
+    }
+  }
+
   private startScheduler(): void {
     if (this.schedulerTimer !== undefined) return;
     this.barEvents = buildBar(this.complexity);
@@ -201,6 +262,7 @@ export class PulseModulator {
 
   /** Raised-cosine (Hann) envelope 0 → peak → 0 as linear-ramp segments. */
   private scheduleEnvelope(start: number, width: number, peak: number): void {
+    if (this.offline) this.scheduledLog.push({ start, width, peak });
     const offset = this.patternSource.offset;
     offset.setValueAtTime(0, start);
     for (let k = 1; k <= ENVELOPE_SEGMENTS; k++) {

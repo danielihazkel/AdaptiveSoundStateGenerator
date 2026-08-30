@@ -12,7 +12,8 @@
     "isolatedModules": true,
     "useDefineForClassFields": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["vite/client", "vite-plugin-pwa/client"]
   },
   "include": ["src", "vite.config.ts"]
 }

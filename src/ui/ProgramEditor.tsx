@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { STATES, type MentalState } from '../audio/states';
+import { programExportSelection } from '../export/programExport';
+import type { Mp3Exporter } from '../export/useMp3Export';
 import { newId } from '../storage/id';
 import {
   normalizeProgram,
   type Program,
   type ProgramSegment,
 } from '../programs/types';
+import { ExportRow } from './ExportRow';
 import { Slider } from './Slider';
 import { StatePicker } from './StatePicker';
 
@@ -285,10 +288,18 @@ function reflow(segments: ProgramSegment[]): ProgramSegment[] {
  */
 export function ProgramEditor(props: {
   program: Program;
+  exporter: Mp3Exporter;
+  chimeEnabled: boolean;
   onSave: (program: Program) => void;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<Program>(props.program);
+  /** The program as it would be saved — also what Download renders. */
+  const commit = (): Program =>
+    normalizeProgram({ ...draft, name: draft.name.trim() || 'Program' });
+  const exportMinutes = Math.round(
+    programExportSelection(commit(), props.chimeEnabled).sel.durationSec / 60,
+  );
 
   const editSegments = (segments: ProgramSegment[]) =>
     setDraft((d) => ({ ...d, segments: reflow(segments) }));
@@ -386,7 +397,7 @@ export function ProgramEditor(props: {
           type="button"
           className="play-button"
           disabled={draft.name.trim() === ''}
-          onClick={() => props.onSave(normalizeProgram({ ...draft, name: draft.name.trim() }))}
+          onClick={() => props.onSave(commit())}
         >
           Save program
         </button>
@@ -394,6 +405,14 @@ export function ProgramEditor(props: {
           Cancel
         </button>
       </div>
+      <ExportRow
+        exporter={props.exporter}
+        label={`⤓ Download ${exportMinutes} min MP3`}
+        onDownload={() => {
+          const { sel, label } = programExportSelection(commit(), props.chimeEnabled);
+          void props.exporter.start(sel, label);
+        }}
+      />
     </section>
   );
 }

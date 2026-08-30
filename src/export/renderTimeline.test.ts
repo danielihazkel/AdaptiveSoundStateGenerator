@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildRenderPlan,
+  CHUNK_LEAD_SEC,
+  EXPORT_CHUNK_SECONDS,
   EXPORT_MAX_SECONDS,
   MODULATION_STEP_SEC,
+  splitRenderPlan,
 } from './renderTimeline';
 
 describe('buildRenderPlan', () => {
@@ -56,7 +59,7 @@ describe('buildRenderPlan', () => {
   });
 
   it('caps long sessions to EXPORT_MAX_SECONDS and still ends with the fade', () => {
-    for (const minutes of [90, 180]) {
+    for (const minutes of [300, 600]) {
       const plan = buildRenderPlan({
         state: 'relax',
         durationSec: minutes * 60,
@@ -70,6 +73,102 @@ describe('buildRenderPlan', () => {
     }
     const short = buildRenderPlan({ state: 'relax', durationSec: 3600, chimeEnabled: false });
     expect(short.capped).toBe(false);
+  });
+
+  it('allows a 3 h sleep program without capping', () => {
+    const plan = buildRenderPlan({ state: 'sleep', durationSec: 3 * 3600, chimeEnabled: false });
+    expect(plan.capped).toBe(false);
+    expect(plan.durationSec).toBe(3 * 3600);
+  });
+});
+
+describe('splitRenderPlan', () => {
+  it('keeps a short plan as a single lead-less chunk identical to the plan', () => {
+    const plan = buildRenderPlan({ state: 'focus', durationSec: 900, chimeEnabled: true });
+    const chunks = splitRenderPlan(plan);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toMatchObject({
+      index: 0,
+      last: true,
+      originSec: 0,
+      startSec: 0,
+      endSec: plan.renderSeconds,
+      leadSec: 0,
+      lengthSec: plan.renderSeconds,
+      fadeInProgress: null,
+    });
+    expect(chunks[0].events).toEqual(plan.events);
+  });
+
+  it('tiles a long plan contiguously with leads that overlap the previous chunk', () => {
+    const plan = buildRenderPlan({ state: 'sleep', durationSec: 50 * 60, chimeEnabled: false });
+    const chunks = splitRenderPlan(plan);
+    expect(chunks.length).toBe(4);
+    expect(chunks[0].startSec).toBe(0);
+    for (let i = 1; i < chunks.length; i++) {
+      expect(chunks[i].startSec).toBe(chunks[i - 1].endSec);
+      expect(chunks[i].leadSec).toBe(CHUNK_LEAD_SEC);
+      expect(chunks[i].originSec).toBe(chunks[i].startSec - CHUNK_LEAD_SEC);
+      expect(chunks[i].lengthSec).toBeCloseTo(chunks[i].endSec - chunks[i].originSec);
+      expect(chunks[i].index).toBe(i);
+      expect(chunks[i].last).toBe(i === chunks.length - 1);
+    }
+    expect(chunks.at(-1)?.endSec).toBeCloseTo(plan.renderSeconds);
+    expect(chunks[0].endSec).toBe(EXPORT_CHUNK_SECONDS);
+  });
+
+  it('re-times events into chunk time, all strictly positive and increasing', () => {
+    const plan = buildRenderPlan({ state: 'relax', durationSec: 40 * 60, chimeEnabled: false });
+    for (const chunk of splitRenderPlan(plan)) {
+      expect(chunk.events[0]?.time).toBeGreaterThan(0);
+      for (let i = 1; i < chunk.events.length; i++) {
+        expect(chunk.events[i].time).toBeGreaterThan(chunk.events[i - 1].time);
+      }
+      for (const ev of chunk.events) {
+        expect(ev.time + chunk.originSec).toBeLessThan(chunk.endSec);
+      }
+    }
+  });
+
+  it('places every master event in its owning chunk (lead-window events repeat)', () => {
+    const plan = buildRenderPlan({ state: 'focus', durationSec: 35 * 60, chimeEnabled: true });
+    const chunks = splitRenderPlan(plan);
+    for (const ev of plan.events) {
+      const owners = chunks.filter((c) => ev.time >= c.startSec && ev.time < c.endSec);
+      expect(owners).toHaveLength(1);
+      const owner = owners[0];
+      expect(
+        owner.events.some((e) => e.kind === ev.kind && e.time + owner.originSec === ev.time),
+      ).toBe(true);
+    }
+    const lastChunk = chunks.at(-1)!;
+    expect(lastChunk.events.some((e) => e.kind === 'endFade')).toBe(true);
+    expect(lastChunk.events.some((e) => e.kind === 'chime')).toBe(true);
+  });
+
+  it("resumes sleep's 60 s fade when a chunk seam falls inside it", () => {
+    // 30 min + 40 s: the fade starts at 29:40, the seam at 30:00 is 20 s in.
+    const durationSec = 30 * 60 + 40;
+    const plan = buildRenderPlan({ state: 'sleep', durationSec, chimeEnabled: false });
+    const chunks = splitRenderPlan(plan);
+    expect(chunks).toHaveLength(3);
+    const last = chunks[2];
+    expect(last.fadeInProgress).not.toBeNull();
+    // Origin is 3 s before the seam: 17 s into the fade, 43 s remain.
+    expect(last.fadeInProgress?.remainingSec).toBeCloseTo(43);
+    expect(last.fadeInProgress?.gainFraction).toBeCloseTo(43 / 60);
+    expect(last.events.some((e) => e.kind === 'endFade')).toBe(false);
+  });
+
+  it('folds a tiny trailing chunk into the previous one', () => {
+    const plan = buildRenderPlan({
+      state: 'relax',
+      durationSec: EXPORT_CHUNK_SECONDS + 5,
+      chimeEnabled: false,
+    });
+    const chunks = splitRenderPlan(plan);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].endSec).toBeCloseTo(plan.renderSeconds);
   });
 
   it('emits strictly increasing event times', () => {

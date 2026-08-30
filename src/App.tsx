@@ -17,8 +17,10 @@ import {
   type SampleAmbienceType,
   type SoundProfile,
 } from './audio/types';
-import { exportSessionMp3, type ExportProgress } from './export/exportSession';
 import type { ExportSelection } from './export/offlineRenderer';
+import { useMp3Export } from './export/useMp3Export';
+import { playSilentKeepAlive } from './platform/silentAudio';
+import { useSessionPlatform } from './platform/useSessionPlatform';
 import { programMinDurationSec, type Program } from './programs/types';
 import { IDENTITY_MODULATION } from './session/evolution';
 import { computeHrTrend } from './biometrics/hrTrend';
@@ -125,6 +127,13 @@ function SessionView(props: {
   };
 }) {
   const snapshot = useSession(props.controller);
+  const stateDef = STATES[props.mentalState];
+  const durationSec = snapshot.elapsedSec + snapshot.remainingSec;
+  useSessionPlatform(props.controller, snapshot, {
+    title: `${stateDef.label} · ${Math.round(durationSec / 60)} min`,
+    subtitle: props.program ? `Resonance · ${props.program.name}` : undefined,
+    durationSec,
+  });
   return (
     <SessionScreen
       stateDef={STATES[props.mentalState]}
@@ -200,9 +209,7 @@ export function App() {
   const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>();
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>();
   const [starting, setStarting] = useState(false);
-  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
-  const [exportMessage, setExportMessage] = useState<string | null>(null);
-  const exportAbortRef = useRef<AbortController | null>(null);
+  const exporter = useMp3Export();
   const [liveProfile, setLiveProfile] = useState<SoundProfile | null>(null);
   const [microPrompt, setMicroPrompt] = useState<CheckpointInfo | null>(null);
   const [coachMessage, setCoachMessage] = useState<string | null>(null);
@@ -434,6 +441,30 @@ export function App() {
     }
   };
 
+  // Closing the tab mid-session drops the session record; mid-export it
+  // drops the render. Ask first.
+  const guardUnload = screen === 'session' || exporter.progress !== null;
+  useEffect(() => {
+    if (!guardUnload) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [guardUnload]);
+
+  // Release the audio graph and timers if the app root ever unmounts.
+  useEffect(
+    () => () => {
+      controllerRef.current?.dispose();
+      engineRef.current?.dispose();
+      controllerRef.current = null;
+      engineRef.current = null;
+    },
+    [],
+  );
+
   /** Lazily create the shared engine + controller (needs a user gesture). */
   const ensureEngine = async (profile: SoundProfile): Promise<AudioEngine> => {
     if (!engineRef.current) {
@@ -495,33 +526,16 @@ export function App() {
     };
   };
 
-  const handleDownload = async () => {
-    if (exportProgress) return;
-    const abort = new AbortController();
-    exportAbortRef.current = abort;
-    setExportMessage(null);
-    setExportProgress({ phase: 'rendering', fraction: 0 });
-    try {
-      const { sel, label } = resolveExportSelection();
-      await exportSessionMp3(sel, label, setExportProgress, abort.signal);
-      setExportMessage('Saved — check your downloads. It plays in any audio player.');
-    } catch (err) {
-      if (abort.signal.aborted) {
-        setExportMessage('Download cancelled.');
-      } else {
-        console.error('MP3 export failed', err);
-        setExportMessage(
-          'Could not create the file — this device may be low on memory. Try a shorter duration.',
-        );
-      }
-    } finally {
-      exportAbortRef.current = null;
-      setExportProgress(null);
-    }
+  const handleDownload = () => {
+    const { sel, label } = resolveExportSelection();
+    void exporter.start(sel, label);
   };
 
   const begin = async () => {
     if (starting) return;
+    // Synchronously inside the tap: iOS only starts media from a gesture, and
+    // the keep-alive is what lets the session survive a locked screen.
+    playSilentKeepAlive();
     setStarting(true);
     try {
       const program = programs.find((p) => p.id === selectedProgramId);
@@ -879,10 +893,8 @@ export function App() {
           }
           onShowInsights={() => setScreen('insights')}
           onBegin={() => void begin()}
-          exportProgress={exportProgress}
-          exportMessage={exportMessage}
-          onDownload={() => void handleDownload()}
-          onCancelExport={() => exportAbortRef.current?.abort()}
+          exporter={exporter}
+          onDownload={handleDownload}
         />
       )}
 
@@ -918,6 +930,8 @@ export function App() {
       {screen === 'programEditor' && editingProgram && (
         <ProgramEditor
           program={editingProgram}
+          exporter={exporter}
+          chimeEnabled={settings.chimeEnabled}
           onSave={handleSaveProgram}
           onCancel={() => {
             setEditingProgram(null);
@@ -932,6 +946,8 @@ export function App() {
           getEngine={() => engineRef.current}
           presets={presets}
           programs={programs}
+          exporter={exporter}
+          chimeEnabled={settings.chimeEnabled}
           availableSampleTypes={sampleAmbience}
           onSavePreset={(name, profile, state, labIntensity) => {
             savePreset({

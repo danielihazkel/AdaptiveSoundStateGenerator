@@ -7,8 +7,10 @@ import {
   type SampleAmbienceType,
   type SoundProfile,
 } from '../../audio/types';
+import type { Mp3Exporter } from '../../export/useMp3Export';
 import { LabProgramRunner } from '../../lab/programRunner';
 import { randomizeProfile } from '../../lab/randomize';
+import { WakeLockHolder } from '../../platform/wakeLock';
 import type { Program } from '../../programs/types';
 import type { Preset } from '../../storage/types';
 import { AdvancedPanel } from '../AdvancedPanel';
@@ -29,6 +31,8 @@ export function LabScreen(props: {
   getEngine: () => AudioEngine | null;
   presets: Preset[];
   programs: Program[];
+  exporter: Mp3Exporter;
+  chimeEnabled: boolean;
   availableSampleTypes?: ReadonlySet<SampleAmbienceType>;
   onSavePreset: (name: string, profile: SoundProfile, state: MentalState, intensity: number) => void;
   onBack: () => void;
@@ -56,6 +60,14 @@ export function LabScreen(props: {
   useEffect(() => {
     if (runActive) setPlaying(false);
   }, [runActive]);
+  // A timed run is a session in all but name — keep the screen awake for it.
+  const wakeLockRef = useRef<WakeLockHolder | null>(null);
+  wakeLockRef.current ??= new WakeLockHolder();
+  useEffect(() => {
+    if (runStatus === 'running') void wakeLockRef.current?.acquire();
+    else wakeLockRef.current?.release();
+  }, [runStatus]);
+  useEffect(() => () => wakeLockRef.current?.release(), []);
 
   const apply = (next: SoundProfile) => {
     setProfile(next);
@@ -156,6 +168,8 @@ export function LabScreen(props: {
         intensity={labIntensity}
         ensureEngine={props.ensureEngine}
         onApplyBase={apply}
+        exporter={props.exporter}
+        chimeEnabled={props.chimeEnabled}
       />
 
       <TimelinePreview

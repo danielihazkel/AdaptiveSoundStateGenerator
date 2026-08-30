@@ -1,4 +1,5 @@
 import { AudioEngine } from '../audio/engine';
+import type { PulseHandover } from '../audio/pulseModulator';
 import { EVOLUTION_TIME_CONSTANT } from '../audio/ramp';
 import type { MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
@@ -7,9 +8,13 @@ import type { Program } from '../programs/types';
 import { evaluateArc, STATE_ARCS } from '../session/evolution';
 import {
   buildRenderPlan,
+  CHUNK_LEAD_SEC,
   EXPORT_SAMPLE_RATE,
   MODULATION_STEP_SEC,
+  splitRenderPlan,
+  type RenderChunk,
   type RenderEvent,
+  type RenderPlan,
 } from './renderTimeline';
 
 /**
@@ -30,40 +35,63 @@ const PULSE_HORIZON_SEC = 1.5;
 
 /**
  * Render a full session offline, faster than realtime, by driving the
- * ordinary AudioEngine on an OfflineAudioContext. The render is suspended at
- * every timeline event; inside the frozen checkpoint ctx.currentTime equals
- * the event time, so the exact realtime code paths (setArcModulation /
- * setProgramModulation / fadeTo) schedule correctly with zero duplication of
- * the engine's composition logic. Progress is reported from the checkpoints.
+ * ordinary AudioEngine on an OfflineAudioContext — one per chunk (see
+ * splitRenderPlan), each handed to `onChunk` as soon as it is done and then
+ * dropped, so peak memory is one chunk. Within a chunk the render is
+ * suspended at every timeline event; inside the frozen checkpoint
+ * ctx.currentTime equals the event time, so the exact realtime code paths
+ * (setArcModulation / setProgramModulation / fadeTo) schedule correctly with
+ * zero duplication of the engine's composition logic.
+ *
+ * Chunks after the first start CHUNK_LEAD_SEC early on a fresh engine that is
+ * jumped straight to the session's values at that moment (no fade-in, or the
+ * end fade resumed mid-way). The rhythm pattern is the one thing a fresh
+ * engine cannot re-derive — bar phase depends on the whole BPM history — so
+ * the previous chunk hands over its scheduled pulses and next-pulse state.
  *
  * Aborting stops the render at the next checkpoint (never resumed) and
  * rejects with an AbortError; the abandoned context is simply GC'd.
  */
-export async function renderSessionToBuffer(
+export async function renderSessionChunks(
   sel: ExportSelection,
+  onChunk: (buffer: AudioBuffer, chunk: RenderChunk) => void,
   onProgress: (fraction01: number) => void,
   signal?: AbortSignal,
-): Promise<AudioBuffer> {
+): Promise<void> {
   signal?.throwIfAborted();
   const plan = buildRenderPlan(sel);
+  let handover: PulseHandover | null = null;
+  for (const chunk of splitRenderPlan(plan)) {
+    const buffer = await renderChunk(sel, plan, chunk, handover, onProgress, signal);
+    handover = buffer.handover;
+    onChunk(buffer.audio, chunk);
+  }
+}
+
+async function renderChunk(
+  sel: ExportSelection,
+  plan: RenderPlan,
+  chunk: RenderChunk,
+  handover: PulseHandover | null,
+  onProgress: (fraction01: number) => void,
+  signal?: AbortSignal,
+): Promise<{ audio: AudioBuffer; handover: PulseHandover | null }> {
   const ctx = new OfflineAudioContext({
     numberOfChannels: 2,
-    length: Math.ceil(plan.renderSeconds * EXPORT_SAMPLE_RATE),
+    length: Math.ceil(chunk.lengthSec * EXPORT_SAMPLE_RATE),
     sampleRate: EXPORT_SAMPLE_RATE,
   });
-
   const engine = await AudioEngine.createOffline(sel.profile, ctx);
+  const toAbs = (ctxTime: number) => chunk.originSec + ctxTime;
+  const toCtx = (absTime: number) => absTime - chunk.originSec;
 
-  const applyModulation = (elapsedSec: number) => {
+  const applyModulation = (absSec: number, timeConstant?: number) => {
     if (sel.program) {
-      engine.setProgramModulation(
-        evaluateProgram(sel.program, elapsedSec),
-        EVOLUTION_TIME_CONSTANT,
-      );
+      engine.setProgramModulation(evaluateProgram(sel.program, absSec), timeConstant);
     } else {
       engine.setArcModulation(
-        evaluateArc(STATE_ARCS[sel.state], elapsedSec / plan.durationSec),
-        EVOLUTION_TIME_CONSTANT,
+        evaluateArc(STATE_ARCS[sel.state], absSec / plan.durationSec),
+        timeConstant,
       );
     }
   };
@@ -71,13 +99,13 @@ export async function renderSessionToBuffer(
   const handle = (ev: RenderEvent) => {
     switch (ev.kind) {
       case 'modulation':
-        applyModulation(ev.time);
+        applyModulation(toAbs(ev.time), EVOLUTION_TIME_CONSTANT);
         engine.schedulePulsesUntil(ev.time + MODULATION_STEP_SEC + PULSE_HORIZON_SEC);
         break;
       case 'endFade':
         // The realtime scheduler keeps pattern pulses running through the end
         // fade, so schedule the whole fade window's worth in one go here.
-        engine.schedulePulsesUntil(plan.durationSec);
+        engine.schedulePulsesUntil(toCtx(plan.durationSec));
         engine.scheduleOfflineEndFade(ev.fadeSeconds);
         break;
       case 'chime':
@@ -86,14 +114,25 @@ export async function renderSessionToBuffer(
     }
   };
 
-  // t=0 setup — before rendering starts, mirroring SessionController.start().
-  applyModulation(0);
+  // t=0 setup — before rendering starts, mirroring SessionController.start()
+  // for the first chunk; later chunks snap (default quick ramp) onto the
+  // session's values at their origin and pick up the rhythm mid-bar.
+  applyModulation(chunk.originSec);
+  if (handover) engine.importPulseHandover(handover, -chunk.originSec);
   engine.schedulePulsesUntil(MODULATION_STEP_SEC + PULSE_HORIZON_SEC);
   await engine.whenAmbienceReady();
   signal?.throwIfAborted();
-  engine.beginOffline();
+  if (chunk.fadeInProgress) {
+    engine.beginOffline({ fadeIn: false, gainFraction: chunk.fadeInProgress.gainFraction });
+    if (chunk.fadeInProgress.remainingSec > 0) {
+      engine.schedulePulsesUntil(toCtx(plan.durationSec));
+      engine.scheduleOfflineEndFade(chunk.fadeInProgress.remainingSec);
+    }
+  } else {
+    engine.beginOffline({ fadeIn: chunk.index === 0 });
+  }
 
-  return await new Promise<AudioBuffer>((resolve, reject) => {
+  const audio = await new Promise<AudioBuffer>((resolve, reject) => {
     let eventIdx = 0;
     const abort = () =>
       reject(signal?.reason ?? new DOMException('Export cancelled', 'AbortError'));
@@ -102,13 +141,13 @@ export async function renderSessionToBuffer(
     // Chain one suspend at a time: the next suspend is registered inside the
     // current frozen checkpoint, before resume() — race-free by construction.
     const scheduleNext = () => {
-      if (eventIdx >= plan.events.length) return;
-      const ev = plan.events[eventIdx];
+      if (eventIdx >= chunk.events.length) return;
+      const ev = chunk.events[eventIdx];
       eventIdx += 1;
       ctx.suspend(ev.time).then(() => {
         if (signal?.aborted) return; // never resumed; context is abandoned
         handle(ev);
-        onProgress(ev.time / plan.renderSeconds);
+        onProgress(toAbs(ev.time) / plan.renderSeconds);
         scheduleNext();
         void ctx.resume();
       }, reject);
@@ -120,4 +159,10 @@ export async function renderSessionToBuffer(
       resolve(buffer);
     }, reject);
   });
+
+  // Pulses that spill past the next chunk's origin, plus where the bar is.
+  const nextHandover = chunk.last
+    ? null
+    : engine.exportPulseHandover(chunk.lengthSec - CHUNK_LEAD_SEC, chunk.originSec);
+  return { audio, handover: nextHandover };
 }

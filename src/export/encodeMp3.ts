@@ -3,53 +3,67 @@ import type { EncodeRequest, EncodeResponse } from './mp3.worker';
 export const MP3_KBPS = 192;
 
 /**
- * Encode a rendered stereo AudioBuffer to MP3 in a worker. The channel
- * ArrayBuffers are transferred, not copied — after this call the AudioBuffer
- * is detached (reads as silence), which is exactly what releases the ~1 GiB
- * render memory on the main thread. Abort terminates the worker.
+ * Streaming MP3 encoder session backed by the worker. Push rendered chunks as
+ * they arrive (their channel ArrayBuffers are transferred, not copied — after
+ * a push the source AudioBuffer is detached, which is exactly what releases
+ * that chunk's render memory on the main thread); the encoder runs while the
+ * next chunk renders. `finish()` resolves with the file once the chunk pushed
+ * with `last: true` has been flushed. Abort terminates the worker.
  */
-export function encodeToMp3(
-  buffer: AudioBuffer,
-  onProgress: (fraction01: number) => void,
-  signal?: AbortSignal,
-): Promise<Blob> {
-  return new Promise<Blob>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('Export cancelled', 'AbortError'));
-      return;
-    }
-    const worker = new Worker(new URL('./mp3.worker.ts', import.meta.url), {
+export class Mp3Stream {
+  private readonly worker: Worker;
+  private pushedSamples = 0;
+  private readonly done: Promise<Blob>;
+  private settle: { resolve: (b: Blob) => void; reject: (e: unknown) => void } | undefined;
+
+  constructor(
+    sampleRate: number,
+    private readonly onProgress: (encodedSamples: number, pushedSamples: number) => void,
+    private readonly signal?: AbortSignal,
+  ) {
+    this.worker = new Worker(new URL('./mp3.worker.ts', import.meta.url), {
       type: 'module',
     });
-    const abort = () => {
-      worker.terminate();
-      reject(signal?.reason ?? new DOMException('Export cancelled', 'AbortError'));
-    };
+    this.done = new Promise<Blob>((resolve, reject) => {
+      this.settle = { resolve, reject };
+    });
+    const abort = () => this.fail(signal?.reason ?? new DOMException('Export cancelled', 'AbortError'));
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
     signal?.addEventListener('abort', abort, { once: true });
-    const finish = (act: () => void) => {
-      signal?.removeEventListener('abort', abort);
-      worker.terminate();
-      act();
-    };
-
-    worker.onmessage = (e: MessageEvent<EncodeResponse>) => {
+    this.worker.onmessage = (e: MessageEvent<EncodeResponse>) => {
       const msg = e.data;
-      if (msg.type === 'progress') onProgress(msg.fraction);
-      else if (msg.type === 'done') finish(() => resolve(msg.blob));
-      else finish(() => reject(new Error(msg.message)));
+      if (msg.type === 'progress') this.onProgress(msg.samples, this.pushedSamples);
+      else if (msg.type === 'done') {
+        signal?.removeEventListener('abort', abort);
+        this.worker.terminate();
+        this.settle?.resolve(msg.blob);
+      } else this.fail(new Error(msg.message));
     };
-    worker.onerror = (e) => finish(() => reject(new Error(e.message || 'MP3 worker failed')));
+    this.worker.onerror = (e) => this.fail(new Error(e.message || 'MP3 worker failed'));
+    const start: EncodeRequest = { type: 'start', sampleRate, kbps: MP3_KBPS };
+    this.worker.postMessage(start);
+  }
 
+  /** Encode samples [start, end) of the buffer's channels. Detaches the buffer. */
+  push(buffer: AudioBuffer, start: number, end: number, last: boolean): void {
+    if (this.signal?.aborted) return;
     const left = buffer.getChannelData(0).buffer as ArrayBuffer;
     const right = buffer.getChannelData(buffer.numberOfChannels > 1 ? 1 : 0)
       .buffer as ArrayBuffer;
-    const request: EncodeRequest = {
-      type: 'encode',
-      sampleRate: buffer.sampleRate,
-      kbps: MP3_KBPS,
-      left,
-      right,
-    };
-    worker.postMessage(request, right === left ? [left] : [left, right]);
-  });
+    this.pushedSamples += end - start;
+    const request: EncodeRequest = { type: 'chunk', left, right, start, end, last };
+    this.worker.postMessage(request, right === left ? [left] : [left, right]);
+  }
+
+  finish(): Promise<Blob> {
+    return this.done;
+  }
+
+  private fail(err: unknown): void {
+    this.worker.terminate();
+    this.settle?.reject(err);
+  }
 }
