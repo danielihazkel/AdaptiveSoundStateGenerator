@@ -83,16 +83,17 @@ export class SessionController {
   private interval: ReturnType<typeof setInterval> | undefined;
   private listeners = new Set<() => void>();
   private snapshot: SessionSnapshot = { phase: 'idle', elapsedSec: 0, remainingSec: 0 };
+  private readonly unsubscribeContextState: () => void;
 
   constructor(private readonly engine: AudioEngine) {
-    engine.onContextStateChange = (state) => {
+    this.unsubscribeContextState = engine.subscribeContextState((state) => {
       // A suspension we did not initiate (phone call, another app grabbing
       // the output) lands while we still think we are running (PRD §4).
       if (this.snapshot.phase === 'running' && state !== 'running') {
         this.clock.pause();
         this.setPhase('interrupted');
       }
-    };
+    });
   }
 
   get phase(): SessionPhase {
@@ -167,6 +168,7 @@ export class SessionController {
 
   dispose(): void {
     clearInterval(this.interval);
+    this.unsubscribeContextState();
     this.listeners.clear();
   }
 

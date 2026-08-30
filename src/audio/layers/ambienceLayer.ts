@@ -2,25 +2,25 @@ import { AMBIENCE_PROCESSOR_NAME } from '../ambience-processor';
 import { loadAmbienceBuffer } from '../ambienceAssets';
 import { ramp } from '../ramp';
 import {
-  SYNTH_AMBIENCE_TYPES,
+  SAMPLE_AMBIENCE_TYPES,
   type AmbienceType,
   type SampleAmbienceType,
-  type SynthAmbienceType,
 } from '../types';
 
 /** Crossfade when moving between the synthesized and sample sources. */
 const SOURCE_SWITCH_TIME_CONSTANT = 0.15; // reads as ~0.5 s
 
-function isSynth(type: AmbienceType): type is SynthAmbienceType {
-  return (SYNTH_AMBIENCE_TYPES as readonly string[]).includes(type);
+function hasSampleUpgrade(type: AmbienceType): type is SampleAmbienceType {
+  return (SAMPLE_AMBIENCE_TYPES as readonly string[]).includes(type);
 }
 
 /**
  * Ambience layer (PRD §6E): one output feeding two internal sources — the
- * synthesized-weather worklet (always available) and a looping sample player
- * (active only when an asset for the type is shipped). Selecting a sample
- * type with no asset plays silence rather than failing: the profile stays
- * valid and applyAll stays idempotent.
+ * synthesis worklet, which renders every type and plays immediately, and a
+ * looping sample player that takes over (crossfade) only once a recording
+ * for the type has been fetched and decoded. No recording shipped, or a
+ * failed load, simply means the synthesized version keeps playing: the
+ * profile stays valid and applyAll stays idempotent.
  *
  * The worklet module must already be loaded on the context (AudioEngine calls
  * loadAmbienceWorklet during creation).
@@ -88,29 +88,27 @@ export class AmbienceLayer {
 
   private applyType(type: AmbienceType): void {
     this.loadGeneration += 1;
-    if (isSynth(type)) {
-      this.stopSample();
-      // The worklet crossfades between its own types internally.
-      this.node.port.postMessage({ type });
-      ramp(this.ctx, this.synthGain.gain, 1, SOURCE_SWITCH_TIME_CONSTANT);
-      ramp(this.ctx, this.sampleGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
-    } else {
-      ramp(this.ctx, this.synthGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
+    // Always start with the synthesized version — the worklet crossfades
+    // between its own types internally, so this is instant and click-free.
+    this.stopSample();
+    this.node.port.postMessage({ type });
+    ramp(this.ctx, this.synthGain.gain, 1, SOURCE_SWITCH_TIME_CONSTANT);
+    ramp(this.ctx, this.sampleGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
+    if (hasSampleUpgrade(type)) {
       this.loadPromise = this.startSample(type, this.loadGeneration).catch(() => {
-        // Load failures mean silence, by design — never propagate.
+        // Load failures leave the synthesized version playing — never propagate.
       });
+    } else {
+      this.loadPromise = Promise.resolve();
     }
   }
 
+  /** Swaps in the recording for `type` once loaded; no-op when there is none. */
   private async startSample(type: SampleAmbienceType, generation: number): Promise<void> {
     const loop = await loadAmbienceBuffer(this.ctx, type);
     if (generation !== this.loadGeneration) return; // stale — type changed again
+    if (!loop) return; // no recording shipped: the synthesized version stays
     this.stopSample();
-    if (!loop) {
-      // Asset missing/undecodable: silence, by design.
-      ramp(this.ctx, this.sampleGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
-      return;
-    }
     const source = new AudioBufferSourceNode(this.ctx, {
       buffer: loop.buffer,
       loop: true,
@@ -121,6 +119,7 @@ export class AmbienceLayer {
     source.start();
     this.sampleSource = source;
     ramp(this.ctx, this.sampleGain.gain, 1, SOURCE_SWITCH_TIME_CONSTANT);
+    ramp(this.ctx, this.synthGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
   }
 
   private stopSample(): void {

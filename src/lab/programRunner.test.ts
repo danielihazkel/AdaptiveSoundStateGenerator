@@ -4,7 +4,17 @@ import { defaultProgram, normalizeProgram, type Program } from '../programs/type
 import { LabProgramRunner } from './programRunner';
 
 function stubEngine() {
+  const contextListeners = new Set<(state: AudioContextState) => void>();
   return {
+    subscribeContextState: vi.fn((listener: (state: AudioContextState) => void) => {
+      contextListeners.add(listener);
+      return () => contextListeners.delete(listener);
+    }),
+    /** Simulates the AudioContext changing state under us. */
+    emitContextState: (state: AudioContextState) => {
+      for (const l of contextListeners) l(state);
+    },
+    listenerCount: () => contextListeners.size,
     setProgramModulation: vi.fn(),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn(),
@@ -115,5 +125,37 @@ describe('LabProgramRunner', () => {
     const calls = engine.setProgramModulation.mock.calls.length;
     await vi.advanceTimersByTimeAsync(10_000);
     expect(engine.setProgramModulation.mock.calls.length).toBe(calls);
+  });
+
+  it('an unexpected context suspension interrupts the run; resume continues', async () => {
+    await start(closedProgram());
+    await vi.advanceTimersByTimeAsync(10_000);
+    engine.emitContextState('suspended');
+    expect(runner.status).toBe('interrupted');
+
+    await vi.advanceTimersByTimeAsync(30_000); // interrupted time must not count
+    expect(runner.getSnapshot().elapsedSec).toBe(10);
+
+    await runner.resume();
+    expect(engine.resume).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(runner.getSnapshot()).toMatchObject({ status: 'running', elapsedSec: 12 });
+  });
+
+  it('a deliberate pause does not read as an interruption', async () => {
+    await start(closedProgram());
+    await runner.pause();
+    engine.emitContextState('suspended'); // engine.pause() suspends the ctx
+    expect(runner.status).toBe('paused');
+  });
+
+  it('subscribes only for the duration of a run', async () => {
+    expect(engine.listenerCount()).toBe(0);
+    await start(closedProgram());
+    expect(engine.listenerCount()).toBe(1);
+    runner.stop();
+    expect(engine.listenerCount()).toBe(0);
+    engine.emitContextState('suspended');
+    expect(runner.status).toBe('idle');
   });
 });

@@ -6,7 +6,7 @@ import { programMinDurationSec, type Program } from '../programs/types';
 import { ElapsedClock } from '../session/elapsedClock';
 import { resolveEndChime } from '../session/endPolicy';
 
-export type RunStatus = 'idle' | 'running' | 'paused' | 'ending' | 'finished';
+export type RunStatus = 'idle' | 'running' | 'paused' | 'interrupted' | 'ending' | 'finished';
 
 export interface RunSnapshot {
   status: RunStatus;
@@ -21,10 +21,11 @@ const TICK_MS = 500;
 /**
  * Real-time timed program runs inside the sound lab: the sandbox counterpart
  * of SessionController. Drives the engine's program side channel from a
- * wall-clock, with pause/resume and the state's proper end fade/chime — but
- * writes no SessionRecord, feeds no bandit, and (unlike SessionController)
- * never touches engine.onContextStateChange, so real sessions keep their
- * interruption detection. Known limitation: lab runs themselves have none.
+ * wall-clock, with pause/resume, the state's proper end fade/chime, and the
+ * same interruption detection as a session (an AudioContext suspension we did
+ * not ask for freezes the clock until Resume) — but writes no SessionRecord
+ * and feeds no bandit. It subscribes to the engine's context-state channel
+ * only for the duration of a run, so real sessions are never affected.
  *
  * A closed program (last segment has an endMin) auto-ends at its total
  * duration; an open-ended final segment plays until stopped, matching how
@@ -36,6 +37,7 @@ export class LabProgramRunner {
   private totalSec: number | null = null;
   private readonly clock = new ElapsedClock();
   private interval: ReturnType<typeof setInterval> | undefined;
+  private unsubscribeContextState: (() => void) | undefined;
   private listeners = new Set<() => void>();
   private snapshot: RunSnapshot = {
     status: 'idle',
@@ -63,6 +65,15 @@ export class LabProgramRunner {
     this.totalSec = last.endMin !== null ? programMinDurationSec(program) : null;
     // Begin at t=0 rather than jumping after the first tick.
     engine.setProgramModulation(evaluateProgram(program, 0));
+    this.unsubscribeContextState?.();
+    this.unsubscribeContextState = engine.subscribeContextState((state) => {
+      // A suspension we did not initiate lands while we still think we are
+      // running — mirrors SessionController.
+      if (this.snapshot.status === 'running' && state !== 'running') {
+        this.clock.pause();
+        this.publish('interrupted');
+      }
+    });
     await engine.start();
     this.clock.start();
     this.interval = setInterval(() => this.tick(), TICK_MS);
@@ -77,7 +88,8 @@ export class LabProgramRunner {
   }
 
   async resume(): Promise<void> {
-    if (this.snapshot.status !== 'paused') return;
+    const status = this.snapshot.status;
+    if (status !== 'paused' && status !== 'interrupted') return;
     await this.engine?.resume();
     this.clock.resume();
     this.publish('running');
@@ -89,6 +101,8 @@ export class LabProgramRunner {
     if (status === 'idle') return;
     clearInterval(this.interval);
     this.interval = undefined;
+    this.unsubscribeContextState?.();
+    this.unsubscribeContextState = undefined;
     this.clock.pause();
     if (status !== 'finished') this.engine?.stop();
     this.engine?.setProgramModulation(null);

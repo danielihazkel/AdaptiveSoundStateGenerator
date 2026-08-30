@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CheckpointResponse } from '../adaptation/types';
 import type { StateDefinition } from '../audio/states';
-import type { SampleAmbienceType, SoundProfile } from '../audio/types';
+import type { SoundProfile } from '../audio/types';
 import { evaluateProgram, segmentAt } from '../programs/evaluator';
 import type { Program } from '../programs/types';
 import type { SessionSnapshot } from '../session/sessionController';
@@ -23,8 +23,6 @@ export function SessionScreen(props: {
   onSavePreset: (name: string) => void;
   /** Timed program driving this session, if any — shows the phase readout. */
   program?: Program;
-  /** Sample ambience types with a shipped asset (see AdvancedPanel). */
-  availableSampleTypes?: ReadonlySet<SampleAmbienceType>;
   /** Adaptation check-in, when one is pending (Phase 3, PRD §17). */
   microPrompt?: {
     onRespond: (response: CheckpointResponse) => void;
@@ -111,11 +109,7 @@ export function SessionScreen(props: {
       </button>
       {showAdvanced && (
         <>
-          <AdvancedPanel
-            profile={props.profile}
-            onChange={props.onProfileChange}
-            availableSampleTypes={props.availableSampleTypes}
-          />
+          <AdvancedPanel profile={props.profile} onChange={props.onProfileChange} />
           <PresetSaveRow
             defaultName={`${props.stateDef.label} custom`}
             onSave={props.onSavePreset}

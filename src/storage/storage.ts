@@ -19,43 +19,69 @@ const PERSONALIZATION_KEY = 'resonance.v1.personalization';
 /** Oldest records are dropped past this — plenty for Phase 2 training. */
 const MAX_SESSION_RECORDS = 500;
 
+/** Suffix under which an unreadable payload is preserved (see quarantine). */
+export const QUARANTINE_SUFFIX = '.quarantine';
+
 interface ListPayload<T> {
-  schemaVersion: typeof SCHEMA_VERSION;
+  schemaVersion: number;
   items: T[];
 }
 
 /**
- * Every read is guarded: a corrupt or foreign payload resets that key to its
- * default instead of crashing the app. localStorage writes can also throw
- * (quota, private browsing) — those are swallowed; losing a record beats
- * losing the session.
+ * Every read is guarded: a corrupt or foreign payload never crashes the app.
+ * What happens to the bytes depends on *why* they were unreadable:
+ *
+ *  - newer schemaVersion than this build knows → the payload is left in place
+ *    (a newer build can still read it) and a copy is quarantined; this build
+ *    sees the key as empty and reports 'incompatible'.
+ *  - older schemaVersion → run through LIST_MIGRATIONS and written back.
+ *  - anything else (not JSON, wrong shape) → quarantined, reset to the
+ *    default, reported as 'corrupt'.
+ *
+ * localStorage writes can also throw (quota, private browsing) — those are
+ * swallowed and reported as 'write'; losing a record beats losing the session.
  */
-function readJson(key: string): unknown {
+function readRaw(key: string): string | null {
   try {
-    const raw = localStorage.getItem(key);
-    return raw === null ? null : JSON.parse(raw);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
+/** undefined = stored but unparseable (distinct from null = nothing stored). */
+function parse(raw: string | null): unknown {
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+export type StorageFailureKind = 'write' | 'incompatible' | 'corrupt';
+
 export interface StorageFailure {
   key: string;
   at: number; // epoch ms
+  /** 'write' = a save failed; the read kinds mean stored data was set aside. */
+  kind: StorageFailureKind;
 }
 
+type FailureListener = (failure: StorageFailure) => void;
+
 let lastFailure: StorageFailure | null = null;
-let failureListener: ((failure: StorageFailure) => void) | null = null;
+const failureListeners = new Set<FailureListener>();
 
 /**
- * Writes stay non-fatal (a full disk must never kill a session), but the app
- * is told so it can warn the user that history may not be recorded. Single
- * subscriber — the App root; returns an unsubscribe.
+ * Failures stay non-fatal (a full disk must never kill a session), but the
+ * app is told so it can warn the user. Any number of subscribers; returns an
+ * unsubscribe.
  */
-export function onStorageFailure(listener: (failure: StorageFailure) => void): () => void {
-  failureListener = listener;
+export function onStorageFailure(listener: FailureListener): () => void {
+  failureListeners.add(listener);
   return () => {
-    if (failureListener === listener) failureListener = null;
+    failureListeners.delete(listener);
   };
 }
 
@@ -68,28 +94,102 @@ export function clearStorageFailure(): void {
   lastFailure = null;
 }
 
-function writeJson(key: string, value: unknown): void {
+function reportFailure(key: string, kind: StorageFailureKind): void {
+  lastFailure = { key, at: Date.now(), kind };
+  for (const listener of failureListeners) listener(lastFailure);
+}
+
+function writeRaw(key: string, raw: string): boolean {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(key, raw);
+    return true;
   } catch {
-    // Quota exceeded / storage unavailable — deliberately non-fatal.
-    lastFailure = { key, at: Date.now() };
-    failureListener?.(lastFailure);
+    return false;
   }
 }
 
+function writeJson(key: string, value: unknown): void {
+  // Quota exceeded / storage unavailable — deliberately non-fatal.
+  if (!writeRaw(key, JSON.stringify(value))) reportFailure(key, 'write');
+}
+
+/**
+ * Preserve the untouched bytes of a payload this build cannot use, under
+ * `<key>.quarantine`. First casualty wins: an existing quarantine is never
+ * overwritten, so the evidence of the original problem survives reloads.
+ */
+function quarantine(key: string, raw: string | null): void {
+  if (raw === null) return;
+  const qKey = key + QUARANTINE_SUFFIX;
+  if (readRaw(qKey) !== null) return;
+  writeRaw(qKey, raw); // best effort — not worth a second warning if it fails
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * `absent` = nothing stored; `current` = usable as is; `older` = needs
+ * migration; `newer` = written by a later build; `corrupt` = unparseable or
+ * unstamped.
+ */
+type SchemaStatus = 'absent' | 'current' | 'older' | 'newer' | 'corrupt';
+
+function schemaStatus(raw: string | null, payload: unknown): SchemaStatus {
+  if (raw === null) return 'absent';
+  if (!isRecord(payload)) return 'corrupt';
+  const v = payload.schemaVersion;
+  if (typeof v !== 'number' || !Number.isInteger(v)) return 'corrupt';
+  if (v === SCHEMA_VERSION) return 'current';
+  return v > SCHEMA_VERSION ? 'newer' : 'older';
+}
+
+/**
+ * List migrations keyed by the version they migrate *from*; each returns a
+ * payload one version newer. Empty while SCHEMA_VERSION is 1 — this is the
+ * scaffold future schema bumps use instead of piling onto normalize-on-read.
+ */
+const LIST_MIGRATIONS: Record<
+  number,
+  (payload: ListPayload<unknown>) => ListPayload<unknown>
+> = {};
+
+function migrateList(payload: ListPayload<unknown>): ListPayload<unknown> | null {
+  let current = payload;
+  while (current.schemaVersion < SCHEMA_VERSION) {
+    const step = LIST_MIGRATIONS[current.schemaVersion];
+    if (!step) return null; // no path forward — treated as corrupt
+    current = step(current);
+  }
+  return current;
+}
+
 function readList<T>(key: string): T[] {
-  const payload = readJson(key) as ListPayload<T> | null;
-  if (
-    payload === null ||
-    typeof payload !== 'object' ||
-    payload.schemaVersion !== SCHEMA_VERSION ||
-    !Array.isArray(payload.items)
-  ) {
-    if (payload !== null) writeList(key, []); // reset corrupt key
+  const raw = readRaw(key);
+  const payload = parse(raw);
+  const status = schemaStatus(raw, payload);
+  if (status === 'absent') return [];
+  if (status === 'newer') {
+    // Leave the newer payload untouched for the build that wrote it.
+    quarantine(key, raw);
+    reportFailure(key, 'incompatible');
     return [];
   }
-  return payload.items;
+  const list = payload as ListPayload<T>;
+  if (status !== 'corrupt' && Array.isArray(list.items)) {
+    if (status === 'current') return list.items;
+    const migrated = migrateList(list);
+    if (migrated) {
+      writeList(key, migrated.items);
+      return migrated.items as T[];
+    }
+  }
+  // Unparseable, unstamped, or an unmigratable shape: set it aside and reset.
+  quarantine(key, raw);
+  reportFailure(key, 'corrupt');
+  writeList(key, []);
+  return [];
 }
 
 function writeList<T>(key: string, items: T[]): void {
@@ -101,11 +201,19 @@ export { newId } from './id';
 // --- Settings ---------------------------------------------------------------
 
 export function loadSettings(): Settings {
-  const raw = readJson(SETTINGS_KEY) as Partial<Settings> | null;
-  if (raw === null || typeof raw !== 'object' || raw.schemaVersion !== SCHEMA_VERSION) {
-    return { ...defaultSettings };
+  const raw = readRaw(SETTINGS_KEY);
+  const payload = parse(raw);
+  const status = schemaStatus(raw, payload);
+  if (status === 'current') return { ...defaultSettings, ...(payload as Partial<Settings>) };
+  if (status === 'newer') {
+    quarantine(SETTINGS_KEY, raw);
+    reportFailure(SETTINGS_KEY, 'incompatible');
+  } else if (status === 'corrupt') {
+    // Settings carry nothing irreplaceable, so no warning — just keep the
+    // bytes in case they matter, and fall back (the disclaimer re-shows).
+    quarantine(SETTINGS_KEY, raw);
   }
-  return { ...defaultSettings, ...raw };
+  return { ...defaultSettings };
 }
 
 export function saveSettings(settings: Settings): void {
@@ -220,21 +328,29 @@ export function emptyPersonalization(candidateSetVersion: number): Personalizati
 /**
  * A corrupt payload, schema mismatch, or a candidate-set version other than the
  * one the running code expects all reset to empty stats — recipes may have
- * changed meaning, so stale stats would silently corrupt the posterior.
+ * changed meaning, so stale stats would silently corrupt the posterior. A
+ * payload from a newer build is quarantined first (it is still rebuildable
+ * from the session records, so this is belt-and-braces).
  */
 export function loadPersonalization(expectedCandidateSetVersion: number): PersonalizationState {
-  const raw = readJson(PERSONALIZATION_KEY) as PersonalizationState | null;
+  const raw = readRaw(PERSONALIZATION_KEY);
+  const payload = parse(raw);
+  const status = schemaStatus(raw, payload);
+  if (status === 'newer') {
+    quarantine(PERSONALIZATION_KEY, raw);
+    reportFailure(PERSONALIZATION_KEY, 'incompatible');
+    return emptyPersonalization(expectedCandidateSetVersion);
+  }
+  const state = payload as PersonalizationState;
   if (
-    raw === null ||
-    typeof raw !== 'object' ||
-    raw.schemaVersion !== SCHEMA_VERSION ||
-    raw.candidateSetVersion !== expectedCandidateSetVersion ||
-    typeof raw.arms !== 'object' ||
-    raw.arms === null
+    status !== 'current' ||
+    state.candidateSetVersion !== expectedCandidateSetVersion ||
+    typeof state.arms !== 'object' ||
+    state.arms === null
   ) {
     return emptyPersonalization(expectedCandidateSetVersion);
   }
-  return raw;
+  return state;
 }
 
 export function savePersonalization(state: PersonalizationState): void {

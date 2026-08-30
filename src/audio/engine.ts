@@ -95,8 +95,8 @@ export class AudioEngine {
    */
   private programModulation: ProgramModulation | null = null;
 
-  /** Notified on every AudioContext state change (interruption handling). */
-  onContextStateChange: ((state: AudioContextState) => void) | undefined;
+  /** Listeners for AudioContext state changes (interruption handling). */
+  private readonly contextStateListeners = new Set<(state: AudioContextState) => void>();
 
   private constructor(
     private readonly ctx: BaseAudioContext,
@@ -118,7 +118,23 @@ export class AudioEngine {
   ) {
     // Offline contexts flip suspended/running at every render checkpoint —
     // that is driver mechanics, not an interruption, so don't surface it.
-    if (!offline) ctx.onstatechange = () => this.onContextStateChange?.(ctx.state);
+    if (!offline) {
+      ctx.onstatechange = () => {
+        for (const listener of this.contextStateListeners) listener(ctx.state);
+      };
+    }
+  }
+
+  /**
+   * Subscribe to AudioContext state changes — how a session or lab run tells
+   * an interruption (phone call, another app grabbing the output) from its own
+   * pause. Any number of subscribers; returns an unsubscribe.
+   */
+  subscribeContextState(listener: (state: AudioContextState) => void): () => void {
+    this.contextStateListeners.add(listener);
+    return () => {
+      this.contextStateListeners.delete(listener);
+    };
   }
 
   static async create(profile: SoundProfile): Promise<AudioEngine> {
@@ -520,6 +536,7 @@ export class AudioEngine {
     clearTimeout(this.stopTimer);
     clearTimeout(this.monoTimer);
     this.ctx.onstatechange = null;
+    this.contextStateListeners.clear();
     this.tone.dispose();
     this.binaural.dispose();
     this.noise.dispose();

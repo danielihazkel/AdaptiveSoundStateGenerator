@@ -1,10 +1,10 @@
 import { SAMPLE_AMBIENCE_TYPES, type SampleAmbienceType } from './types';
 
 /**
- * Sample-based ambience assets (PRD §6E, post-MVP): forest, fireplace, café.
- * The infrastructure ships now; the sounds activate when someone drops the
- * recordings into public/ambience/ (see the README there). Types with no
- * asset present are hidden from the UI and play silence if selected anyway.
+ * Optional recorded-ambience upgrades (PRD §6E): forest, fireplace, café.
+ * Every type is synthesized in the worklet and always playable; dropping a
+ * recording into public/ambience/ (see the README there) makes the layer
+ * crossfade to the recording instead. Nothing here gates the UI.
  */
 
 const EXTENSIONS = ['mp3', 'ogg'] as const;

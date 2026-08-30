@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { AudioEngine } from '../../audio/engine';
 import { STATES, type MentalState } from '../../audio/states';
-import {
-  cloneProfile,
-  normalizeProfile,
-  type SampleAmbienceType,
-  type SoundProfile,
-} from '../../audio/types';
+import { cloneProfile, normalizeProfile, type SoundProfile } from '../../audio/types';
 import type { Mp3Exporter } from '../../export/useMp3Export';
 import { LabProgramRunner } from '../../lab/programRunner';
 import { randomizeProfile } from '../../lab/randomize';
@@ -34,7 +29,6 @@ export function LabScreen(props: {
   programs: Program[];
   exporter: Mp3Exporter;
   chimeEnabled: boolean;
-  availableSampleTypes?: ReadonlySet<SampleAmbienceType>;
   onSavePreset: (name: string, profile: SoundProfile, state: MentalState, intensity: number) => void;
   onBack: () => void;
 }) {
@@ -53,7 +47,10 @@ export function LabScreen(props: {
   const runner = runnerRef.current;
   const runStatus = useSyncExternalStore(runner.subscribe, runner.getSnapshot).status;
   const runActive =
-    runStatus === 'running' || runStatus === 'paused' || runStatus === 'ending';
+    runStatus === 'running' ||
+    runStatus === 'paused' ||
+    runStatus === 'interrupted' ||
+    runStatus === 'ending';
   // The lab must hand the engine back clean — the runner stops its audio and
   // clears the program channel on unmount.
   useEffect(() => () => runnerRef.current?.dispose(), []);
@@ -198,11 +195,7 @@ export function LabScreen(props: {
         onApply={apply}
       />
 
-      <AdvancedPanel
-        profile={profile}
-        onChange={apply}
-        availableSampleTypes={props.availableSampleTypes}
-      />
+      <AdvancedPanel profile={profile} onChange={apply} />
       <PresetSaveRow
         defaultName={`${STATES[labState].label} lab`}
         onSave={(name) =>

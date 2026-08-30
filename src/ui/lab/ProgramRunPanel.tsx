@@ -60,7 +60,10 @@ export function ProgramRunPanel(props: {
   };
 
   const active =
-    snap.status === 'running' || snap.status === 'paused' || snap.status === 'ending';
+    snap.status === 'running' ||
+    snap.status === 'paused' ||
+    snap.status === 'interrupted' ||
+    snap.status === 'ending';
   const phase = snap.program ? segmentAt(snap.program, snap.elapsedSec) : null;
 
   return (
@@ -106,6 +109,11 @@ export function ProgramRunPanel(props: {
           {phase && phase.nextIn !== null && ` · next in ${formatMinSec(phase.nextIn)}`}
         </p>
       )}
+      {snap.status === 'interrupted' && (
+        <p className="hint" role="status">
+          Audio was interrupted — press Resume to continue.
+        </p>
+      )}
       {snap.status === 'finished' && <p className="hint">Program finished.</p>}
 
       <div className="preset-strip">
@@ -124,7 +132,7 @@ export function ProgramRunPanel(props: {
             ❚❚ Pause
           </button>
         )}
-        {snap.status === 'paused' && (
+        {(snap.status === 'paused' || snap.status === 'interrupted') && (
           <button type="button" className="chip" onClick={() => void props.runner.resume()}>
             ► Resume
           </button>

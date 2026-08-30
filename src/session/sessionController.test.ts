@@ -6,8 +6,17 @@ import { defaultProgram } from '../programs/types';
 import { SessionController, type SessionConfig } from './sessionController';
 
 function stubEngine() {
+  const contextListeners = new Set<(state: AudioContextState) => void>();
   return {
-    onContextStateChange: undefined as ((state: AudioContextState) => void) | undefined,
+    subscribeContextState: vi.fn((listener: (state: AudioContextState) => void) => {
+      contextListeners.add(listener);
+      return () => contextListeners.delete(listener);
+    }),
+    /** Simulates the AudioContext changing state under us. */
+    emitContextState: (state: AudioContextState) => {
+      for (const l of contextListeners) l(state);
+    },
+    listenerCount: () => contextListeners.size,
     applyProfile: vi.fn(),
     setArcModulation: vi.fn(),
     setProgramModulation: vi.fn(),
@@ -116,7 +125,7 @@ describe('SessionController', () => {
   it('an unexpected context suspension marks the session interrupted', async () => {
     await controller.start(config());
     await vi.advanceTimersByTimeAsync(5_000);
-    engine.onContextStateChange?.('suspended');
+    engine.emitContextState('suspended');
     expect(controller.phase).toBe('interrupted');
 
     await vi.advanceTimersByTimeAsync(30_000); // interrupted time must not count
@@ -128,7 +137,7 @@ describe('SessionController', () => {
   it('a deliberate pause does not read as an interruption', async () => {
     await controller.start(config());
     await controller.pause();
-    engine.onContextStateChange?.('suspended'); // engine.pause() suspends the ctx
+    engine.emitContextState('suspended'); // engine.pause() suspends the ctx
     expect(controller.phase).toBe('paused');
   });
 

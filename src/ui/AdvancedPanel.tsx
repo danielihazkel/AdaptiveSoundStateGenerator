@@ -1,11 +1,9 @@
 import {
+  AMBIENCE_TYPES,
   cloneProfile,
-  SAMPLE_AMBIENCE_TYPES,
-  SYNTH_AMBIENCE_TYPES,
   type AmbienceType,
   type NoiseType,
   type RhythmMode,
-  type SampleAmbienceType,
   type SoundProfile,
 } from '../audio/types';
 import { Slider } from './Slider';
@@ -34,16 +32,8 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 export function AdvancedPanel(props: {
   profile: SoundProfile;
   onChange: (next: SoundProfile) => void;
-  /** Sample ambience types with a shipped asset — the rest stay hidden. */
-  availableSampleTypes?: ReadonlySet<SampleAmbienceType>;
 }) {
   const p = props.profile;
-  const sampleTypes = props.availableSampleTypes ?? new Set<SampleAmbienceType>();
-  // An imported preset may name a sample type this install has no asset for:
-  // show it (disabled-annotated) rather than silently rewriting the profile.
-  const currentUnavailable =
-    (SAMPLE_AMBIENCE_TYPES as readonly string[]).includes(p.ambience.type) &&
-    !sampleTypes.has(p.ambience.type as SampleAmbienceType);
   const edit = (mutate: (draft: SoundProfile) => void) => {
     const draft = cloneProfile(p);
     mutate(draft);
@@ -139,21 +129,11 @@ export function AdvancedPanel(props: {
             value={p.ambience.type}
             onChange={(e) => edit((d) => (d.ambience.type = e.target.value as AmbienceType))}
           >
-            {SYNTH_AMBIENCE_TYPES.map((t) => (
+            {AMBIENCE_TYPES.map((t) => (
               <option key={t} value={t}>
                 {AMBIENCE_LABELS[t]}
               </option>
             ))}
-            {SAMPLE_AMBIENCE_TYPES.filter((t) => sampleTypes.has(t)).map((t) => (
-              <option key={t} value={t}>
-                {AMBIENCE_LABELS[t]}
-              </option>
-            ))}
-            {currentUnavailable && (
-              <option value={p.ambience.type} disabled>
-                {AMBIENCE_LABELS[p.ambience.type]} (no asset installed)
-              </option>
-            )}
           </select>
           <span />
         </label>

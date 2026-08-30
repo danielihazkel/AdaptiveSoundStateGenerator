@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { STATES } from '../audio/states';
 import { defaultProgram } from '../programs/types';
 import {
@@ -18,12 +18,13 @@ import {
   markBanditResolved,
   markFeedbackSkipped,
   newId,
+  QUARANTINE_SUFFIX,
   savePersonalization,
   savePreset,
   saveProgram,
   saveSettings,
 } from './storage';
-import { defaultSettings, modeFor, type Preset, type SessionRecord } from './types';
+import { defaultSettings, modeFor, SCHEMA_VERSION, type Preset, type SessionRecord } from './types';
 
 // Node has no localStorage — a Map-backed stand-in matching the parts we use.
 function fakeLocalStorage(): Storage {
@@ -255,5 +256,93 @@ describe('storage failure reporting', () => {
     globalThis.localStorage = fakeLocalStorage();
     saveSettings(defaultSettings);
     expect(getStorageFailure()).toBeNull();
+  });
+
+  it('fans out to every subscriber; each unsubscribes independently', () => {
+    clearStorageFailure();
+    const throwing = fakeLocalStorage();
+    throwing.setItem = () => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    };
+    globalThis.localStorage = throwing;
+    const a: string[] = [];
+    const b: string[] = [];
+    const offA = onStorageFailure((f) => a.push(f.kind));
+    const offB = onStorageFailure((f) => b.push(f.kind));
+    saveSettings(defaultSettings);
+    expect(a).toEqual(['write']);
+    expect(b).toEqual(['write']);
+    offA();
+    saveSettings(defaultSettings);
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(2);
+    offB();
+    clearStorageFailure();
+  });
+});
+
+describe('schema forward-compatibility', () => {
+  const PRESETS = 'resonance.v1.presets';
+  const Q = PRESETS + QUARANTINE_SUFFIX;
+
+  afterEach(() => clearStorageFailure());
+
+  it('never wipes a list written by a newer schema; quarantines a copy and reports it', () => {
+    const newer = JSON.stringify({ schemaVersion: SCHEMA_VERSION + 1, items: [{ id: 'x' }] });
+    localStorage.setItem(PRESETS, newer);
+    const seen: string[] = [];
+    const off = onStorageFailure((f) => seen.push(`${f.kind}:${f.key}`));
+    expect(loadPresets()).toEqual([]);
+    off();
+    expect(localStorage.getItem(PRESETS)).toBe(newer); // untouched
+    expect(localStorage.getItem(Q)).toBe(newer);
+    expect(seen).toEqual([`incompatible:${PRESETS}`]);
+    expect(getStorageFailure()?.kind).toBe('incompatible');
+  });
+
+  it('quarantines a corrupt list before resetting it', () => {
+    localStorage.setItem(PRESETS, '{not json');
+    const seen: string[] = [];
+    const off = onStorageFailure((f) => seen.push(f.kind));
+    expect(loadPresets()).toEqual([]);
+    off();
+    expect(localStorage.getItem(Q)).toBe('{not json');
+    expect(JSON.parse(localStorage.getItem(PRESETS)!)).toEqual({
+      schemaVersion: SCHEMA_VERSION,
+      items: [],
+    });
+    expect(seen).toEqual(['corrupt']);
+  });
+
+  it('a stamped payload with the wrong shape counts as corrupt', () => {
+    localStorage.setItem(PRESETS, JSON.stringify({ schemaVersion: SCHEMA_VERSION, items: 'no' }));
+    expect(loadPresets()).toEqual([]);
+    expect(getStorageFailure()?.kind).toBe('corrupt');
+  });
+
+  it('the first quarantined payload is never overwritten', () => {
+    localStorage.setItem(PRESETS, '"first"');
+    loadPresets();
+    localStorage.setItem(PRESETS, '"second"');
+    loadPresets();
+    expect(localStorage.getItem(Q)).toBe('"first"');
+  });
+
+  it('keeps newer settings and personalization aside too', () => {
+    localStorage.setItem(
+      'resonance.v1.settings',
+      JSON.stringify({ schemaVersion: SCHEMA_VERSION + 1, monoMode: true }),
+    );
+    expect(loadSettings()).toEqual(defaultSettings);
+    expect(localStorage.getItem('resonance.v1.settings' + QUARANTINE_SUFFIX)).not.toBeNull();
+
+    localStorage.setItem(
+      'resonance.v1.personalization',
+      JSON.stringify({ schemaVersion: SCHEMA_VERSION + 1, candidateSetVersion: 1, arms: {} }),
+    );
+    expect(loadPersonalization(1)).toEqual(emptyPersonalization(1));
+    expect(
+      localStorage.getItem('resonance.v1.personalization' + QUARANTINE_SUFFIX),
+    ).not.toBeNull();
   });
 });

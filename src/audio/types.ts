@@ -1,8 +1,11 @@
 export type NoiseType = 'white' | 'pink' | 'brown' | 'blue';
 
-/** Ambience generated from shaped noise — always available (PRD §6E). */
+/** Ambience that is only ever synthesized from shaped noise (PRD §6E). */
 export type SynthAmbienceType = 'rain' | 'ocean' | 'wind' | 'space';
-/** Ambience from looped recordings — active only when an asset is shipped (PRD §6E). */
+/**
+ * Ambience that is synthesized by default but upgrades to a looped recording
+ * when one is shipped in public/ambience/ (PRD §6E).
+ */
 export type SampleAmbienceType = 'forest' | 'fireplace' | 'cafe';
 export type AmbienceType = SynthAmbienceType | SampleAmbienceType;
 
@@ -116,7 +119,8 @@ export function cloneProfile(profile: SoundProfile): SoundProfile {
 
 const NOISE_TYPES: readonly NoiseType[] = ['white', 'pink', 'brown', 'blue'];
 const RHYTHM_MODES: readonly RhythmMode[] = ['simple', 'pattern'];
-const AMBIENCE_TYPES: readonly AmbienceType[] = [
+/** Every ambience type, in picker order — all always playable. */
+export const AMBIENCE_TYPES: readonly AmbienceType[] = [
   ...SYNTH_AMBIENCE_TYPES,
   ...SAMPLE_AMBIENCE_TYPES,
 ];

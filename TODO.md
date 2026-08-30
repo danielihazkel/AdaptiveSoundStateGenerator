@@ -23,7 +23,7 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Intensity slider mapped to modulation depth, beat range position, noise level (§4 Step 2) — `src/audio/states.ts`, `src/ui/SetupScreen.tsx`
 - [x] Duration picker: 15/30/45/60/90/custom + session timer (§4 Step 3) — `src/ui/DurationPicker.tsx`, `src/session/sessionController.ts`
 - [x] Session end behavior per state — sleep fades to silence, no chime (§4 Step 4) — `src/session/sessionController.ts`, `src/audio/chime.ts`
-- [x] Pause/resume + audio interruption handling (§4) — `src/session/sessionController.ts`
+- [x] Pause/resume + audio interruption handling (§4) — `src/session/sessionController.ts`; lab program runs share it via `engine.subscribeContextState` (`src/lab/programRunner.ts`)
 - [x] Isochronic-style amplitude modulation layer (§6C) — `src/audio/pulseModulator.ts`
 - [x] Stereo width control (§5) — `src/audio/stereoWidth.ts` (binaural exempt by design)
 - [x] Live parameter panel for advanced users (§15.4) — `src/ui/AdvancedPanel.tsx`
@@ -87,7 +87,7 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs
 - [x] Synthesized ambience: rain, ocean, wind, space from shaped noise (§6E) — `src/audio/ambience-processor.ts`, `src/audio/layers/ambienceLayer.ts`; post-pulse tap into `master` (pulses never chop weather); per-state §8 defaults; `ambience-up`/`ambience-off` bandit arms (CANDIDATE_SET_VERSION → 2)
-- [ ] Sample-based ambience: forest, fireplace, café (§6E, post-MVP) — infrastructure done (loader + seamless loop crossfade + asset probe, `src/audio/ambienceAssets.ts`; UI hides types without assets); still needs the actual recordings in `public/ambience/` (see README there)
+- [x] Forest, fireplace, café ambience (§6E) — synthesized in the worklet (leaves + bird motifs, flickering bed + crackles/pops, wandering murmur + clinks), always available; a recording dropped into `public/ambience/` replaces the synthesized version via the existing loader + seamless loop crossfade (`src/audio/ambienceAssets.ts`). Node-side generator test: `src/audio/ambience-processor.test.ts`
 - [x] Tone softening: detuning, harmonic stacking, low-pass filtering (§7) — `tone.warmth` (0..1) in `SoundProfile`, implemented in `src/audio/layers/toneLayer.ts` (equal-power, warmth 0 = old pure sine); Warmth slider in the advanced panel
 - [ ] Verify by ear: each synth ambience type solo + click-free switches, ambience steady under deep isochronic depth (post-pulse routing), warmth 0→1 sweep on meditation (no loudness jump), 5-min session per state to hear the compressed arc land in the end fade, drop a test `forest.mp3` in `public/ambience/` and hear it loop seamlessly
 - [x] MP3 session export ("Download") — offline render of the selected session (profile + arc/program, adaptation excluded by design) via `OfflineAudioContext` suspend-checkpoints driving the ordinary `AudioEngine`, lamejs worker encode — `src/export/`, buttons on the setup screen, program editor and lab (`src/export/useMp3Export.ts`, `src/ui/ExportRow.tsx`)

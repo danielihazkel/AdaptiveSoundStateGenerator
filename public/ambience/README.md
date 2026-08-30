@@ -1,8 +1,10 @@
-# Sample-based ambience assets (PRD §6E)
+# Optional recorded ambience (PRD §6E)
 
-Drop looped recordings here to activate the sample-based ambience types.
-Nothing else is needed — on the next load the app probes this folder and the
-matching options appear in the Ambience picker. Types with no file are hidden.
+Forest, fireplace and café are synthesized in the audio worklet and always
+available. Drop a looped recording here to *replace* the synthesized version:
+nothing else is needed — on the next load the app finds the file and the
+ambience layer crossfades from synthesis to the recording once it has decoded.
+Types with no file simply keep their synthesized sound.
 
 ## Expected files
 
