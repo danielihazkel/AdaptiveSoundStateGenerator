@@ -12,6 +12,12 @@ export interface SegmentObservation {
   customizedInSegment: boolean;
   /** null = no biometric source connected. */
   hrTrend: HrTrend | null;
+  /**
+   * RMSSD trend from RR intervals (Phase 9); null = no source, or the
+   * sensor sends no RR data. For calm states *falling* HRV is adverse —
+   * roughly the mirror of a rising heart rate.
+   */
+  hrvTrend: HrTrend | null;
 }
 
 export type AdaptationAction =

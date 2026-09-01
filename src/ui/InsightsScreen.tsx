@@ -147,6 +147,16 @@ export function InsightsScreen(props: {
                   <dd>{insight.bestArm.label}</dd>
                 </>
               )}
+              {insight.hrvDeltaPct && (
+                <>
+                  <dt>Heart-rate variability</dt>
+                  <dd>
+                    {insight.hrvDeltaPct.meanPct >= 0 ? 'rose' : 'fell'}{' '}
+                    {Math.abs(Math.round(insight.hrvDeltaPct.meanPct))}% on average
+                    over {insight.hrvDeltaPct.n} sessions
+                  </dd>
+                </>
+              )}
               {insight.bestByTime.length > 0 && (
                 <>
                   <dt>Works best at</dt>

@@ -48,20 +48,26 @@ export interface AdaptationInput {
 }
 
 /**
- * HR only informs adaptation where rising is unambiguously adverse
- * (relax/sleep/meditation/calm/creative). For focus/energy/flow a rising HR
- * could just as well be engagement, and for arousal it is expected, so it is
- * ignored (v1).
+ * Biometrics only inform adaptation where the signal is unambiguously
+ * adverse (relax/sleep/meditation/calm/creative): a rising heart rate, or —
+ * Phase 9 — falling HRV, its parasympathetic mirror. For focus/energy/flow
+ * a rising HR could just as well be engagement, and for arousal it is
+ * expected, so both are ignored there. One boolean, so HR and HRV moving
+ * together never double-count.
  */
-function isAdverseHr(state: MentalState, trend: HrTrend | null): boolean {
-  if (trend !== 'rising') return false;
-  return (
+function isAdverseBiometric(
+  state: MentalState,
+  hr: HrTrend | null,
+  hrv: HrTrend | null,
+): boolean {
+  const calmState =
     state === 'relax' ||
     state === 'sleep' ||
     state === 'meditation' ||
     state === 'calm' ||
-    state === 'creative'
-  );
+    state === 'creative';
+  if (!calmState) return false;
+  return hr === 'rising' || hrv === 'falling';
 }
 
 /** Apply the soften nudge to the currently playing profile (arm unchanged). */
@@ -78,7 +84,10 @@ export function decideAdaptation(input: AdaptationInput): AdaptationAction {
   // Sleep never prompts and never switches arms in v1 — a mid-sleep timbre
   // jump risks waking the user. Biometrics-only: one soften nudge per session.
   if (state === 'sleep') {
-    if (observation.hrTrend === 'rising' && !input.softenedAlready) {
+    if (
+      isAdverseBiometric(state, observation.hrTrend, observation.hrvTrend) &&
+      !input.softenedAlready
+    ) {
       return { kind: 'soften' };
     }
     return { kind: 'stay' };
@@ -90,9 +99,9 @@ export function decideAdaptation(input: AdaptationInput): AdaptationAction {
   const response = observation.response;
   if (response === 'better' || response === 'same') return { kind: 'stay' };
 
-  const adverseHr = isAdverseHr(state, observation.hrTrend);
+  const adverseBio = isAdverseBiometric(state, observation.hrTrend, observation.hrvTrend);
   const implicitBad =
-    observation.volumeTweaksInSegment >= IMPLICIT_SWITCH_VOLUME_TWEAKS || adverseHr;
+    observation.volumeTweaksInSegment >= IMPLICIT_SWITCH_VOLUME_TWEAKS || adverseBio;
 
   // Locked mode never explores: only an explicit 'worse' moves anything.
   if (mode === 'locked') {
@@ -113,7 +122,7 @@ export function decideAdaptation(input: AdaptationInput): AdaptationAction {
 
   if (input.switchesSoFar >= MAX_SWITCHES_PER_SESSION) return { kind: 'stay' };
 
-  const trigger = response === 'worse' ? 'explicit' : adverseHr ? 'biometric' : 'implicit';
+  const trigger = response === 'worse' ? 'explicit' : adverseBio ? 'biometric' : 'implicit';
   const armId = resampleExcluding(input);
   if (!armId) return { kind: 'stay' };
   return { kind: 'switch', armId, trigger };

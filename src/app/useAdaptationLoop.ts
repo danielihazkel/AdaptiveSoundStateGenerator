@@ -11,6 +11,7 @@ import { ADAPT_RAMP_TIME_CONSTANT } from '../audio/ramp';
 import type { MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
 import { computeHrTrend } from '../biometrics/hrTrend';
+import { computeHrvTrend } from '../biometrics/hrv';
 import type { BiometricSample } from '../biometrics/types';
 import { CANDIDATE_SET_VERSION } from '../personalization/candidates';
 import { buildCandidateProfile } from '../personalization/candidates';
@@ -74,11 +75,16 @@ export function useAdaptationLoop(deps: {
       recentWindowMs: ADAPT_INTERVAL_SEC * 1000,
       now: Date.now(),
     });
+    const hrv = computeHrvTrend(deps.getHrSamples(), {
+      recentWindowMs: ADAPT_INTERVAL_SEC * 1000,
+      now: Date.now(),
+    });
 
     current.endSec = info.elapsedSec;
     if (response) current.response = response;
     current.volumeAdjustments = segmentVolumeTweaksRef.current;
     if (hr) current.hrDeltaBpm = Math.round(hr.deltaBpm);
+    if (hrv) current.hrvDeltaPct = Math.round(hrv.deltaPct * 100);
 
     const action = decideAdaptation({
       state: meta.state,
@@ -95,6 +101,7 @@ export function useAdaptationLoop(deps: {
         volumeTweaksInSegment: segmentVolumeTweaksRef.current,
         customizedInSegment: false, // customization disables adaptation upstream
         hrTrend: hr?.trend ?? null,
+        hrvTrend: hrv?.trend ?? null,
       },
       personalization: loadPersonalization(CANDIDATE_SET_VERSION),
       context: { bucket: timeBucketOf(new Date()), mono: engine.isMonoMode },

@@ -105,6 +105,8 @@ export interface SessionSegment {
   trigger?: 'initial' | 'explicit' | 'implicit' | 'biometric';
   /** HR delta vs session baseline at segment close — raw HR is never stored. */
   hrDeltaBpm?: number;
+  /** RMSSD change vs the session baseline in this segment, signed % (Phase 9). */
+  hrvDeltaPct?: number;
 }
 
 export interface SessionRecord {

@@ -37,6 +37,7 @@ function observation(overrides: Partial<SegmentObservation> = {}): SegmentObserv
     volumeTweaksInSegment: 0,
     customizedInSegment: false,
     hrTrend: null,
+    hrvTrend: null,
     ...overrides,
   };
 }
@@ -158,6 +159,52 @@ describe('decideAdaptation', () => {
         ),
       ).toEqual({ kind: 'stay' });
     }
+  });
+
+  it('falling HRV is adverse for calm states, ignored elsewhere; rising HRV never is', () => {
+    const action = decideAdaptation(
+      input({ state: 'relax', observation: observation({ hrvTrend: 'falling' }) }),
+    );
+    expect(action.kind).toBe('switch');
+    if (action.kind === 'switch') expect(action.trigger).toBe('biometric');
+    // HR and HRV moving together still trigger a single biometric switch.
+    const both = decideAdaptation(
+      input({
+        state: 'calm',
+        observation: observation({ hrTrend: 'rising', hrvTrend: 'falling' }),
+      }),
+    );
+    expect(both.kind).toBe('switch');
+    for (const state of ['focus', 'flow', 'energy', 'arousal'] as const) {
+      expect(
+        decideAdaptation(
+          input({ state, observation: observation({ hrvTrend: 'falling' }) }),
+        ),
+      ).toEqual({ kind: 'stay' });
+    }
+    // Rising HRV = settling — never a reason to change anything.
+    expect(
+      decideAdaptation(
+        input({ state: 'relax', observation: observation({ hrvTrend: 'rising' }) }),
+      ),
+    ).toEqual({ kind: 'stay' });
+  });
+
+  it('sleep softens once on falling HRV, like rising HR', () => {
+    expect(
+      decideAdaptation(
+        input({ state: 'sleep', observation: observation({ hrvTrend: 'falling' }) }),
+      ),
+    ).toEqual({ kind: 'soften' });
+    expect(
+      decideAdaptation(
+        input({
+          state: 'sleep',
+          softenedAlready: true,
+          observation: observation({ hrvTrend: 'falling' }),
+        }),
+      ),
+    ).toEqual({ kind: 'stay' });
   });
 
   it('customization always wins: stay even on worse', () => {

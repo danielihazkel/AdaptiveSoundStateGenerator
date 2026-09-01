@@ -34,6 +34,8 @@ export const MIN_CONTEXT_PULLS = 2;
 export const MIN_NOISE_SESSIONS = 3;
 /** Sessions scoring at least this count as "worked" for volume preference. */
 export const GOOD_SESSION_SCORE = 0.5;
+/** Sessions carrying an HRV delta before the fact is shown (Phase 9). */
+export const MIN_HRV_SESSIONS = 3;
 
 export type SoundComponent =
   | 'binaural'
@@ -101,6 +103,12 @@ export interface StateInsights {
   completionRate: number | null;
   /** Session count at which the current best variation was first played and settled. */
   bestFoundAfter: number | null;
+  /**
+   * Mean per-session HRV (RMSSD) change during sessions whose segments
+   * carry one (heart-rate sensor with RR support); null below
+   * MIN_HRV_SESSIONS. Positive = HRV rose while listening.
+   */
+  hrvDeltaPct: { meanPct: number; n: number } | null;
 }
 
 interface Scored {
@@ -248,6 +256,25 @@ function computeStateInsights(
     }
   }
 
+  // HRV during sessions (Phase 9): each session averages its segments' RMSSD
+  // deltas; the fact is the mean over such sessions.
+  const hrvPerSession: number[] = [];
+  for (const record of records) {
+    const deltas = (record.segments ?? [])
+      .map((s) => s.hrvDeltaPct)
+      .filter((d): d is number => d !== undefined);
+    if (deltas.length > 0) {
+      hrvPerSession.push(deltas.reduce((a, b) => a + b, 0) / deltas.length);
+    }
+  }
+  const hrvDeltaPct =
+    hrvPerSession.length >= MIN_HRV_SESSIONS
+      ? {
+          meanPct: hrvPerSession.reduce((a, b) => a + b, 0) / hrvPerSession.length,
+          n: hrvPerSession.length,
+        }
+      : null;
+
   return {
     state,
     sessionCount: scored.length,
@@ -258,6 +285,7 @@ function computeStateInsights(
         : null,
     bestArm,
     arms,
+    hrvDeltaPct,
     bestByTime,
     componentEffectiveness,
     preferredBeatRange,
