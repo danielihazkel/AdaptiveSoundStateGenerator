@@ -13,6 +13,7 @@ import {
   MONO_SUBSTITUTE_MIN_DEPTH,
   NOISE_TRIM,
   TONE_TRIM,
+  TYPE_FADE_SECONDS,
 } from './mixPolicy';
 import { MAX_PULSE_RATE_HZ, STATE_LIST, STATES } from './states';
 import { AMBIENCE_TYPES, cloneProfile, type NoiseType, type SoundProfile } from './types';
@@ -22,6 +23,8 @@ import { AMBIENCE_TYPES, cloneProfile, type NoiseType, type SoundProfile } from 
  * before the composition was extracted (every `this.layer.setX(v)` became a
  * field assignment, in the same order, with the same expressions). This is
  * the specification compose.ts must match bit-for-bit — keep it verbatim.
+ * Later additions (marked "Phase 9") are spelled out here in the same
+ * literal style so the oracle stays the specification.
  */
 function legacyCompose(input: ComposeInput): EffectiveParams {
   const p = input.profile;
@@ -29,7 +32,16 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   const pm = input.program;
   const substitute = input.monoMode && p.binaural.enabled;
 
-  const beat = Math.max(0.5, p.binaural.beat + (pm ? 0 : mod.beatOffsetHz));
+  // Phase 9: absolute program overrides, else the historic expressions.
+  const beat =
+    pm && pm.beatHz !== null
+      ? Math.max(0.5, pm.beatHz)
+      : Math.max(0.5, p.binaural.beat + (pm ? 0 : mod.beatOffsetHz));
+  const carrier = pm && pm.carrierHz !== null ? pm.carrierHz : p.binaural.carrier;
+  const noiseType = pm && pm.noiseType !== null ? pm.noiseType : p.noise.type;
+  const ambienceType = pm && pm.ambienceType !== null ? pm.ambienceType : p.ambience.type;
+  const richness = pm && pm.harmonyRichness !== null ? pm.harmonyRichness : p.harmony.richness;
+  const fadeSec = pm ? pm.typeFadeSec : TYPE_FADE_SECONDS;
   const trackingBeat =
     p.isochronic.rate === Math.min(p.binaural.beat, MAX_PULSE_RATE_HZ);
   const arcGain = pm ? pm.intensity : mod.intensity;
@@ -45,7 +57,7 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   const warmth = pm && pm.warmth !== null ? pm.warmth : p.tone.warmth;
 
   const toneEnabled = substitute ? true : p.tone.enabled;
-  const toneFrequency = substitute ? p.binaural.carrier : p.tone.frequency;
+  const toneFrequency = substitute ? carrier : p.tone.frequency;
   const toneLevel = (substitute ? p.binaural.level : p.tone.level) * arcGain * toneScale;
   const isoEnabled = substitute ? true : p.isochronic.enabled;
   const isoRate = substitute
@@ -67,28 +79,31 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   };
   // this.binaural.setCarrier / setBeat / setLevel
   out.binaural = {
-    carrier: p.binaural.carrier,
+    carrier,
     beat,
     level: p.binaural.enabled && !substitute ? p.binaural.level * arcGain * BINAURAL_TRIM : 0,
   };
-  // this.noise.setType / setLevel
+  // this.noise.setType(type, fadeSec) / setLevel
   out.noise = {
-    type: p.noise.type,
-    level: p.noise.enabled ? p.noise.level * arcGain * noiseScale * NOISE_TRIM[p.noise.type] : 0,
+    type: noiseType,
+    level: p.noise.enabled ? p.noise.level * arcGain * noiseScale * NOISE_TRIM[noiseType] : 0,
+    fadeSec,
   };
-  // this.ambience.setType / setLevel
+  // this.ambience.setType(type, fadeSec) / setLevel
   out.ambience = {
-    type: p.ambience.type,
+    type: ambienceType,
     level: p.ambience.enabled
-      ? p.ambience.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience.type]
+      ? p.ambience.level * arcGain * ambienceScale * AMBIENCE_TRIM[ambienceType]
       : 0,
+    fadeSec,
   };
-  // this.ambience2.setType / setLevel
+  // this.ambience2.setType(type, fadeSec) / setLevel
   out.ambience2 = {
     type: p.ambience2.type,
     level: p.ambience2.enabled
       ? p.ambience2.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience2.type]
       : 0,
+    fadeSec,
   };
   const patternRhythm = substitute ? null : (pm?.rhythm ?? null);
   const patternMode =
@@ -116,7 +131,7 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   // this.harmony.setRoot / setRichness / setMovement / setSoftness / setLevel
   out.harmony = {
     rootHz: p.harmony.rootHz,
-    richness: p.harmony.richness,
+    richness,
     movement: p.harmony.movement,
     softness: warmth,
     level: p.harmony.enabled ? p.harmony.level * arcGain * harmonyScale * HARMONY_TRIM : 0,
@@ -146,9 +161,30 @@ const PROGRAM: ProgramModulation = {
   bassScale: 3, // bass * scale > 1 hits the cap
   warmth: 0.9,
   rhythm: { bpm: 96, complexity: 0.4 },
+  beatHz: null,
+  carrierHz: null,
+  noiseType: null,
+  ambienceType: null,
+  harmonyRichness: null,
+  typeFadeSec: 8,
 };
 const PROGRAM_NO_RHYTHM: ProgramModulation = { ...PROGRAM, warmth: null, rhythm: null };
-const PROGRAMS: (ProgramModulation | null)[] = [null, PROGRAM, PROGRAM_NO_RHYTHM];
+/** Phase 9: every absolute override set, beat below the floor to hit the clamp. */
+const PROGRAM_OVERRIDES: ProgramModulation = {
+  ...PROGRAM,
+  beatHz: 0.2,
+  carrierHz: 333,
+  noiseType: 'blue',
+  ambienceType: 'cafe',
+  harmonyRichness: 0.05,
+  typeFadeSec: 5,
+};
+const PROGRAMS: (ProgramModulation | null)[] = [
+  null,
+  PROGRAM,
+  PROGRAM_NO_RHYTHM,
+  PROGRAM_OVERRIDES,
+];
 const BREATHS: (BreathPattern | null)[] = [null, BREATH_PATTERNS.box];
 
 function edgeProfiles(): SoundProfile[] {

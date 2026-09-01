@@ -12,6 +12,11 @@ export const MONO_SWITCH_DIP_SECONDS = 0.15;
 export const CHIME_SECONDS = 2.0;
 /** Wake-up alarm: the chime repeats at this spacing until dismissed. */
 export const ALARM_REPEAT_SECONDS = 4;
+/**
+ * Noise-colour / ambience-type crossfade inside the worklets for an ordinary
+ * (slider / preset / arm) switch. Programs pass their own, longer fade.
+ */
+export const TYPE_FADE_SECONDS = 0.1;
 
 /**
  * Per-layer trim so equal slider values sound roughly equally loud (a sine at

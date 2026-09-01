@@ -664,11 +664,11 @@ export class AudioEngine {
     this.binaural.setCarrier(e.binaural.carrier, timeConstant);
     this.binaural.setBeat(e.binaural.beat, timeConstant);
     this.binaural.setLevel(e.binaural.level, timeConstant);
-    this.noise.setType(e.noise.type);
+    this.noise.setType(e.noise.type, e.noise.fadeSec);
     this.noise.setLevel(e.noise.level, timeConstant);
-    this.ambience.setType(e.ambience.type);
+    this.ambience.setType(e.ambience.type, e.ambience.fadeSec);
     this.ambience.setLevel(e.ambience.level, timeConstant);
-    this.ambience2.setType(e.ambience2.type);
+    this.ambience2.setType(e.ambience2.type, e.ambience2.fadeSec);
     this.ambience2.setLevel(e.ambience2.level, timeConstant);
     const pulse = e.pulse;
     if (pulse.mode === 'breath') {

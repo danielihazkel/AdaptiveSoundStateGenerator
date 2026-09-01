@@ -41,6 +41,20 @@ describe('encodeShare / decodeShare', () => {
     expect(await decodeShare(token)).toEqual(payload);
   });
 
+  it('round-trips a program whose phases carry sound overrides', async () => {
+    const program = defaultProgram('relax', 0.5);
+    program.segments[1] = {
+      ...program.segments[1],
+      beatHz: 7,
+      carrierHz: 180,
+      noiseType: 'pink',
+      ambienceType: 'ocean',
+      harmonyRichness: 0.6,
+    };
+    const payload: SharePayload = { v: 1, kind: 'program', program };
+    expect(await decodeShare(await encodeShare(payload))).toEqual(payload);
+  });
+
   it('round-trips a preset', async () => {
     const payload = presetPayload();
     expect(await decodeShare(await encodeShare(payload))).toEqual(payload);

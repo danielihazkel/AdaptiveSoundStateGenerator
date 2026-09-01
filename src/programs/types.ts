@@ -1,5 +1,12 @@
 import { STATES, clamp01, type MentalState } from '../audio/states';
-import { normalizeProfile, type SoundProfile } from '../audio/types';
+import {
+  AMBIENCE_TYPES,
+  NOISE_TYPES,
+  normalizeProfile,
+  type AmbienceType,
+  type NoiseType,
+  type SoundProfile,
+} from '../audio/types';
 import { newId } from '../storage/id';
 
 /**
@@ -32,6 +39,18 @@ export interface ProgramSegment {
   bassScale?: number; // 0..2
   /** Absolute override of tone warmth (0..1); absent = profile warmth. */
   warmth?: number;
+  /**
+   * Absolute sound overrides (Phase 9): a phase can move the binaural beat,
+   * the carrier, the noise colour, the ambience type, or the pad's richness
+   * instead of only scaling levels. Absent = the base profile's value.
+   * Numeric overrides crossfade at phase boundaries like warmth; the two
+   * discrete ones switch at the boundary and the worklets glide the switch.
+   */
+  beatHz?: number; // 0.5..40
+  carrierHz?: number; // 20..1500
+  noiseType?: NoiseType;
+  ambienceType?: AmbienceType;
+  harmonyRichness?: number; // 0..1
 }
 
 export interface Program {
@@ -74,6 +93,10 @@ function str(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.length > 0 ? value : fallback;
 }
 
+function optionalOneOf<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  return allowed.includes(value as T) ? (value as T) : undefined;
+}
+
 function isMentalState(value: unknown): value is MentalState {
   return typeof value === 'string' && value in STATES;
 }
@@ -112,6 +135,17 @@ function normalizeSegment(raw: unknown, index: number): ProgramSegment {
   if (harmonyScale !== undefined) segment.harmonyScale = harmonyScale;
   if (bassScale !== undefined) segment.bassScale = bassScale;
   if (warmth !== undefined) segment.warmth = warmth;
+  // Sound overrides — same ranges as normalizeProfile's for the same fields.
+  const beatHz = optionalScale(s.beatHz, 0.5, 40);
+  const carrierHz = optionalScale(s.carrierHz, 20, 1500);
+  const noiseType = optionalOneOf(s.noiseType, NOISE_TYPES);
+  const ambienceType = optionalOneOf(s.ambienceType, AMBIENCE_TYPES);
+  const harmonyRichness = optionalScale(s.harmonyRichness, 0, 1);
+  if (beatHz !== undefined) segment.beatHz = beatHz;
+  if (carrierHz !== undefined) segment.carrierHz = carrierHz;
+  if (noiseType !== undefined) segment.noiseType = noiseType;
+  if (ambienceType !== undefined) segment.ambienceType = ambienceType;
+  if (harmonyRichness !== undefined) segment.harmonyRichness = harmonyRichness;
   return segment;
 }
 

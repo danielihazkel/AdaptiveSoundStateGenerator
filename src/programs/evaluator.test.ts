@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SEGMENT_CROSSFADE_SEC, evaluateProgram, segmentAt } from './evaluator';
+import {
+  PROGRAM_TYPE_FADE_SEC,
+  SEGMENT_CROSSFADE_SEC,
+  evaluateProgram,
+  segmentAt,
+} from './evaluator';
 import { defaultProgram, normalizeProgram, type Program } from './types';
 
 const program = defaultProgram('focus', 0.5);
@@ -65,6 +70,85 @@ describe('evaluateProgram', () => {
       expect(Math.abs(next.bassScale - prev.bassScale)).toBeLessThan(0.05);
       prev = next;
     }
+  });
+
+  it('defaults every sound override to null and carries the type fade', () => {
+    for (const t of [0, 5 * 60, 30 * 60]) {
+      const m = evaluateProgram(program, t);
+      expect(m.beatHz).toBeNull();
+      expect(m.carrierHz).toBeNull();
+      expect(m.noiseType).toBeNull();
+      expect(m.ambienceType).toBeNull();
+      expect(m.harmonyRichness).toBeNull();
+      expect(m.typeFadeSec).toBe(PROGRAM_TYPE_FADE_SEC);
+    }
+  });
+
+  it('crossfades numeric sound overrides and snaps discrete ones at the boundary', () => {
+    const p = normalizeProgram({
+      segments: [
+        {
+          startMin: 0,
+          endMin: 10,
+          bpmRange: [70, 80],
+          beatHz: 14,
+          carrierHz: 200,
+          noiseType: 'pink',
+          ambienceType: 'rain',
+          harmonyRichness: 0.2,
+        },
+        {
+          startMin: 10,
+          endMin: null,
+          bpmRange: [90, 100],
+          beatHz: 8,
+          carrierHz: 160,
+          noiseType: 'brown',
+          ambienceType: 'fireplace',
+          harmonyRichness: 0.8,
+        },
+      ],
+    });
+    const boundary = 10 * 60;
+    const before = evaluateProgram(p, boundary - SEGMENT_CROSSFADE_SEC);
+    expect(before.beatHz).toBe(14);
+    expect(before.noiseType).toBe('pink');
+    expect(before.ambienceType).toBe('rain');
+    const mid = evaluateProgram(p, boundary);
+    expect(mid.beatHz).toBeCloseTo(11);
+    expect(mid.carrierHz).toBeCloseTo(180);
+    expect(mid.harmonyRichness).toBeCloseTo(0.5);
+    // Discrete: the old type up to the boundary, the new one from it.
+    expect(evaluateProgram(p, boundary - 1).noiseType).toBe('pink');
+    expect(evaluateProgram(p, boundary - 1).ambienceType).toBe('rain');
+    expect(mid.noiseType).toBe('brown');
+    expect(mid.ambienceType).toBe('fireplace');
+    const after = evaluateProgram(p, boundary + SEGMENT_CROSSFADE_SEC);
+    expect(after.beatHz).toBe(8);
+    expect(after.carrierHz).toBe(160);
+    expect(after.harmonyRichness).toBe(0.8);
+    let prev = evaluateProgram(p, boundary - SEGMENT_CROSSFADE_SEC);
+    for (let t = boundary - SEGMENT_CROSSFADE_SEC + 1; t <= boundary + SEGMENT_CROSSFADE_SEC; t++) {
+      const next = evaluateProgram(p, t);
+      expect(Math.abs(next.beatHz! - prev.beatHz!)).toBeLessThan(0.6);
+      expect(Math.abs(next.carrierHz! - prev.carrierHz!)).toBeLessThan(4);
+      prev = next;
+    }
+  });
+
+  it('takes the overriding side when only one neighbor sets a sound override', () => {
+    const p = normalizeProgram({
+      segments: [
+        { startMin: 0, endMin: 10, bpmRange: [70, 80], noiseType: 'blue' },
+        { startMin: 10, endMin: null, bpmRange: [90, 100], beatHz: 6, ambienceType: 'ocean' },
+      ],
+    });
+    expect(evaluateProgram(p, 5 * 60).beatHz).toBeNull();
+    expect(evaluateProgram(p, 5 * 60).ambienceType).toBeNull();
+    expect(evaluateProgram(p, 10 * 60 - 5).beatHz).toBe(6);
+    expect(evaluateProgram(p, 10 * 60 - 5).ambienceType).toBe('ocean');
+    expect(evaluateProgram(p, 10 * 60 + 5).noiseType).toBe('blue');
+    expect(evaluateProgram(p, 20 * 60).noiseType).toBeNull();
   });
 
   it('takes the overriding side when only one crossfade neighbor sets warmth', () => {

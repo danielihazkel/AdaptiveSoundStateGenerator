@@ -1,3 +1,4 @@
+import type { AmbienceType, NoiseType } from '../audio/types';
 import type { Program, ProgramSegment } from './types';
 
 /**
@@ -22,10 +23,29 @@ export interface ProgramModulation {
   warmth: number | null;
   /** Pattern-mode pulse target; null = fall back to the profile's rhythm. */
   rhythm: { bpm: number; complexity: number } | null;
+  /**
+   * Absolute sound overrides (Phase 9); null = the profile's value. Numeric
+   * ones crossfade across the boundary window; the discrete ones snap at the
+   * boundary and the engine asks the worklets to glide over `typeFadeSec`.
+   */
+  beatHz: number | null;
+  carrierHz: number | null;
+  noiseType: NoiseType | null;
+  ambienceType: AmbienceType | null;
+  harmonyRichness: number | null;
+  /** How long a noise-colour / ambience-type switch should take. */
+  typeFadeSec: number;
 }
 
 /** Numeric outputs blend across [boundary − 15 s, boundary + 15 s]. */
 export const SEGMENT_CROSSFADE_SEC = 30;
+
+/**
+ * Worklet crossfade for a discrete type change at a phase boundary. Shorter
+ * than the numeric window so the new colour has landed by the time the
+ * levels finish blending, long enough to read as a dissolve, not a cut.
+ */
+export const PROGRAM_TYPE_FADE_SEC = 8;
 
 /** Period of the deterministic BPM drift sine within a segment. */
 const DRIFT_PERIOD_SEC = 150;
@@ -68,6 +88,11 @@ interface SegmentValues {
   warmth: number | null;
   bpm: number;
   complexity: number;
+  beatHz: number | null;
+  carrierHz: number | null;
+  noiseType: NoiseType | null;
+  ambienceType: AmbienceType | null;
+  harmonyRichness: number | null;
 }
 
 function valuesAt(program: Program, index: number, elapsedSec: number): SegmentValues {
@@ -83,7 +108,30 @@ function valuesAt(program: Program, index: number, elapsedSec: number): SegmentV
     warmth: segment.warmth ?? null,
     bpm: driftBpm(segment, index, elapsedSec),
     complexity: segment.complexity,
+    beatHz: segment.beatHz ?? null,
+    carrierHz: segment.carrierHz ?? null,
+    noiseType: segment.noiseType ?? null,
+    ambienceType: segment.ambienceType ?? null,
+    harmonyRichness: segment.harmonyRichness ?? null,
   };
+}
+
+/**
+ * Null-aware lerp for an optional absolute override: an override only on one
+ * side snaps at the window edge — inaudible under the engine's τ=2 s glide,
+ * and the shipped templates set warmth on every segment so this path never
+ * triggers in practice.
+ */
+function mixOptional(a: number | null, b: number | null, t: number): number | null {
+  if (a === null && b === null) return null;
+  if (a === null) return b;
+  if (b === null) return a;
+  return a + (b - a) * t;
+}
+
+/** A discrete override switches at the boundary (blend 0.5), null-aware. */
+function pickDiscrete<T>(a: T | null, b: T | null, t: number): T | null {
+  return t >= 0.5 ? (b ?? a) : (a ?? b);
 }
 
 function mix(a: SegmentValues, b: SegmentValues, t: number): SegmentValues {
@@ -96,19 +144,14 @@ function mix(a: SegmentValues, b: SegmentValues, t: number): SegmentValues {
     toneScale: lerp(a.toneScale, b.toneScale),
     harmonyScale: lerp(a.harmonyScale, b.harmonyScale),
     bassScale: lerp(a.bassScale, b.bassScale),
-    // Null-aware: an override only on one side snaps at the window edge —
-    // inaudible under the engine's τ=2 s glide, and the shipped templates set
-    // warmth on every segment so this path never triggers in practice.
-    warmth:
-      a.warmth === null && b.warmth === null
-        ? null
-        : a.warmth === null
-          ? b.warmth
-          : b.warmth === null
-            ? a.warmth
-            : lerp(a.warmth, b.warmth),
+    warmth: mixOptional(a.warmth, b.warmth, t),
     bpm: lerp(a.bpm, b.bpm),
     complexity: lerp(a.complexity, b.complexity),
+    beatHz: mixOptional(a.beatHz, b.beatHz, t),
+    carrierHz: mixOptional(a.carrierHz, b.carrierHz, t),
+    noiseType: pickDiscrete(a.noiseType, b.noiseType, t),
+    ambienceType: pickDiscrete(a.ambienceType, b.ambienceType, t),
+    harmonyRichness: mixOptional(a.harmonyRichness, b.harmonyRichness, t),
   };
 }
 
@@ -144,6 +187,12 @@ export function evaluateProgram(program: Program, elapsedSec: number): ProgramMo
     bassScale: values.bassScale,
     warmth: values.warmth,
     rhythm: { bpm: values.bpm, complexity: values.complexity },
+    beatHz: values.beatHz,
+    carrierHz: values.carrierHz,
+    noiseType: values.noiseType,
+    ambienceType: values.ambienceType,
+    harmonyRichness: values.harmonyRichness,
+    typeFadeSec: PROGRAM_TYPE_FADE_SEC,
   };
 }
 

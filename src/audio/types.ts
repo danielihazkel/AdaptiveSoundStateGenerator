@@ -128,7 +128,7 @@ export function cloneProfile(profile: SoundProfile): SoundProfile {
   return structuredClone(profile);
 }
 
-const NOISE_TYPES: readonly NoiseType[] = ['white', 'pink', 'brown', 'blue'];
+export const NOISE_TYPES: readonly NoiseType[] = ['white', 'pink', 'brown', 'blue'];
 const RHYTHM_MODES: readonly RhythmMode[] = ['simple', 'pattern'];
 /** Every ambience type, in picker order — all always playable. */
 export const AMBIENCE_TYPES: readonly AmbienceType[] = [

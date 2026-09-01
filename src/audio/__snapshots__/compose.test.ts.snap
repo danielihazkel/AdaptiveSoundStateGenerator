@@ -5,10 +5,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.017499999999999998,
         "type": "rain",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -27,6 +29,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 9000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.19599999999999998,
         "type": "brown",
       },
@@ -44,10 +47,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.025,
         "type": "rain",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -66,6 +71,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 18000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.27999999999999997,
         "type": "brown",
       },
@@ -83,10 +89,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0.010000000000000002,
         "type": "rain",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -105,6 +113,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 10800,
       "noise": {
+        "fadeSec": 8,
         "level": 0.3136,
         "type": "brown",
       },
@@ -126,10 +135,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.16799999999999998,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -148,6 +159,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 9000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.07874999999999999,
         "type": "pink",
       },
@@ -165,10 +177,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.24,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -187,6 +201,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 18000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.11249999999999999,
         "type": "pink",
       },
@@ -204,10 +219,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0.09600000000000002,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -226,6 +243,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 10800,
       "noise": {
+        "fadeSec": 8,
         "level": 0.126,
         "type": "pink",
       },
@@ -247,10 +265,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.0735,
         "type": "space",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -269,6 +289,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 1000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.20999999999999996,
         "type": "brown",
       },
@@ -286,10 +307,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.105,
         "type": "space",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -308,6 +331,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 2000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.30000000000000004,
         "type": "brown",
       },
@@ -325,10 +349,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0.041999999999999996,
         "type": "space",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -347,6 +373,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 1200,
       "noise": {
+        "fadeSec": 8,
         "level": 0.3360000000000001,
         "type": "brown",
       },
@@ -368,10 +395,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "wind",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -390,6 +419,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 9000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.0336,
         "type": "blue",
       },
@@ -407,10 +437,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "wind",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -429,6 +461,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 18000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.048,
         "type": "blue",
       },
@@ -447,10 +480,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0,
         "type": "wind",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -469,6 +504,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 10800,
       "noise": {
+        "fadeSec": 8,
         "level": 0.053759999999999995,
         "type": "blue",
       },
@@ -490,10 +526,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.05775,
         "type": "wind",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -512,6 +550,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 9000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.052500000000000005,
         "type": "pink",
       },
@@ -529,10 +568,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.0825,
         "type": "wind",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -551,6 +592,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 18000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.07500000000000001,
         "type": "pink",
       },
@@ -568,10 +610,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0.033,
         "type": "wind",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -590,6 +634,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 10800,
       "noise": {
+        "fadeSec": 8,
         "level": 0.084,
         "type": "pink",
       },
@@ -611,10 +656,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.105,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -633,6 +680,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 3000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.12040000000000001,
         "type": "brown",
       },
@@ -650,10 +698,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.15,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -672,6 +722,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 6000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.17200000000000001,
         "type": "brown",
       },
@@ -689,10 +740,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0.06,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -711,6 +764,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 3600,
       "noise": {
+        "fadeSec": 8,
         "level": 0.19264000000000003,
         "type": "brown",
       },
@@ -732,10 +786,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.017499999999999998,
         "type": "rain",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -754,6 +810,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 9000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.20999999999999996,
         "type": "brown",
       },
@@ -771,10 +828,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.025,
         "type": "rain",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -793,6 +852,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 18000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.30000000000000004,
         "type": "brown",
       },
@@ -810,10 +870,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0.010000000000000002,
         "type": "rain",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -832,6 +894,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 10800,
       "noise": {
+        "fadeSec": 8,
         "level": 0.3360000000000001,
         "type": "brown",
       },
@@ -853,10 +916,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.14699999999999996,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -875,6 +940,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 4000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.06475,
         "type": "pink",
       },
@@ -892,10 +958,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.21,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -914,6 +982,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 8000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.0925,
         "type": "pink",
       },
@@ -931,10 +1000,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0.08399999999999999,
         "type": "ocean",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -953,6 +1024,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 4800,
       "noise": {
+        "fadeSec": 8,
         "level": 0.10359999999999998,
         "type": "pink",
       },
@@ -974,10 +1046,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
   {
     "mono": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.09799999999999999,
         "type": "space",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -996,6 +1070,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 9000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.052500000000000005,
         "type": "pink",
       },
@@ -1013,10 +1088,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "plain": {
       "ambience": {
+        "fadeSec": 0.1,
         "level": 0.13999999999999999,
         "type": "space",
       },
       "ambience2": {
+        "fadeSec": 0.1,
         "level": 0,
         "type": "ocean",
       },
@@ -1035,6 +1112,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 18000,
       "noise": {
+        "fadeSec": 0.1,
         "level": 0.07500000000000001,
         "type": "pink",
       },
@@ -1052,10 +1130,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
     },
     "program": {
       "ambience": {
+        "fadeSec": 8,
         "level": 0.05600000000000001,
         "type": "space",
       },
       "ambience2": {
+        "fadeSec": 8,
         "level": 0,
         "type": "ocean",
       },
@@ -1074,6 +1154,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "lowpassHz": 10800,
       "noise": {
+        "fadeSec": 8,
         "level": 0.084,
         "type": "pink",
       },

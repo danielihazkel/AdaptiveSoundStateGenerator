@@ -29,6 +29,44 @@ describe('normalizeProgram', () => {
     expect(normalizeProgram({ ...plain, boundaryChime: false }).boundaryChime).toBeUndefined();
   });
 
+  it('keeps, clamps and validates per-segment sound overrides; never invents them', () => {
+    const plain = defaultProgram('focus', 0.5);
+    for (const s of normalizeProgram(plain).segments) {
+      expect(s).not.toHaveProperty('beatHz');
+      expect(s).not.toHaveProperty('carrierHz');
+      expect(s).not.toHaveProperty('noiseType');
+      expect(s).not.toHaveProperty('ambienceType');
+      expect(s).not.toHaveProperty('harmonyRichness');
+    }
+    const p = normalizeProgram({
+      segments: [
+        {
+          startMin: 0,
+          endMin: 5,
+          bpmRange: [70, 80],
+          beatHz: 12,
+          carrierHz: 9000,
+          noiseType: 'pink',
+          ambienceType: 'fireplace',
+          harmonyRichness: 1.7,
+        },
+        { startMin: 5, endMin: null, bpmRange: [70, 80], noiseType: 'lava', ambienceType: 42, beatHz: 'x' },
+      ],
+    });
+    expect(p.segments[0]).toMatchObject({
+      beatHz: 12,
+      carrierHz: 1500,
+      noiseType: 'pink',
+      ambienceType: 'fireplace',
+      harmonyRichness: 1,
+    });
+    expect(p.segments[1]).not.toHaveProperty('noiseType');
+    expect(p.segments[1]).not.toHaveProperty('ambienceType');
+    expect(p.segments[1]).not.toHaveProperty('beatHz');
+    // Idempotent: a normalized program with overrides survives a second pass.
+    expect(normalizeProgram(p)).toEqual(p);
+  });
+
   it('turns non-objects into a usable one-segment program', () => {
     for (const raw of [null, undefined, 42, 'program']) {
       const p = normalizeProgram(raw);
