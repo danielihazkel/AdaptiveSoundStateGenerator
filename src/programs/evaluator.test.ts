@@ -80,6 +80,7 @@ describe('evaluateProgram', () => {
       expect(m.noiseType).toBeNull();
       expect(m.ambienceType).toBeNull();
       expect(m.harmonyRichness).toBeNull();
+      expect(m.space).toBeNull();
       expect(m.typeFadeSec).toBe(PROGRAM_TYPE_FADE_SEC);
     }
   });
@@ -96,6 +97,7 @@ describe('evaluateProgram', () => {
           noiseType: 'pink',
           ambienceType: 'rain',
           harmonyRichness: 0.2,
+          space: 0.1,
         },
         {
           startMin: 10,
@@ -106,6 +108,7 @@ describe('evaluateProgram', () => {
           noiseType: 'brown',
           ambienceType: 'fireplace',
           harmonyRichness: 0.8,
+          space: 0.3,
         },
       ],
     });
@@ -118,6 +121,7 @@ describe('evaluateProgram', () => {
     expect(mid.beatHz).toBeCloseTo(11);
     expect(mid.carrierHz).toBeCloseTo(180);
     expect(mid.harmonyRichness).toBeCloseTo(0.5);
+    expect(mid.space).toBeCloseTo(0.2);
     // Discrete: the old type up to the boundary, the new one from it.
     expect(evaluateProgram(p, boundary - 1).noiseType).toBe('pink');
     expect(evaluateProgram(p, boundary - 1).ambienceType).toBe('rain');

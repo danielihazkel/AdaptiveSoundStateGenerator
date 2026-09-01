@@ -182,7 +182,8 @@ export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
     bassDb: BASS_MAX_DB * Math.min(1, p.bass * bassScale),
     // The wet path taps the already-scaled mix, so arc/program gains reach
     // the reverb through its input — the mix ratio itself stays constant.
-    space: { level: p.space.level, size: p.space.size },
+    // A phase may override the wet level absolutely (Phase 9).
+    space: { level: pm?.space ?? p.space.level, size: p.space.size },
     stereoWidth: p.stereoWidth,
     lowpassHz,
   };

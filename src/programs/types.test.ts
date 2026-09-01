@@ -49,6 +49,7 @@ describe('normalizeProgram', () => {
           noiseType: 'pink',
           ambienceType: 'fireplace',
           harmonyRichness: 1.7,
+          space: -0.4,
         },
         { startMin: 5, endMin: null, bpmRange: [70, 80], noiseType: 'lava', ambienceType: 42, beatHz: 'x' },
       ],
@@ -59,6 +60,7 @@ describe('normalizeProgram', () => {
       noiseType: 'pink',
       ambienceType: 'fireplace',
       harmonyRichness: 1,
+      space: 0,
     });
     expect(p.segments[1]).not.toHaveProperty('noiseType');
     expect(p.segments[1]).not.toHaveProperty('ambienceType');

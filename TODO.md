@@ -108,6 +108,15 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] IndexedDB session records (5 000 cap) behind a write-through cache with verified one-time migration and localStorage fallback — `src/storage/sessionDb.ts`, `src/storage/storage.ts`
 - [ ] Verify in-browser: update toast appears after a rebuild with the preview tab open and reloads only on Update; deleting a built chunk and opening History shows the boundary with Reload; a v2 personalization payload survives the upgrade; feedback chips land in History; Insights shows the variation table; migration moves records into IndexedDB (DevTools → Application) and a second tab is refused a session
 
+## Phase 9 — Program depth & reverb, HRV & sleep-onset
+
+- [x] Worklet type crossfades parametrized: `{type, fadeSeconds}` messages for noise + ambience (default ~100 ms; programs pass longer) — `src/audio/noise-processor.ts`, `ambience-processor.ts`, layer `setType(type, fadeSeconds?)`
+- [x] Per-phase absolute sound overrides in programs: `beatHz`, `carrierHz`, `noiseType`, `ambienceType`, `harmonyRichness`, `space` — numeric ones glide across the 30 s boundary window, discrete ones snap at the boundary and dissolve over `PROGRAM_TYPE_FADE_SEC` — `src/programs/{types,evaluator}.ts`, `src/audio/compose.ts`, editor "Sound" section in `src/ui/ProgramEditor.tsx`; the Intimate template's afterglow dissolves ocean → fireplace
+- [x] Algorithmic reverb ("space"): `SoundProfile.space {level,size}` (default inert), synthesized deterministic IR (`src/audio/reverbIr.ts`, RT60 0.6–3 s ≤ the export chunk lead), pre-master send with A/B convolver size crossfade (`src/audio/reverb.ts`), Space/Room sliders, lab randomizer bounds, `space-on` bandit arm (CANDIDATE_SET_VERSION 4, additive)
+- [ ] HRV (RMSSD) from BLE RR intervals + falling-HRV adaptation signal + insights line
+- [ ] Sleep-onset detection → early wind-down for sleep sessions (opt-in), `sleepOnsetSec` on records, reward credit, "fell asleep" history badge
+- [ ] Verify by ear: program with rain→fireplace + pink→brown dissolves (no click); Space 0→1 on meditation at constant loudness; 20-min sleep-program export with space 0.3 seamless at the 15:00 chunk seam; `?simhr=sleep` fades a sleep session out after ~15 min with the toggle on
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs

@@ -51,6 +51,8 @@ export interface ProgramSegment {
   noiseType?: NoiseType;
   ambienceType?: AmbienceType;
   harmonyRichness?: number; // 0..1
+  /** Absolute reverb wet level (0..1); absent = the base profile's space. */
+  space?: number;
 }
 
 export interface Program {
@@ -141,11 +143,13 @@ function normalizeSegment(raw: unknown, index: number): ProgramSegment {
   const noiseType = optionalOneOf(s.noiseType, NOISE_TYPES);
   const ambienceType = optionalOneOf(s.ambienceType, AMBIENCE_TYPES);
   const harmonyRichness = optionalScale(s.harmonyRichness, 0, 1);
+  const space = optionalScale(s.space, 0, 1);
   if (beatHz !== undefined) segment.beatHz = beatHz;
   if (carrierHz !== undefined) segment.carrierHz = carrierHz;
   if (noiseType !== undefined) segment.noiseType = noiseType;
   if (ambienceType !== undefined) segment.ambienceType = ambienceType;
   if (harmonyRichness !== undefined) segment.harmonyRichness = harmonyRichness;
+  if (space !== undefined) segment.space = space;
   return segment;
 }
 

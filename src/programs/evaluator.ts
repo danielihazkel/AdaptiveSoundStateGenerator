@@ -33,6 +33,8 @@ export interface ProgramModulation {
   noiseType: NoiseType | null;
   ambienceType: AmbienceType | null;
   harmonyRichness: number | null;
+  /** Absolute reverb wet level; null = the profile's space. */
+  space: number | null;
   /** How long a noise-colour / ambience-type switch should take. */
   typeFadeSec: number;
 }
@@ -93,6 +95,7 @@ interface SegmentValues {
   noiseType: NoiseType | null;
   ambienceType: AmbienceType | null;
   harmonyRichness: number | null;
+  space: number | null;
 }
 
 function valuesAt(program: Program, index: number, elapsedSec: number): SegmentValues {
@@ -113,6 +116,7 @@ function valuesAt(program: Program, index: number, elapsedSec: number): SegmentV
     noiseType: segment.noiseType ?? null,
     ambienceType: segment.ambienceType ?? null,
     harmonyRichness: segment.harmonyRichness ?? null,
+    space: segment.space ?? null,
   };
 }
 
@@ -152,6 +156,7 @@ function mix(a: SegmentValues, b: SegmentValues, t: number): SegmentValues {
     noiseType: pickDiscrete(a.noiseType, b.noiseType, t),
     ambienceType: pickDiscrete(a.ambienceType, b.ambienceType, t),
     harmonyRichness: mixOptional(a.harmonyRichness, b.harmonyRichness, t),
+    space: mixOptional(a.space, b.space, t),
   };
 }
 
@@ -192,6 +197,7 @@ export function evaluateProgram(program: Program, elapsedSec: number): ProgramMo
     noiseType: values.noiseType,
     ambienceType: values.ambienceType,
     harmonyRichness: values.harmonyRichness,
+    space: values.space,
     typeFadeSec: PROGRAM_TYPE_FADE_SEC,
   };
 }

@@ -138,8 +138,12 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   };
   // ramp(this.bassShelf.gain, BASS_MAX_DB * Math.min(1, p.bass * bassScale))
   out.bassDb = BASS_MAX_DB * Math.min(1, p.bass * bassScale);
-  // Phase 9: this.reverb.setParams(level, size)
-  out.space = { level: p.space.level, size: p.space.size };
+  // Phase 9: this.reverb.setParams(level, size); a program phase may
+  // override the wet level absolutely.
+  out.space = {
+    level: pm && pm.space !== null ? pm.space : p.space.level,
+    size: p.space.size,
+  };
   // this.width.setWidth(p.stereoWidth)
   out.stereoWidth = p.stereoWidth;
   // ramp(this.lowpass.frequency, lowpassHz)
@@ -168,6 +172,7 @@ const PROGRAM: ProgramModulation = {
   noiseType: null,
   ambienceType: null,
   harmonyRichness: null,
+  space: null,
   typeFadeSec: 8,
 };
 const PROGRAM_NO_RHYTHM: ProgramModulation = { ...PROGRAM, warmth: null, rhythm: null };
@@ -179,6 +184,7 @@ const PROGRAM_OVERRIDES: ProgramModulation = {
   noiseType: 'blue',
   ambienceType: 'cafe',
   harmonyRichness: 0.05,
+  space: 0.4,
   typeFadeSec: 5,
 };
 const PROGRAMS: (ProgramModulation | null)[] = [

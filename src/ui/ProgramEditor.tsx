@@ -397,6 +397,31 @@ function SegmentRow(props: {
             )}
           </label>
           <label className="control">
+            <span>Space</span>
+            <label className="segment-open-toggle">
+              <input
+                type="checkbox"
+                checked={s.space !== undefined}
+                onChange={(e) => editOverride('space', e.target.checked ? 0.2 : undefined)}
+              />
+              override
+            </label>
+            <span className="value">
+              {s.space === undefined ? 'base sound' : pct(s.space)}
+            </span>
+          </label>
+          {s.space !== undefined && (
+            <Slider
+              label=""
+              min={0}
+              max={1}
+              step={0.01}
+              value={s.space}
+              display={pct(s.space)}
+              onChange={(v) => edit({ space: v })}
+            />
+          )}
+          <label className="control">
             <span>Pad richness</span>
             <label className="segment-open-toggle">
               <input
