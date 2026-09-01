@@ -7,6 +7,7 @@ import {
   type Rating,
   type SessionRecord,
 } from '../storage/types';
+import { posteriorFor } from './bandit';
 import { CANDIDATE_SET_VERSION } from './candidates';
 import { computeInsights, MIN_SESSIONS_FOR_INSIGHTS } from './insights';
 
@@ -176,7 +177,11 @@ describe('per-variation table', () => {
     const top = insight.arms[0];
     expect(top.mean).toBeCloseTo(0.8, 10);
     expect(top.pulls).toBe(3);
-    expect(top.ci).toBeCloseTo(1.96 * 0.25 / Math.sqrt(4), 10);
+    // The interval follows the posterior (Phase 10: empirical-variance std).
+    expect(top.ci).toBeCloseTo(
+      1.96 * posteriorFor({ n: 3, sum: 2.7, sumSq: 2.5 }, 'noise-up').std,
+      10,
+    );
     // Less evidence → wider interval.
     expect(insight.arms[1].ci).toBeGreaterThan(top.ci);
     expect(insight.arms.every((a) => a.label.length > 0)).toBe(true);

@@ -16,7 +16,7 @@ import {
   updateArm,
 } from './bandit';
 import { computeReward } from './reward';
-import { contextualPosterior, CONTEXT_SHRINK_N } from './bandit';
+import { contextualPosterior, CONTEXT_SHRINK_N, MIN_POSTERIOR_STD } from './bandit';
 import { contextOf, timeBucketOf, type ServeContext } from './context';
 
 /** Deterministic LCG (numerical recipes constants) for seeded Thompson draws. */
@@ -45,6 +45,20 @@ describe('posteriorFor', () => {
     const { mean, std } = posteriorFor(stats, 'beat-down');
     expect(mean).toBeCloseTo(18.5 / 21, 5);
     expect(std).toBeLessThan(0.06);
+  });
+
+  it('Phase 10: noisy arms keep a wider posterior than consistent ones, never below the floor', () => {
+    // Same mean (0.6 over 10 pulls), different spread.
+    const consistent = { n: 10, sum: 6, sumSq: 3.6 }; // every pull exactly 0.6
+    const noisy = { n: 10, sum: 6, sumSq: 5.2 }; // pulls swing 0.2..1.0
+    const tight = posteriorFor(consistent, 'beat-down');
+    const wide = posteriorFor(noisy, 'beat-down');
+    expect(tight.mean).toBe(wide.mean);
+    expect(wide.std).toBeGreaterThan(tight.std);
+    expect(tight.std).toBeGreaterThanOrEqual(MIN_POSTERIOR_STD);
+    // Untouched arms are bit-identical to the pre-variance behaviour.
+    expect(posteriorFor(undefined, 'beat-down').std).toBe(0.25);
+    expect(posteriorFor({ n: 0, sum: 0, sumSq: 0 }, 'beat-down').std).toBe(0.25);
   });
 });
 
@@ -283,7 +297,7 @@ describe('contextual posterior', () => {
     // invariant under test is that an empty context never changes a draw.
     const pinned = [
       'space-on', 'bass-up', 'beat-down', 'warmth-up', 'binaural-soft', 'pulse-deep',
-      'beat-up', 'noise-alt', 'beat-up', 'noise-up', 'binaural-soft', 'beat-up',
+      'beat-up', 'noise-alt', 'beat-up', 'binaural-soft', 'binaural-soft', 'beat-up',
     ];
     const rng1 = lcg(123);
     expect(Array.from({ length: 12 }, () => sampleArm(state, 'relax', rng1))).toEqual(pinned);
@@ -301,7 +315,9 @@ describe('contextual posterior', () => {
     expect(little.mean).toBeCloseTo((base * CONTEXT_SHRINK_N + 0.95) / (CONTEXT_SHRINK_N + 1), 12);
     const lots = contextualPosterior(stateStats, { n: 300, sum: 285, sumSq: 270 }, 'noise-up');
     expect(lots.mean).toBeCloseTo(0.95, 1);
-    expect(lots.std).toBe(posteriorFor(stateStats, 'noise-up').std);
+    // Phase 10: context evidence narrows the spread (down to the floor).
+    expect(lots.std).toBeLessThan(posteriorFor(stateStats, 'noise-up').std);
+    expect(lots.std).toBeGreaterThanOrEqual(MIN_POSTERIOR_STD);
   });
 
   it('updateArm writes the state level always and the context when given', () => {

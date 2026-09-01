@@ -52,22 +52,48 @@ export interface Posterior {
   std: number;
 }
 
+/**
+ * Exploration never fully stops (Phase 10 floor): decay saturates the
+ * effective n at 1/(1−DECAY), and the empirical-variance blend must not let
+ * a run of identical rewards collapse the spread below the level the decay
+ * design already promised (see the DECAY comment above).
+ */
+export const MIN_POSTERIOR_STD = SIGMA / Math.sqrt(PRIOR_N + 1 / (1 - DECAY));
+
+/**
+ * Variance blend (Phase 10): PRIOR_N pseudo-observations at SIGMA² plus the
+ * arm's own empirical spread from the stored sumSq. With n = 0 this is
+ * exactly SIGMA², so untouched arms behave as before; a noisy arm keeps a
+ * wide posterior (more exploration), a consistent one narrows faster.
+ */
+function blendedVariance(stats: ArmStats | undefined): number {
+  const n = stats?.n ?? 0;
+  if (n <= 0) return SIGMA * SIGMA;
+  const mean = (stats?.sum ?? 0) / n;
+  const empVar = Math.max(0, (stats?.sumSq ?? 0) / n - mean * mean);
+  return (PRIOR_N * SIGMA * SIGMA + n * empVar) / (PRIOR_N + n);
+}
+
 export function posteriorFor(stats: ArmStats | undefined, armId: string): Posterior {
   const priorMean = armId === PRIOR_ARM_ID ? PRIOR_ARM_MEAN : OTHER_ARM_MEAN;
   const n = stats?.n ?? 0;
   const sum = stats?.sum ?? 0;
   return {
     mean: (priorMean * PRIOR_N + sum) / (PRIOR_N + n),
-    std: SIGMA / Math.sqrt(PRIOR_N + n),
+    std: Math.max(
+      MIN_POSTERIOR_STD,
+      Math.sqrt(blendedVariance(stats) / (PRIOR_N + n)),
+    ),
   };
 }
 
 /**
  * Posterior for an arm in one context: the state-level posterior with its
- * mean pulled toward the context's own evidence. Only the mean moves — the
- * context sessions are already part of the state-level n, so the spread
- * stays that of the state. Exactly `posteriorFor` when the context has no
- * data, which keeps old payloads and context-free calls bit-identical.
+ * mean pulled toward the context's own evidence, and (Phase 10) its spread
+ * narrowed by the context observations — context evidence now drives
+ * exploration too, not only exploitation. Exactly `posteriorFor` when the
+ * context has no data, which keeps old payloads and context-free calls
+ * bit-identical.
  */
 export function contextualPosterior(
   stateStats: ArmStats | undefined,
@@ -77,9 +103,13 @@ export function contextualPosterior(
   const base = posteriorFor(stateStats, armId);
   const nc = ctxStats?.n ?? 0;
   if (nc <= 0) return base;
+  const n = stateStats?.n ?? 0;
   return {
     mean: (base.mean * CONTEXT_SHRINK_N + (ctxStats?.sum ?? 0)) / (CONTEXT_SHRINK_N + nc),
-    std: base.std,
+    std: Math.max(
+      MIN_POSTERIOR_STD,
+      Math.sqrt(blendedVariance(stateStats) / (PRIOR_N + n + nc)),
+    ),
   };
 }
 

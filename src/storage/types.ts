@@ -227,8 +227,9 @@ export interface InProgressSession {
 
 /**
  * Sufficient statistics for one bandit arm. Weighted: n is a sum of session
- * weights (0..1 each), not a count. sumSq is kept so posterior variance could
- * use empirical spread later without a schema change.
+ * weights (0..1 each), not a count. sumSq feeds the empirical-variance
+ * blend in bandit.ts posteriorFor (Phase 10): noisy arms keep exploring,
+ * consistent ones converge faster.
  */
 export interface ArmStats {
   n: number;
