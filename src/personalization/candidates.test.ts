@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_PULSE_RATE_HZ, STATE_LIST, STATES } from '../audio/states';
+import { MAX_PULSE_RATE_HZ, STATE_LIST, STATES, type MentalState } from '../audio/states';
 import { MAX_MASTER_VOLUME } from '../ui/AdvancedPanel';
 import {
   buildCandidateProfile,
@@ -22,11 +22,22 @@ const BEAT_BANDS = {
   creative: [4, 10],
 } as const;
 
+/** 11 v2 arms + harmony toggle + bass-up, then the gated arms. */
+function expectedArmCount(state: MentalState): number {
+  const ref = STATES[state].buildProfile(0.5);
+  let n = 13;
+  if (ref.tone.enabled || ref.harmony.enabled) n += 1; // warmth-up
+  if (ref.ambience.enabled) n += 1; // ambience-alt
+  else n -= 1; // ambience-off would be a no-op
+  return n;
+}
+
 describe('candidate sets', () => {
-  it('every state has 11 arms with unique stable ids, prior first', () => {
+  it('every state has its expected arms with unique stable ids, prior first', () => {
     for (const { id: state } of STATE_LIST) {
       const specs = candidatesFor(state);
-      expect(specs).toHaveLength(11);
+      expect(specs).toHaveLength(expectedArmCount(state));
+      expect(specs.length).toBeLessThanOrEqual(15);
       expect(specs[0].id).toBe(PRIOR_ARM_ID);
       expect(new Set(specs.map((s) => s.id)).size).toBe(specs.length);
       for (const spec of specs) expect(spec.label.length).toBeGreaterThan(0);
@@ -40,6 +51,36 @@ describe('candidate sets', () => {
     const focusIds = candidatesFor('focus').map((s) => s.id);
     expect(focusIds).toContain('pulse-deep');
     expect(focusIds).not.toContain('darker');
+  });
+
+  it('v3 arms are gated on being audible against the state prior', () => {
+    const ids = (state: MentalState) => candidatesFor(state).map((s) => s.id);
+    // Pad toggle: one direction per state.
+    expect(ids('relax')).toContain('harmony-off');
+    expect(ids('relax')).not.toContain('harmony-on');
+    expect(ids('focus')).toContain('harmony-on');
+    expect(ids('focus')).not.toContain('harmony-off');
+    // Warmth needs a tone or a pad to act on.
+    expect(ids('meditation')).toContain('warmth-up');
+    expect(ids('relax')).toContain('warmth-up');
+    expect(ids('focus')).not.toContain('warmth-up');
+    // Energy ships without ambience — nothing to swap or switch off.
+    expect(ids('energy')).not.toContain('ambience-alt');
+    expect(ids('energy')).not.toContain('ambience-off');
+    expect(ids('energy')).toContain('ambience-up');
+    expect(ids('focus')).toContain('ambience-alt');
+    expect(ids('focus')).toContain('ambience-off');
+    for (const { id: state } of STATE_LIST) expect(ids(state)).toContain('bass-up');
+  });
+
+  it('every arm changes something audible at mid intensity', () => {
+    for (const { id: state } of STATE_LIST) {
+      const prior = STATES[state].buildProfile(0.5);
+      for (const spec of candidatesFor(state)) {
+        if (spec.id === PRIOR_ARM_ID) continue;
+        expect(spec.apply(prior), `${state}/${spec.id}`).not.toEqual(prior);
+      }
+    }
   });
 
   it('the prior arm is the identity over buildProfile', () => {
@@ -74,6 +115,14 @@ describe('candidate sets', () => {
       }
     }
   });
+
+  it('ambience-alt swaps the type and keeps the level', () => {
+    const prior = STATES.focus.buildProfile(0.5); // rain
+    const alt = buildCandidateProfile('focus', 0.5, 'ambience-alt');
+    expect(alt.ambience.type).toBe('forest');
+    expect(alt.ambience.level).toBe(prior.ambience.level);
+    expect(buildCandidateProfile('relax', 0.5, 'ambience-alt').ambience.type).toBe('wind');
+  });
 });
 
 describe('safety invariants for every state × arm × intensity', () => {
@@ -101,6 +150,12 @@ describe('safety invariants for every state × arm × intensity', () => {
 
           expect(profile.isochronic.rate).toBeLessThanOrEqual(MAX_PULSE_RATE_HZ);
           expect(profile.isochronic.depth).toBeLessThanOrEqual(0.4);
+
+          // v3 bounds: the pad and bass never dominate the mix.
+          expect(profile.bass).toBeLessThanOrEqual(0.6);
+          expect(profile.harmony.level).toBeLessThanOrEqual(0.3);
+          expect(profile.harmony.richness).toBeLessThanOrEqual(1);
+          expect(profile.tone.warmth).toBeLessThanOrEqual(1);
 
           // Recipes never mutate their input.
           expect(prior).toEqual(STATES[state].buildProfile(t));

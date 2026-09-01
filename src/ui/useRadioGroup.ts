@@ -7,7 +7,8 @@ import type { KeyboardEvent } from 'react';
  */
 export function useRadioGroup<T>(opts: {
   items: readonly T[];
-  value: T;
+  /** null = nothing selected yet (the first item takes the tab stop). */
+  value: T | null;
   onChange: (value: T) => void;
   /** Return the button element for an item so arrow keys can focus it. */
   getKey: (item: T) => string;

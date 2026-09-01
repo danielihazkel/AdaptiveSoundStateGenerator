@@ -1,8 +1,9 @@
 import { STATE_LIST, type MentalState } from '../audio/states';
 import { normalizeProfile, type NoiseType } from '../audio/types';
-import type { PersonalizationState, SessionRecord } from '../storage/types';
-import { posteriorFor } from './bandit';
+import type { ArmStats, PersonalizationState, SessionRecord } from '../storage/types';
+import { contextualPosterior, posteriorFor } from './bandit';
 import { candidatesFor } from './candidates';
+import { parseContextKey, TIME_BUCKETS, type TimeBucket } from './context';
 import { scoreSession } from './reward';
 import {
   bestFoundAfter,
@@ -19,8 +20,16 @@ import {
  * their rating, unrated ones via the implicit score, weighted by confidence.
  */
 export const MIN_SESSIONS_FOR_INSIGHTS = 5;
-/** An arm needs this many weighted pulls before it's shown as "best". */
+/**
+ * An arm needs this many weighted pulls before it's shown as "best". Pulls
+ * decay with recency (bandit.ts DECAY), so read this as "about three recent
+ * sessions' worth of evidence".
+ */
 export const MIN_ARM_PULLS = 3;
+/** Half-width of the shown interval: ±1.96 posterior std (≈95 %). */
+export const ARM_CI_Z = 1.96;
+/** A time of day needs this many weighted pulls (all arms) before it gets a winner. */
+export const MIN_CONTEXT_PULLS = 2;
 /** Sessions per noise type before it can be called "preferred". */
 export const MIN_NOISE_SESSIONS = 3;
 /** Sessions scoring at least this count as "worked" for volume preference. */
@@ -54,12 +63,30 @@ export interface ComponentEffectiveness {
   sessionsOn: number;
 }
 
+/** One row of the per-variation comparison table. */
+export interface ArmInsight {
+  id: string;
+  label: string;
+  /** Weighted, recency-decayed pulls. */
+  pulls: number;
+  /** Posterior mean reward, 0..1. */
+  mean: number;
+  /** ± half-width of the interval around `mean`. */
+  ci: number;
+  /** The row shown as "Best variation" (needs MIN_ARM_PULLS). */
+  isBest: boolean;
+}
+
 export interface StateInsights {
   state: MentalState;
   sessionCount: number;
   ratedCount: number;
   avgRating: number | null;
   bestArm: { id: string; label: string; mean: number; n: number } | null;
+  /** Every variation that has been played, best first. */
+  arms: ArmInsight[];
+  /** Best variation per time of day, where that time has enough evidence. */
+  bestByTime: Array<{ bucket: TimeBucket; label: string; n: number }>;
   componentEffectiveness: ComponentEffectiveness[];
   /** Reward-weighted P25–P75 of the binaural beat, Hz. */
   preferredBeatRange: [number, number] | null;
@@ -137,6 +164,48 @@ function computeStateInsights(
     }
   }
 
+  // The whole comparison, so the user can see *why* something is best — and
+  // which variations are still barely explored.
+  const arms: ArmInsight[] = [];
+  for (const spec of candidatesFor(state)) {
+    const stats = armStats[spec.id];
+    if (!stats || stats.n <= 0) continue;
+    const { mean, std } = posteriorFor(stats, spec.id);
+    arms.push({
+      id: spec.id,
+      label: spec.label,
+      pulls: stats.n,
+      mean,
+      ci: ARM_CI_Z * std,
+      isBest: bestArm?.id === spec.id,
+    });
+  }
+  arms.sort((a, b) => b.mean - a.mean || b.pulls - a.pulls);
+
+  // Time-of-day winners: mono and stereo evidence merged per bucket, the
+  // context posterior shrunk toward the state one, shown only where the
+  // bucket has been tried enough to say anything.
+  const bestByTime: StateInsights['bestByTime'] = [];
+  const contexts = bandit.contexts?.[state] ?? {};
+  for (const bucket of TIME_BUCKETS) {
+    const merged: Record<string, ArmStats> = {};
+    for (const [key, byArm] of Object.entries(contexts)) {
+      if (parseContextKey(key)?.bucket !== bucket) continue;
+      for (const [armId, s] of Object.entries(byArm)) {
+        const prev = merged[armId] ?? { n: 0, sum: 0, sumSq: 0 };
+        merged[armId] = { n: prev.n + s.n, sum: prev.sum + s.sum, sumSq: prev.sumSq + s.sumSq };
+      }
+    }
+    const n = Object.values(merged).reduce((acc, s) => acc + s.n, 0);
+    if (n < MIN_CONTEXT_PULLS) continue;
+    let winner: { id: string; label: string; mean: number } | null = null;
+    for (const spec of candidatesFor(state)) {
+      const { mean } = contextualPosterior(armStats[spec.id], merged[spec.id], spec.id);
+      if (!winner || mean > winner.mean) winner = { id: spec.id, label: spec.label, mean };
+    }
+    if (winner) bestByTime.push({ bucket, label: winner.label, n });
+  }
+
   const componentEffectiveness: ComponentEffectiveness[] = SOUND_COMPONENTS.map((component) => {
     const on = scored.filter((s) => componentEnabled(s.record, component));
     const totalWeight = on.reduce((acc, s) => acc + s.weight, 0);
@@ -188,6 +257,8 @@ function computeStateInsights(
         ? ratings.reduce((a, b) => a + b, 0) / ratings.length
         : null,
     bestArm,
+    arms,
+    bestByTime,
     componentEffectiveness,
     preferredBeatRange,
     preferredNoiseType,

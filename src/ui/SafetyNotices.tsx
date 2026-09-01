@@ -3,6 +3,10 @@ import { useDialog } from './useDialog';
 /** Safety surfaces required by PRD §13 and §7. */
 
 /** Shown when the audio engine fails to start (blocked autoplay, worklet, no device). */
+/** Begin refused because a session is already playing in another tab (tabGuard.ts). */
+export const OTHER_TAB_SESSION_MESSAGE =
+  'A session is already playing in another Resonance tab. Stop it there first, or close that tab.';
+
 export const START_ERROR_MESSAGE =
   "Couldn't start audio. Check that sound isn't blocked for this site and try again.";
 

@@ -4,7 +4,10 @@ import { COLD_START_SESSIONS, eligibleSessionCount } from '../personalization/ba
 import { CANDIDATE_SET_VERSION } from '../personalization/candidates';
 import { computeInsights, MIN_SESSIONS_FOR_INSIGHTS } from '../personalization/insights';
 import { findPendingMorningPrompt } from '../personalization/morningPrompt';
-import { resolvePendingOutcomes } from '../personalization/personalizer';
+import {
+  ensurePersonalizationVersion,
+  resolvePendingOutcomes,
+} from '../personalization/personalizer';
 import { recoverSession } from '../session/inProgress';
 import {
   appendSession,
@@ -15,9 +18,12 @@ import {
   loadPresets,
   loadPrograms,
   loadSessions,
+  initSessionStore,
   loadSettings,
+  onStorageChanged,
   onStorageFailure,
   saveSettings,
+  withStorageLock,
   type StorageFailureKind,
 } from '../storage/storage';
 import type { SessionRecord, Settings } from '../storage/types';
@@ -52,21 +58,52 @@ export function useStoredData(screen: Screen) {
 
   // Settle any sessions whose rating opportunity has passed (implicit-only),
   // then check whether last night's sleep session needs its morning rating.
+  /** Session records are served from IndexedDB once the store has opened. */
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+
   useEffect(() => {
-    // A leftover checkpoint means the last session never finished writing.
-    const checkpoint = loadInProgress();
-    if (checkpoint) {
-      const recovered = recoverSession(checkpoint);
-      clearInProgress();
-      if (recovered) {
-        appendSession(recovered);
-        setRecoveredSession(recovered);
+    let cancelled = false;
+    void initSessionStore().then(() => {
+      if (cancelled) return;
+      // Read-modify-write sweep: serialised across tabs where Web Locks exist.
+      withStorageLock(settle);
+      setSessionsLoaded(true);
+    });
+    const settle = () => {
+      // A leftover checkpoint means the last session never finished writing.
+      const checkpoint = loadInProgress();
+      if (checkpoint) {
+        const recovered = recoverSession(checkpoint);
+        clearInProgress();
+        if (recovered) {
+          appendSession(recovered);
+          setRecoveredSession(recovered);
+        }
       }
-    }
-    resolvePendingOutcomes();
-    setMorningPrompt(findPendingMorningPrompt(loadSessions(), new Date()));
-    bumpData();
+      // An app update may have grown the bandit's arm menu — carry the learned
+      // statistics over before anything samples from them.
+      ensurePersonalizationVersion();
+      resolvePendingOutcomes();
+      setMorningPrompt(findPendingMorningPrompt(loadSessions(), new Date()));
+      bumpData();
+    };
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Another tab wrote: drop the stale cache. Settings come back through
+  // setSettings without the dirty flag, so nothing is written back.
+  useEffect(
+    () =>
+      onStorageChanged(() => {
+        setSettings(loadSettings());
+        setPresets(loadPresets());
+        setPrograms(loadPrograms());
+        bumpData();
+      }),
+    [],
+  );
 
   const { activeStates, insightsAvailable, historyAvailable, lastSession } = useMemo(() => {
     void dataVersion; // memo key: stored data changed
@@ -133,6 +170,7 @@ export function useStoredData(screen: Screen) {
       bumpData();
     },
     bumpData,
+    sessionsLoaded,
     storageFailure,
     dismissStorageFailure: () => setStorageFailure(null),
     activeStates,

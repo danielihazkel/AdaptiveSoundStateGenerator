@@ -2,8 +2,17 @@ import { normalizeProfile } from '../audio/types';
 import { normalizeProgram, type Program } from '../programs/types';
 import { movePreset } from './presetOrder';
 import {
+  countSessions,
+  deleteSessions,
+  getAllSessions,
+  openSessionDb,
+  putSessions,
+  replaceAllSessions,
+} from './sessionDb';
+import {
   defaultSettings,
   SCHEMA_VERSION,
+  type FeedbackInput,
   type InProgressSession,
   type PersonalizationState,
   type Preset,
@@ -21,6 +30,56 @@ const IN_PROGRESS_KEY = 'resonance.v1.inProgress';
 
 /** Oldest records are dropped past this — plenty for Phase 2 training. */
 const MAX_SESSION_RECORDS = 500;
+
+/** Every key this module owns starts with this. */
+const KEY_PREFIX = 'resonance.';
+/** Web Locks name serialising the startup settle sweep across tabs. */
+export const STORAGE_LOCK_NAME = 'resonance.storage';
+
+/**
+ * Fires when *another* tab writes one of our keys — the native `storage`
+ * event never fires in the tab that wrote. Lets the React-side cache refresh
+ * instead of going stale behind the second tab tabGuard warns about.
+ * `key` is '*' when the other tab cleared storage.
+ */
+export function onStorageChanged(listener: (key: string) => void): () => void {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+    return () => {};
+  }
+  const handler = (event: StorageEvent) => {
+    if (event.key === null) {
+      listener('*');
+      return;
+    }
+    if (event.key.startsWith(KEY_PREFIX)) listener(event.key);
+  };
+  window.addEventListener('storage', handler);
+  return () => window.removeEventListener('storage', handler);
+}
+
+/**
+ * Run a read-modify-write sweep under the cross-tab storage lock when the
+ * browser has Web Locks; synchronously otherwise (the pre-existing
+ * single-tab assumption). `fn` runs exactly once either way.
+ */
+export function withStorageLock(
+  fn: () => void,
+  locks: LockManager | undefined = (globalThis.navigator as Navigator | undefined)?.locks,
+): void {
+  if (!locks) {
+    fn();
+    return;
+  }
+  let ran = false;
+  locks
+    .request(STORAGE_LOCK_NAME, () => {
+      ran = true;
+      fn();
+    })
+    .catch(() => {
+      if (!ran) fn();
+    });
+}
 
 /** Suffix under which an unreadable payload is preserved (see quarantine). */
 export const QUARANTINE_SUFFIX = '.quarantine';
@@ -296,15 +355,145 @@ export function overwritePrograms(programs: Program[]): void {
 }
 
 // --- Session records ----------------------------------------------------------
+//
+// Records live in IndexedDB behind a write-through in-memory cache: reads stay
+// synchronous (everything above this layer — memos, the personalizer, export —
+// calls loadSessions() inline), writes update the cache at once and persist
+// asynchronously. Until initSessionStore() resolves, and wherever IndexedDB
+// is unavailable, the localStorage list (with its 500-record cap) is used
+// exactly as before.
 
+/** Cap once records live in IndexedDB — no 5 MB localStorage budget to share. */
+export const MAX_SESSION_RECORDS_DB = 5000;
+const SESSIONS_MIGRATED_KEY = 'resonance.v1.sessions.migratedAt';
+
+export type SessionStoreBackend = 'indexeddb' | 'localStorage';
+
+let sessionDb: IDBDatabase | null = null;
+let sessionCache: SessionRecord[] | null = null;
+let sessionInit: Promise<SessionStoreBackend> | null = null;
+let sessionBackend: SessionStoreBackend | null = null;
+
+function newestFirst(records: readonly SessionRecord[]): SessionRecord[] {
+  return [...records].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+}
+
+/**
+ * Open IndexedDB, move any localStorage records into it once (verified
+ * before the localStorage copy is retired), and fill the cache. Resolves
+ * with the backend in use. Idempotent — every caller shares one attempt.
+ */
+export function initSessionStore(factory?: IDBFactory): Promise<SessionStoreBackend> {
+  if (!sessionInit) sessionInit = initSessionStoreOnce(factory);
+  return sessionInit;
+}
+
+async function initSessionStoreOnce(factory?: IDBFactory): Promise<SessionStoreBackend> {
+  const db = await openSessionDb(factory);
+  if (!db) {
+    sessionBackend = 'localStorage';
+    return sessionBackend;
+  }
+  try {
+    let records = await getAllSessions(db);
+    if (readRaw(SESSIONS_KEY) !== null) {
+      const legacy = readList<SessionRecord>(SESSIONS_KEY);
+      const known = new Set(records.map((r) => r.id));
+      const missing = legacy.filter((r) => !known.has(r.id));
+      await putSessions(db, missing);
+      if ((await countSessions(db)) < known.size + missing.length) {
+        throw new Error('session migration incomplete');
+      }
+      records = [...records, ...missing];
+      // Everything is verifiably in IndexedDB — retire the localStorage copy.
+      try {
+        localStorage.removeItem(SESSIONS_KEY);
+      } catch {
+        // Leaving it behind is harmless: IndexedDB wins on the next open.
+      }
+      writeRaw(SESSIONS_MIGRATED_KEY, new Date().toISOString());
+    }
+    sessionCache = newestFirst(records).slice(0, MAX_SESSION_RECORDS_DB);
+    sessionDb = db;
+    sessionBackend = 'indexeddb';
+    // Ask the browser not to evict our data under storage pressure (best effort).
+    void (globalThis.navigator as Navigator | undefined)?.storage?.persist?.().catch(() => undefined);
+    return sessionBackend;
+  } catch {
+    // Migration failed part-way: localStorage is intact, keep serving from it.
+    try {
+      db.close();
+    } catch {
+      // nothing to release
+    }
+    sessionBackend = 'localStorage';
+    return sessionBackend;
+  }
+}
+
+/** Which backend serves session records; null until initSessionStore resolves. */
+export function sessionStoreBackend(): SessionStoreBackend | null {
+  return sessionBackend;
+}
+
+/** Test hook: forget the open database and cache. */
+export function resetSessionStoreForTests(): void {
+  try {
+    sessionDb?.close();
+  } catch {
+    // already closed
+  }
+  sessionDb = null;
+  sessionCache = null;
+  sessionInit = null;
+  sessionBackend = null;
+}
+
+function persistPut(records: SessionRecord[]): void {
+  if (!sessionDb || records.length === 0) return;
+  putSessions(sessionDb, records).catch(() => reportFailure(SESSIONS_KEY, 'write'));
+}
+
+function persistDelete(ids: string[]): void {
+  if (!sessionDb || ids.length === 0) return;
+  deleteSessions(sessionDb, ids).catch(() => reportFailure(SESSIONS_KEY, 'write'));
+}
+
+/** Newest first. The array is yours; the records are shared — never mutate them. */
 export function loadSessions(): SessionRecord[] {
-  return readList<SessionRecord>(SESSIONS_KEY);
+  return sessionCache ? sessionCache.slice() : readList<SessionRecord>(SESSIONS_KEY);
 }
 
 export function appendSession(record: SessionRecord): void {
+  if (sessionCache) {
+    const next = [record, ...sessionCache];
+    const overflow = next.splice(MAX_SESSION_RECORDS_DB);
+    sessionCache = next;
+    persistPut([record]);
+    persistDelete(overflow.map((r) => r.id));
+    return;
+  }
   const sessions = loadSessions();
   sessions.unshift(record);
   writeList(SESSIONS_KEY, sessions.slice(0, MAX_SESSION_RECORDS));
+}
+
+/** Replace one record by id (immutable — the cache never sees in-place edits). */
+function updateSessionRecord(
+  sessionId: string,
+  patch: (record: SessionRecord) => SessionRecord,
+): void {
+  const sessions = loadSessions();
+  const index = sessions.findIndex((s) => s.id === sessionId);
+  if (index < 0) return;
+  const next = patch(sessions[index]);
+  sessions[index] = next;
+  if (sessionCache) {
+    sessionCache = sessions;
+    persistPut([next]);
+  } else {
+    writeList(SESSIONS_KEY, sessions);
+  }
 }
 
 // --- In-progress checkpoint ---------------------------------------------------
@@ -345,33 +534,42 @@ export function overwritePresets(presets: Preset[]): void {
 
 /** Bulk replace after an import merge (transfer.ts); the cap still applies. */
 export function overwriteSessions(sessions: SessionRecord[]): void {
+  if (sessionCache) {
+    sessionCache = newestFirst(sessions).slice(0, MAX_SESSION_RECORDS_DB);
+    if (sessionDb) {
+      replaceAllSessions(sessionDb, sessionCache).catch(() =>
+        reportFailure(SESSIONS_KEY, 'write'),
+      );
+    }
+    return;
+  }
   writeList(SESSIONS_KEY, sessions.slice(0, MAX_SESSION_RECORDS));
 }
 
-export function attachFeedback(sessionId: string, rating: Rating): void {
-  const sessions = loadSessions();
-  const record = sessions.find((s) => s.id === sessionId);
-  if (!record) return;
-  record.feedback = { rating, ratedAt: new Date().toISOString() };
-  writeList(SESSIONS_KEY, sessions);
+export function attachFeedback(sessionId: string, input: Rating | FeedbackInput): void {
+  const feedback = typeof input === 'number' ? { rating: input } : input;
+  updateSessionRecord(sessionId, (record) => ({
+    ...record,
+    feedback: {
+      rating: feedback.rating,
+      ratedAt: new Date().toISOString(),
+      ...(feedback.distraction !== undefined ? { distraction: feedback.distraction } : {}),
+      ...(feedback.useAgain !== undefined ? { useAgain: feedback.useAgain } : {}),
+    },
+  }));
 }
 
 /** Records the "declined to rate" implicit signal (PRD §9). Unknown id: no-op. */
 export function markFeedbackSkipped(sessionId: string): void {
-  const sessions = loadSessions();
-  const record = sessions.find((s) => s.id === sessionId);
-  if (!record) return;
-  record.feedbackSkipped = true;
-  writeList(SESSIONS_KEY, sessions);
+  updateSessionRecord(sessionId, (record) => ({ ...record, feedbackSkipped: true }));
 }
 
 /** Stamps a session as consumed by the bandit so it is never counted twice. */
 export function markBanditResolved(sessionId: string): void {
-  const sessions = loadSessions();
-  const record = sessions.find((s) => s.id === sessionId);
-  if (!record) return;
-  record.banditResolvedAt = new Date().toISOString();
-  writeList(SESSIONS_KEY, sessions);
+  updateSessionRecord(sessionId, (record) => ({
+    ...record,
+    banditResolvedAt: new Date().toISOString(),
+  }));
 }
 
 // --- Personalization ----------------------------------------------------------
@@ -410,4 +608,17 @@ export function loadPersonalization(expectedCandidateSetVersion: number): Person
 
 export function savePersonalization(state: PersonalizationState): void {
   writeJson(PERSONALIZATION_KEY, state);
+}
+
+/**
+ * The candidate-set version of whatever is stored, without the reset that
+ * loadPersonalization applies on a mismatch — so an upgrade can rebuild the
+ * posterior from the session records instead (personalizer.ts). null = nothing
+ * stored or unreadable.
+ */
+export function peekPersonalizationVersion(): number | null {
+  const payload = parse(readRaw(PERSONALIZATION_KEY));
+  if (!payload || typeof payload !== 'object') return null;
+  const version = (payload as { candidateSetVersion?: unknown }).candidateSetVersion;
+  return typeof version === 'number' ? version : null;
 }

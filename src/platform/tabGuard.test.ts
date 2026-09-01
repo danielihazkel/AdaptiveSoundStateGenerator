@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { subscribeTabPresence, TAB_CHANNEL_NAME } from './tabGuard';
+import { acquireSessionLock, SESSION_LOCK_NAME, subscribeTabPresence, TAB_CHANNEL_NAME } from './tabGuard';
 
 /** Minimal in-process BroadcastChannel: same-name channels share a bus. */
 class FakeBroadcastChannel {
@@ -61,5 +61,46 @@ describe('subscribeTabPresence', () => {
     const unsub = subscribeTabPresence(() => hits++);
     unsub();
     expect(hits).toBe(0);
+  });
+});
+
+/** Minimal Web Locks stand-in: one holder per name, ifAvailable semantics only. */
+function fakeLocks() {
+  const held = new Map<string, Promise<unknown>>();
+  const manager = {
+    request: (name: string, _opts: unknown, cb: (lock: { name: string } | null) => Promise<unknown>) => {
+      if (held.has(name)) return cb(null);
+      const running = cb({ name }).finally(() => held.delete(name));
+      held.set(name, running);
+      return running;
+    },
+  } as unknown as LockManager;
+  return { manager, isHeld: (name: string) => held.has(name) };
+}
+
+describe('acquireSessionLock', () => {
+  it('always grants without Web Locks', async () => {
+    const release = await acquireSessionLock(undefined);
+    expect(release).not.toBeNull();
+    release!();
+  });
+
+  it('grants once, refuses a second holder until released', async () => {
+    const { manager, isHeld } = fakeLocks();
+    const first = await acquireSessionLock(manager);
+    expect(first).not.toBeNull();
+    expect(isHeld(SESSION_LOCK_NAME)).toBe(true);
+    expect(await acquireSessionLock(manager)).toBeNull();
+    first!();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(isHeld(SESSION_LOCK_NAME)).toBe(false);
+    const again = await acquireSessionLock(manager);
+    expect(again).not.toBeNull();
+    again!();
+  });
+
+  it('grants when the lock manager itself fails', async () => {
+    const broken = { request: () => Promise.reject(new Error('no locks')) } as unknown as LockManager;
+    expect(await acquireSessionLock(broken)).not.toBeNull();
   });
 });

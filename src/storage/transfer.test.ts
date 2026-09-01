@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { STATES } from '../audio/states';
+import { DECAY, rebuildFromSessions } from '../personalization/bandit';
 import { CANDIDATE_SET_VERSION, PRIOR_ARM_ID } from '../personalization/candidates';
 import { defaultProgram } from '../programs/types';
 import {
@@ -116,8 +117,12 @@ describe('export → import round-trip', () => {
     expect(loadPresets()).toHaveLength(1);
 
     const rebuilt = loadPersonalization(CANDIDATE_SET_VERSION);
-    expect(rebuilt.arms.focus![PRIOR_ARM_ID].n).toBe(1);
-    expect(rebuilt.arms.focus!['noise-up'].n).toBe(1);
+    // Both rated at full weight; the earlier one decayed once when the later resolved.
+    const n = [rebuilt.arms.focus![PRIOR_ARM_ID].n, rebuilt.arms.focus!['noise-up'].n].sort();
+    expect(n[0]).toBeCloseTo(DECAY, 12);
+    expect(n[1]).toBe(1);
+    expect(rebuilt.resolved).toEqual({ focus: 2 });
+    expect(rebuilt).toEqual(rebuildFromSessions(loadSessions(), loadPresets()));
   });
 
   it('restores programs on a fresh device and imports legacy bundles without them', () => {

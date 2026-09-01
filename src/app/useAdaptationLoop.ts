@@ -14,6 +14,7 @@ import { computeHrTrend } from '../biometrics/hrTrend';
 import type { BiometricSample } from '../biometrics/types';
 import { CANDIDATE_SET_VERSION } from '../personalization/candidates';
 import { buildCandidateProfile } from '../personalization/candidates';
+import { timeBucketOf } from '../personalization/context';
 import type { CheckpointInfo, SessionController } from '../session/sessionController';
 import { loadPersonalization } from '../storage/storage';
 import type { PersonalizationMode, SessionSegment } from '../storage/types';
@@ -96,6 +97,7 @@ export function useAdaptationLoop(deps: {
         hrTrend: hr?.trend ?? null,
       },
       personalization: loadPersonalization(CANDIDATE_SET_VERSION),
+      context: { bucket: timeBucketOf(new Date()), mono: engine.isMonoMode },
     });
     segmentVolumeTweaksRef.current = 0;
 

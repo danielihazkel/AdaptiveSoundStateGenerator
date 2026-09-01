@@ -17,6 +17,7 @@ import {
 import { CANDIDATE_SET_VERSION, PRIOR_ARM_ID } from './candidates';
 import {
   chooseProfile,
+  ensurePersonalizationVersion,
   resolveOutcome,
   resolvePendingOutcomes,
 } from './personalizer';
@@ -162,9 +163,9 @@ describe('resolvePendingOutcomes', () => {
     expect(byId.get(pendingSleep.id)!.banditResolvedAt).toBeUndefined();
 
     const state = loadPersonalization(CANDIDATE_SET_VERSION);
-    // focus: 1 rated (weight 1) + 1 skipped implicit (0.6); sleep: 1 implicit (0.6).
-    expect(eligibleSessionCount(state, 'focus')).toBeCloseTo(1.6, 10);
-    expect(eligibleSessionCount(state, 'sleep')).toBeCloseTo(0.6, 10);
+    // Sessions resolved, not weighted pulls: focus rated + skipped; sleep expired.
+    expect(eligibleSessionCount(state, 'focus')).toBe(2);
+    expect(eligibleSessionCount(state, 'sleep')).toBe(1);
   });
 
   it('is a no-op on a second run', () => {
@@ -238,5 +239,70 @@ describe('skip signal round-trip', () => {
     resolveOutcome(session.id);
     const stats = loadPersonalization(CANDIDATE_SET_VERSION).arms.focus![PRIOR_ARM_ID];
     expect(stats.n).toBeCloseTo(0.6, 10); // implicit-only weight
+  });
+});
+
+describe('candidate-set upgrade', () => {
+  const KEY = 'resonance.v1.personalization';
+
+  it('rebuilds the posterior from sessions instead of resetting it', () => {
+    for (let i = 0; i < 3; i++) {
+      const session = makeSession({ feedback: { rating: 5, ratedAt: new Date().toISOString() } });
+      appendSession(session);
+      resolveOutcome(session.id);
+    }
+    const learned = loadPersonalization(CANDIDATE_SET_VERSION);
+    expect(learned.arms.focus?.[PRIOR_ARM_ID]?.n).toBeGreaterThan(0);
+    // Simulate stats written by the previous build.
+    localStorage.setItem(KEY, JSON.stringify({ ...learned, candidateSetVersion: CANDIDATE_SET_VERSION - 1 }));
+    // Without the upgrade step the mismatch would wipe everything.
+    expect(loadPersonalization(CANDIDATE_SET_VERSION).arms).toEqual({});
+
+    ensurePersonalizationVersion();
+    const after = loadPersonalization(CANDIDATE_SET_VERSION);
+    expect(after.candidateSetVersion).toBe(CANDIDATE_SET_VERSION);
+    expect(after).toEqual(rebuildFromSessions(loadSessions()));
+    expect(after.arms.focus?.[PRIOR_ARM_ID]).toEqual(learned.arms.focus?.[PRIOR_ARM_ID]);
+  });
+
+  it('leaves a current payload untouched and does nothing with no payload', () => {
+    ensurePersonalizationVersion();
+    expect(localStorage.getItem(KEY)).toBeNull();
+    const session = makeSession({ feedback: { rating: 4, ratedAt: new Date().toISOString() } });
+    appendSession(session);
+    resolveOutcome(session.id);
+    const before = localStorage.getItem(KEY);
+    ensurePersonalizationVersion();
+    expect(localStorage.getItem(KEY)).toBe(before);
+  });
+});
+
+describe('serving context', () => {
+  it('credit lands in the context the session was served in, and locked mode follows it', () => {
+    const morning = new Date(2026, 8, 1, 8).toISOString();
+    const night = new Date(2026, 8, 1, 23).toISOString();
+    for (let i = 0; i < 4; i++) {
+      for (const [startedAt, armId, rating] of [
+        [morning, 'noise-up', 5],
+        [night, 'noise-up', 1],
+        [morning, 'beat-down', 1],
+        [night, 'beat-down', 5],
+      ] as const) {
+        const s = makeSession({
+          startedAt,
+          servedArmId: armId,
+          servedBy: 'bandit',
+          feedback: { rating, ratedAt: startedAt },
+        });
+        appendSession(s);
+        resolveOutcome(s.id);
+      }
+    }
+    const state = loadPersonalization(CANDIDATE_SET_VERSION);
+    expect(Object.keys(state.contexts!.focus!).sort()).toEqual(['morning:stereo', 'night:stereo']);
+    const at = (bucket: 'morning' | 'night') =>
+      chooseProfile('focus', 0.5, 'locked', Math.random, { bucket, mono: false }).armId;
+    expect(at('morning')).toBe('noise-up');
+    expect(at('night')).toBe('beat-down');
   });
 });

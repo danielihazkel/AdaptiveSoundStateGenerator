@@ -2,15 +2,19 @@ import type { MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
 import {
   loadPersonalization,
+  loadPresets,
   loadSessions,
   markBanditResolved,
+  peekPersonalizationVersion,
   savePersonalization,
 } from '../storage/storage';
 import type { PersonalizationMode } from '../storage/types';
 import {
   bestArm,
   COLD_START_SESSIONS,
+  decayState,
   eligibleSessionCount,
+  rebuildFromSessions,
   sampleArm,
   updateArm,
 } from './bandit';
@@ -19,8 +23,10 @@ import {
   CANDIDATE_SET_VERSION,
   PRIOR_ARM_ID,
 } from './candidates';
+import { contextOf, type ServeContext } from './context';
 import { ratingWindowExpired } from './morningPrompt';
-import { computeCredits } from './reward';
+import { computeCredits, hasBanditSignal } from './reward';
+import { makeSourceArmResolver } from './sourceArm';
 
 /**
  * The orchestration seam between the pure bandit and storage — the only
@@ -46,6 +52,8 @@ export function chooseProfile(
   intensity: number,
   mode: PersonalizationMode,
   rng: () => number = Math.random,
+  /** Where/how this session is served — time of day, speakers vs headphones. */
+  ctx?: ServeContext,
 ): ServedProfile {
   const state = loadPersonalization(CANDIDATE_SET_VERSION);
   let armId: string;
@@ -54,10 +62,10 @@ export function chooseProfile(
     armId = PRIOR_ARM_ID;
     servedBy = 'prior';
   } else if (mode === 'locked') {
-    armId = bestArm(state, mental);
+    armId = bestArm(state, mental, ctx);
     servedBy = 'locked';
   } else {
-    armId = sampleArm(state, mental, rng);
+    armId = sampleArm(state, mental, rng, ctx);
     servedBy = 'bandit';
   }
   return { profile: buildCandidateProfile(mental, intensity, armId), armId, servedBy };
@@ -71,17 +79,35 @@ export function chooseProfile(
  * paths (rating, skip, expiry sweep) call this.
  */
 export function resolveOutcome(sessionId: string): void {
-  const record = loadSessions().find((s) => s.id === sessionId);
-  if (!record || !record.servedArmId || record.banditResolvedAt) return;
-  const credits = computeCredits(record);
+  const sessions = loadSessions();
+  const record = sessions.find((s) => s.id === sessionId);
+  if (!record || !hasBanditSignal(record) || record.banditResolvedAt) return;
+  const credits = computeCredits(record, {
+    sourceArm: makeSourceArmResolver(sessions, loadPresets()),
+  });
   if (credits.length > 0) {
-    let state = loadPersonalization(CANDIDATE_SET_VERSION);
+    // Credit lands in the context the session was actually served in.
+    const ctx = contextOf(record.startedAt, record.monoMode) ?? undefined;
+    let state = decayState(loadPersonalization(CANDIDATE_SET_VERSION), record.state);
     for (const credit of credits) {
-      state = updateArm(state, record.state, credit.armId, credit.reward);
+      state = updateArm(state, record.state, credit.armId, credit.reward, ctx);
     }
     savePersonalization(state);
   }
   markBanditResolved(sessionId);
+}
+
+/**
+ * Candidate-set bumps are additive (candidates.ts): every stored arm keeps
+ * its id and meaning, so the learning a user has accumulated stays valid.
+ * Instead of the reset loadPersonalization would apply on a version mismatch,
+ * rebuild the posterior from the session records under the current version.
+ * Call once at startup, before anything reads the posterior.
+ */
+export function ensurePersonalizationVersion(): void {
+  const stored = peekPersonalizationVersion();
+  if (stored === null || stored === CANDIDATE_SET_VERSION) return;
+  savePersonalization(rebuildFromSessions(loadSessions(), loadPresets()));
 }
 
 /**
@@ -92,7 +118,7 @@ export function resolveOutcome(sessionId: string): void {
  */
 export function resolvePendingOutcomes(now: Date = new Date()): void {
   for (const record of loadSessions()) {
-    if (!record.servedArmId || record.banditResolvedAt) continue;
+    if (!hasBanditSignal(record) || record.banditResolvedAt) continue;
     if (record.feedback || record.feedbackSkipped || ratingWindowExpired(record, now)) {
       resolveOutcome(record.id);
     }

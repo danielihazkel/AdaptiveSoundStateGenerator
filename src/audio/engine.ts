@@ -12,56 +12,20 @@ import { ToneLayer } from './layers/toneLayer';
 import { loadNoiseWorklet } from './noise-processor';
 import { PulseModulator, type PulseHandover } from './pulseModulator';
 import { fadeTo, ramp } from './ramp';
-import { MAX_PULSE_RATE_HZ } from './states';
 import { StereoWidthNode } from './stereoWidth';
+import { cloneProfile, type NoiseType, type RhythmMode, type SoundProfile } from './types';
+
+import { composeEffectiveParams, type EffectiveParams } from './compose';
 import {
-  cloneProfile,
-  type AmbienceType,
-  type NoiseType,
-  type RhythmMode,
-  type SoundProfile,
-} from './types';
+  ALARM_REPEAT_SECONDS,
+  CHIME_SECONDS,
+  FADE_IN_SECONDS,
+  FADE_OUT_SECONDS,
+  MONO_SWITCH_DIP_SECONDS,
+  PAUSE_FADE_SECONDS,
+} from './mixPolicy';
 
-const FADE_IN_SECONDS = 1.5; // PRD §13: always fade in, no sudden loud sounds
-const FADE_OUT_SECONDS = 1.0;
-const PAUSE_FADE_SECONDS = 0.3;
-const MONO_SWITCH_DIP_SECONDS = 0.15;
-const CHIME_SECONDS = 2.0;
-/** Wake-up alarm: the chime repeats at this spacing until dismissed. */
-export const ALARM_REPEAT_SECONDS = 4;
-
-/**
- * Per-layer trim so equal slider values sound roughly equally loud (a sine at
- * 0.5 is far louder than pink noise at 0.5). Together with the master limiter
- * and the UI's 0.85 master-volume cap, this is the MVP substitute for the
- * PRD §13 LUFS loudness ceiling. Tuned by ear.
- */
-const TONE_TRIM = 0.5;
-const BINAURAL_TRIM = 0.5;
-/** Four equal-power-normalized pad voices — start below TONE_TRIM, tuned by ear. */
-const HARMONY_TRIM = 0.4;
-/** Bass low-shelf peak boost; capped here even when a program scales bass up. */
-const BASS_MAX_DB = 6;
-const NOISE_TRIM: Record<NoiseType, number> = {
-  white: 0.35,
-  pink: 0.5,
-  brown: 0.8,
-  blue: 0.3,
-};
-const AMBIENCE_TRIM: Record<AmbienceType, number> = {
-  rain: 0.5,
-  ocean: 0.6,
-  wind: 0.55,
-  space: 0.7,
-  forest: 0.6,
-  fireplace: 0.6,
-  cafe: 0.6,
-};
-
-/** Depth floor for the mono-fallback pulse substitution (see below). */
-const MONO_SUBSTITUTE_MIN_DEPTH = 0.35;
-/** Guided breathing must be audible as a swell: relax/meditation pulses are 3-12 % deep. */
-const BREATH_MIN_DEPTH = 0.3;
+export { ALARM_REPEAT_SECONDS } from './mixPolicy';
 
 /**
  * Owns the AudioContext and the full node graph. Create from a user gesture
@@ -501,124 +465,154 @@ export class AudioEngine {
     if (this.playing) ramp(this.ctx, this.master.gain, volume);
   }
 
-  setToneEnabled(enabled: boolean): void {
-    this.profile.tone.enabled = enabled;
+  /** Mutate one profile field and re-apply everything (ramped, click-free). */
+  private patchProfile(patch: (p: SoundProfile) => void): void {
+    patch(this.profile);
     this.applyAll();
+  }
+
+  setToneEnabled(enabled: boolean): void {
+    this.patchProfile((p) => {
+      p.tone.enabled = enabled;
+    });
   }
 
   setToneFrequency(hz: number): void {
-    this.profile.tone.frequency = hz;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.tone.frequency = hz;
+    });
   }
 
   setToneLevel(level: number): void {
-    this.profile.tone.level = level;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.tone.level = level;
+    });
   }
 
   setBinauralEnabled(enabled: boolean): void {
-    this.profile.binaural.enabled = enabled;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.binaural.enabled = enabled;
+    });
   }
 
   setBinauralCarrier(hz: number): void {
-    this.profile.binaural.carrier = hz;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.binaural.carrier = hz;
+    });
   }
 
   setBinauralBeat(hz: number): void {
-    this.profile.binaural.beat = hz;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.binaural.beat = hz;
+    });
   }
 
   setBinauralLevel(level: number): void {
-    this.profile.binaural.level = level;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.binaural.level = level;
+    });
   }
 
   setNoiseEnabled(enabled: boolean): void {
-    this.profile.noise.enabled = enabled;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.noise.enabled = enabled;
+    });
   }
 
   setNoiseType(type: NoiseType): void {
-    this.profile.noise.type = type;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.noise.type = type;
+    });
   }
 
   setNoiseLevel(level: number): void {
-    this.profile.noise.level = level;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.noise.level = level;
+    });
   }
 
   setIsochronicEnabled(enabled: boolean): void {
-    this.profile.isochronic.enabled = enabled;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.isochronic.enabled = enabled;
+    });
   }
 
   setIsochronicRate(hz: number): void {
-    this.profile.isochronic.rate = hz;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.isochronic.rate = hz;
+    });
   }
 
   setIsochronicDepth(depth: number): void {
-    this.profile.isochronic.depth = depth;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.isochronic.depth = depth;
+    });
   }
 
   setRhythmMode(mode: RhythmMode): void {
-    this.profile.rhythm.mode = mode;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.rhythm.mode = mode;
+    });
   }
 
   setRhythmBpm(bpm: number): void {
-    this.profile.rhythm.bpm = bpm;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.rhythm.bpm = bpm;
+    });
   }
 
   setRhythmComplexity(complexity: number): void {
-    this.profile.rhythm.complexity = complexity;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.rhythm.complexity = complexity;
+    });
   }
 
   setHarmonyEnabled(enabled: boolean): void {
-    this.profile.harmony.enabled = enabled;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.harmony.enabled = enabled;
+    });
   }
 
   setHarmonyLevel(level: number): void {
-    this.profile.harmony.level = level;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.harmony.level = level;
+    });
   }
 
   setHarmonyRichness(richness: number): void {
-    this.profile.harmony.richness = richness;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.harmony.richness = richness;
+    });
   }
 
   setHarmonyMovement(movement: number): void {
-    this.profile.harmony.movement = movement;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.harmony.movement = movement;
+    });
   }
 
   setHarmonyRoot(hz: number): void {
-    this.profile.harmony.rootHz = hz;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.harmony.rootHz = hz;
+    });
   }
 
   setBass(bass: number): void {
-    this.profile.bass = bass;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.bass = bass;
+    });
   }
 
   setStereoWidth(w: number): void {
-    this.profile.stereoWidth = w;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.stereoWidth = w;
+    });
   }
 
   setLowpass(hz: number): void {
-    this.profile.lowpassHz = hz;
-    this.applyAll();
+    this.patchProfile((p) => {
+      p.lowpassHz = hz;
+    });
   }
 
   dispose(): void {
@@ -644,128 +638,57 @@ export class AudioEngine {
   }
 
   /**
-   * Push the whole profile (plus the arc modulation and the mono
-   * substitution, both computed here and never written back) to the node
-   * graph. Everything ramps, so re-applying unchanged values is free and
-   * click-free.
+   * Push the whole profile (plus the arc/program/breath side channels and the
+   * mono substitution, all composed in compose.ts and never written back) to
+   * the node graph. Everything ramps, so re-applying unchanged values is free
+   * and click-free.
    */
   private applyAll(timeConstant?: number): void {
-    const p = this.profile;
-    const mod = this.arcModulation;
-    const pm = this.programModulation;
-    const substitute = this.monoMode && p.binaural.enabled;
+    this.applyEffective(
+      composeEffectiveParams({
+        profile: this.profile,
+        arc: this.arcModulation,
+        program: this.programModulation,
+        breath: this.breath,
+        monoMode: this.monoMode,
+      }),
+      timeConstant,
+    );
+  }
 
-    // Arc composition (PRD §12): the beat drifts by an offset, every layer
-    // level and the pulse depth scale with the arc intensity, and the lowpass
-    // can darken. The states.ts coherence rule survives modulation: a pulse
-    // rate that tracked the base beat tracks the modulated beat. An active
-    // program replaces the arc: its segment intensity/lowpass take over, its
-    // texture scalers multiply per-layer levels, and the beat stays unshifted
-    // (programs shape rhythm through BPM, not beat offsets).
-    const beat = Math.max(0.5, p.binaural.beat + (pm ? 0 : mod.beatOffsetHz));
-    const trackingBeat =
-      p.isochronic.rate === Math.min(p.binaural.beat, MAX_PULSE_RATE_HZ);
-    const arcGain = pm ? pm.intensity : mod.intensity;
-    const lowpassHz = Math.max(
-      200,
-      p.lowpassHz * (pm ? pm.lowpassScale : mod.lowpassScale),
-    );
-    const noiseScale = pm?.noiseScale ?? 1;
-    const ambienceScale = pm?.ambienceScale ?? 1;
-    const toneScale = pm?.toneScale ?? 1;
-    const harmonyScale = pm?.harmonyScale ?? 1;
-    const bassScale = pm?.bassScale ?? 1;
-    // A program segment may override tone warmth; it softens the pad too.
-    const warmth = pm && pm.warmth !== null ? pm.warmth : p.tone.warmth;
-
-    const toneEnabled = substitute ? true : p.tone.enabled;
-    const toneFrequency = substitute ? p.binaural.carrier : p.tone.frequency;
-    const toneLevel = (substitute ? p.binaural.level : p.tone.level) * arcGain * toneScale;
-    const isoEnabled = substitute ? true : p.isochronic.enabled;
-    const isoRate = substitute
-      ? beat
-      : trackingBeat
-        ? Math.min(beat, MAX_PULSE_RATE_HZ)
-        : p.isochronic.rate;
-    const isoDepth =
-      (substitute
-        ? Math.max(p.isochronic.enabled ? p.isochronic.depth : 0, MONO_SUBSTITUTE_MIN_DEPTH)
-        : p.isochronic.depth) * arcGain;
-
-    this.tone.setFrequency(toneFrequency, timeConstant);
-    this.tone.setCharacter(warmth, timeConstant);
-    this.tone.setLevel(toneEnabled ? toneLevel * TONE_TRIM : 0, timeConstant);
-    this.binaural.setCarrier(p.binaural.carrier, timeConstant);
-    this.binaural.setBeat(beat, timeConstant);
-    this.binaural.setLevel(
-      p.binaural.enabled && !substitute ? p.binaural.level * arcGain * BINAURAL_TRIM : 0,
-      timeConstant,
-    );
-    this.noise.setType(p.noise.type);
-    this.noise.setLevel(
-      p.noise.enabled ? p.noise.level * arcGain * noiseScale * NOISE_TRIM[p.noise.type] : 0,
-      timeConstant,
-    );
-    this.ambience.setType(p.ambience.type);
-    this.ambience.setLevel(
-      p.ambience.enabled
-        ? p.ambience.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience.type]
-        : 0,
-      timeConstant,
-    );
-    // The second bed follows the same arc gain and program swell: a program
-    // that lifts ambience lifts the whole bed.
-    this.ambience2.setType(p.ambience2.type);
-    this.ambience2.setLevel(
-      p.ambience2.enabled
-        ? p.ambience2.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience2.type]
-        : 0,
-      timeConstant,
-    );
-    // Mono substitution stays on the simple path: its pulsed-tone stand-in
-    // for binaural must track the beat rate, not a musical BPM grid. Guided
-    // breathing comes next: the user asked to breathe with the sound, so the
-    // swell gets a floor even where the state's own pulse is nearly flat.
-    const patternRhythm = substitute ? null : (pm?.rhythm ?? null);
-    const patternMode =
-      !substitute && (patternRhythm !== null || p.rhythm.mode === 'pattern');
-    const breath = substitute ? null : this.breath;
-    if (breath) {
+  /** One ramped node write per composed value, in a fixed order. */
+  private applyEffective(e: EffectiveParams, timeConstant?: number): void {
+    this.tone.setFrequency(e.tone.frequency, timeConstant);
+    this.tone.setCharacter(e.tone.warmth, timeConstant);
+    this.tone.setLevel(e.tone.level, timeConstant);
+    this.binaural.setCarrier(e.binaural.carrier, timeConstant);
+    this.binaural.setBeat(e.binaural.beat, timeConstant);
+    this.binaural.setLevel(e.binaural.level, timeConstant);
+    this.noise.setType(e.noise.type);
+    this.noise.setLevel(e.noise.level, timeConstant);
+    this.ambience.setType(e.ambience.type);
+    this.ambience.setLevel(e.ambience.level, timeConstant);
+    this.ambience2.setType(e.ambience2.type);
+    this.ambience2.setLevel(e.ambience2.level, timeConstant);
+    const pulse = e.pulse;
+    if (pulse.mode === 'breath') {
       this.pulse.setMode('breath', timeConstant);
-      this.pulse.setBreath(
-        breath,
-        this.breathAnchor,
-        Math.max(isoEnabled ? isoDepth : 0, BREATH_MIN_DEPTH),
-        timeConstant,
-      );
-    } else if (patternMode) {
+      this.pulse.setBreath(pulse.pattern, this.breathAnchor, pulse.depth, timeConstant);
+    } else if (pulse.mode === 'pattern') {
       this.pulse.setMode('pattern', timeConstant);
-      this.pulse.setPattern(
-        patternRhythm?.bpm ?? p.rhythm.bpm,
-        patternRhythm?.complexity ?? p.rhythm.complexity,
-        isoEnabled ? isoDepth : 0,
-        timeConstant,
-      );
+      this.pulse.setPattern(pulse.bpm, pulse.complexity, pulse.depth, timeConstant);
     } else {
       this.pulse.setMode('simple', timeConstant);
-      this.pulse.setRate(isoRate, timeConstant);
-      this.pulse.setDepth(isoEnabled ? isoDepth : 0, timeConstant);
+      this.pulse.setRate(pulse.rate, timeConstant);
+      this.pulse.setDepth(pulse.depth, timeConstant);
     }
-    this.harmony.setRoot(p.harmony.rootHz, timeConstant);
-    this.harmony.setRichness(p.harmony.richness, timeConstant);
-    this.harmony.setMovement(p.harmony.movement, timeConstant);
-    this.harmony.setSoftness(warmth, timeConstant);
-    this.harmony.setLevel(
-      p.harmony.enabled ? p.harmony.level * arcGain * harmonyScale * HARMONY_TRIM : 0,
-      timeConstant,
-    );
-    ramp(
-      this.ctx,
-      this.bassShelf.gain,
-      BASS_MAX_DB * Math.min(1, p.bass * bassScale),
-      timeConstant,
-    );
-    this.width.setWidth(p.stereoWidth, timeConstant);
-    ramp(this.ctx, this.lowpass.frequency, lowpassHz, timeConstant);
+    this.harmony.setRoot(e.harmony.rootHz, timeConstant);
+    this.harmony.setRichness(e.harmony.richness, timeConstant);
+    this.harmony.setMovement(e.harmony.movement, timeConstant);
+    this.harmony.setSoftness(e.harmony.softness, timeConstant);
+    this.harmony.setLevel(e.harmony.level, timeConstant);
+    ramp(this.ctx, this.bassShelf.gain, e.bassDb, timeConstant);
+    this.width.setWidth(e.stereoWidth, timeConstant);
+    ramp(this.ctx, this.lowpass.frequency, e.lowpassHz, timeConstant);
   }
 }

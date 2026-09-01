@@ -158,3 +158,59 @@ describe('computeInsights', () => {
     expect(byComponent.noise.avgRewardWhenOn).toBeGreaterThan(0.5);
   });
 });
+
+describe('per-variation table', () => {
+  it('lists every played arm best-first with an interval, flagging the best', () => {
+    const bandit = emptyBandit();
+    bandit.arms.focus = {
+      prior: { n: 4, sum: 2.4, sumSq: 1.5 }, // mean (0.55 + 2.4) / 5 = 0.59
+      'noise-up': { n: 3, sum: 2.7, sumSq: 2.5 }, // mean (0.5 + 2.7) / 4 = 0.8
+      'beat-down': { n: 1, sum: 0.9, sumSq: 0.81 }, // mean 0.7 but too few pulls to be best
+      'iso-off': { n: 0, sum: 0, sumSq: 0 }, // never played
+    };
+    const sessions = Array.from({ length: MIN_SESSIONS_FOR_INSIGHTS }, () => rated(4));
+    const [insight] = computeInsights(sessions, bandit);
+    expect(insight.arms.map((a) => a.id)).toEqual(['noise-up', 'beat-down', 'prior']);
+    expect(insight.arms.map((a) => a.isBest)).toEqual([true, false, false]);
+    expect(insight.bestArm?.id).toBe('noise-up');
+    const top = insight.arms[0];
+    expect(top.mean).toBeCloseTo(0.8, 10);
+    expect(top.pulls).toBe(3);
+    expect(top.ci).toBeCloseTo(1.96 * 0.25 / Math.sqrt(4), 10);
+    // Less evidence → wider interval.
+    expect(insight.arms[1].ci).toBeGreaterThan(top.ci);
+    expect(insight.arms.every((a) => a.label.length > 0)).toBe(true);
+  });
+
+  it('is empty (and nothing is best) before any arm has been played', () => {
+    const sessions = Array.from({ length: MIN_SESSIONS_FOR_INSIGHTS }, () => rated(4));
+    const [insight] = computeInsights(sessions, emptyBandit());
+    expect(insight.arms).toEqual([]);
+    expect(insight.bestArm).toBeNull();
+  });
+});
+
+describe('works best at (time of day)', () => {
+  it('names a winner per bucket with enough evidence, merging mono and stereo', () => {
+    const bandit = emptyBandit();
+    bandit.arms.focus = {
+      prior: { n: 6, sum: 3.6, sumSq: 2.2 },
+      'noise-up': { n: 6, sum: 3.6, sumSq: 2.2 },
+    };
+    bandit.contexts = {
+      focus: {
+        'morning:stereo': { 'noise-up': { n: 1.5, sum: 1.4, sumSq: 1.3 } },
+        'morning:mono': { 'noise-up': { n: 1, sum: 0.95, sumSq: 0.9 } },
+        'night:stereo': { prior: { n: 0.6, sum: 0.5, sumSq: 0.4 } }, // too thin
+      },
+    };
+    const sessions = Array.from({ length: MIN_SESSIONS_FOR_INSIGHTS }, () => rated(4));
+    const [insight] = computeInsights(sessions, bandit);
+    expect(insight.bestByTime).toEqual([{ bucket: 'morning', label: 'More noise', n: 2.5 }]);
+  });
+
+  it('is empty without context data', () => {
+    const sessions = Array.from({ length: MIN_SESSIONS_FOR_INSIGHTS }, () => rated(4));
+    expect(computeInsights(sessions, emptyBandit())[0].bestByTime).toEqual([]);
+  });
+});

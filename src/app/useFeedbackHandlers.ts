@@ -1,6 +1,6 @@
 import { resolveOutcome } from '../personalization/personalizer';
 import { attachFeedback, markFeedbackSkipped } from '../storage/storage';
-import type { Rating, SessionRecord } from '../storage/types';
+import type { FeedbackInput, Rating, SessionRecord } from '../storage/types';
 import type { FinishedSession } from './useSessionOrchestrator';
 
 /**
@@ -22,16 +22,17 @@ export function useFeedbackHandlers(deps: {
   };
 
   return {
-    rate: (rating: Rating) => {
-      settle(deps.getLastSession()?.recordId, (id) => attachFeedback(id, rating));
+    rate: (input: FeedbackInput) => {
+      settle(deps.getLastSession()?.recordId, (id) => attachFeedback(id, input));
       deps.onDone();
     },
     skip: () => {
       settle(deps.getLastSession()?.recordId, markFeedbackSkipped);
       deps.onDone();
     },
+    /** The morning prompt asks the one question that matters after sleep. */
     morningRate: (rating: Rating) => {
-      settle(deps.morningPrompt?.id, (id) => attachFeedback(id, rating));
+      settle(deps.morningPrompt?.id, (id) => attachFeedback(id, { rating }));
       deps.setMorningPrompt(null);
     },
     morningDismiss: () => {

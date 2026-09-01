@@ -5,8 +5,10 @@ import { BREATH_PATTERNS, type BreathPattern } from '../audio/breathing';
 import { AudioEngine } from '../audio/engine';
 import type { MentalState } from '../audio/states';
 import { cloneProfile, normalizeProfile, type SoundProfile } from '../audio/types';
+import { timeBucketOf, type ServeContext } from '../personalization/context';
 import { chooseProfile, type ServedProfile } from '../personalization/personalizer';
 import { playSilentKeepAlive } from '../platform/silentAudio';
+import { acquireSessionLock, type LockRelease } from '../platform/tabGuard';
 import { programMinDurationSec, type Program } from '../programs/types';
 import { IDENTITY_MODULATION } from '../session/evolution';
 import { CHECKPOINT_EVERY_SEC } from '../session/inProgress';
@@ -26,7 +28,7 @@ import {
   type SessionRecord,
   type Settings,
 } from '../storage/types';
-import { START_ERROR_MESSAGE } from '../ui/SafetyNotices';
+import { OTHER_TAB_SESSION_MESSAGE, START_ERROR_MESSAGE } from '../ui/SafetyNotices';
 import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
 import type { Coach } from './useCoach';
@@ -86,6 +88,12 @@ export function useSessionOrchestrator(deps: {
   /** Checkpoint of the running session (minus elapsed), rewritten as it plays. */
   const checkpointRef = useRef<Omit<InProgressSession, 'elapsedSec' | 'updatedAt'> | null>(null);
   const unsubscribeCheckpointRef = useRef<(() => void) | null>(null);
+  /** Cross-tab "a session is playing" lock held for the life of the session. */
+  const sessionLockRef = useRef<LockRelease | null>(null);
+  const releaseSessionLock = () => {
+    sessionLockRef.current?.();
+    sessionLockRef.current = null;
+  };
 
   const [liveProfile, setLiveProfile] = useState<SoundProfile | null>(null);
   const [starting, setStarting] = useState(false);
@@ -124,6 +132,7 @@ export function useSessionOrchestrator(deps: {
 
   const handleComplete = (result: SessionResult) => {
     stopCheckpointing();
+    releaseSessionLock();
     const engine = engineRef.current;
     const profile = engine?.getProfile() ?? result.config.profile;
     const served = servedRef.current;
@@ -189,6 +198,7 @@ export function useSessionOrchestrator(deps: {
   useEffect(
     () => () => {
       unsubscribeCheckpointRef.current?.();
+      sessionLockRef.current?.();
       controllerRef.current?.dispose();
       engineRef.current?.dispose();
       controllerRef.current = null;
@@ -223,6 +233,11 @@ export function useSessionOrchestrator(deps: {
     setStarting(true);
     setStartError(null);
     try {
+      // Time of day and speakers-vs-headphones shape which arm works (context.ts).
+      const serveContext: ServeContext = {
+        bucket: timeBucketOf(new Date()),
+        mono: settings.monoMode,
+      };
       const direct = opts.replayOf ?? null;
       const mentalState = direct?.state ?? selection.mentalState;
       const intensity = direct?.intensity ?? selection.intensity;
@@ -254,7 +269,13 @@ export function useSessionOrchestrator(deps: {
       // arms were never calibrated against, so they stay out of the bandit.
       let servedForProgram: ServedProfile | null = null;
       if (resolved.generated && !resolved.fromReplay && !selectedPreset) {
-        servedForProgram = chooseProfile(mentalState, intensity, modeFor(settings, mentalState));
+        servedForProgram = chooseProfile(
+          mentalState,
+          intensity,
+          modeFor(settings, mentalState),
+          Math.random,
+          serveContext,
+        );
         resolved = resolveSessionProgram({ ...programInput, baseProfile: servedForProgram.profile });
       }
       const program = resolved.program;
@@ -278,7 +299,13 @@ export function useSessionOrchestrator(deps: {
         profile = normalizeProfile(replaying.profile);
         servedRef.current = null;
       } else {
-        const served = chooseProfile(mentalState, intensity, modeFor(settings, mentalState));
+        const served = chooseProfile(
+          mentalState,
+          intensity,
+          modeFor(settings, mentalState),
+          Math.random,
+          serveContext,
+        );
         profile = served.profile;
         servedRef.current = served;
       }
@@ -287,7 +314,14 @@ export function useSessionOrchestrator(deps: {
       const breathing = breathingId ? BREATH_PATTERNS[breathingId] : undefined;
       sessionBreathingRef.current = breathing ?? null;
 
-      await ensureEngine(profile);
+      // The engine and the cross-tab lock in parallel: the lock request is
+      // async, and the engine must still be created inside the tap's gesture.
+      const [, releaseLock] = await Promise.all([ensureEngine(profile), acquireSessionLock()]);
+      if (!releaseLock) {
+        setStartError(OTHER_TAB_SESSION_MESSAGE);
+        return;
+      }
+      sessionLockRef.current = releaseLock;
       customizedRef.current = false;
       volumeAdjustmentsRef.current = 0;
 
@@ -373,6 +407,7 @@ export function useSessionOrchestrator(deps: {
       // controller may be mid-start; stop it so the next Begin starts clean.
       console.error('Session failed to start', err);
       stopCheckpointing();
+      releaseSessionLock();
       try {
         controllerRef.current?.stop();
       } catch {
@@ -413,6 +448,9 @@ export function useSessionOrchestrator(deps: {
       state: source ? source.state : selection.mentalState,
       intensity: source ? source.intensity : selection.intensity,
       profile: cloneProfile(profile),
+      // Saved from a finished session: replaying the preset later credits
+      // the arm that produced this sound (personalization/sourceArm.ts).
+      sourceSessionId: source?.recordId,
     });
     deps.onPresetSaved();
   };

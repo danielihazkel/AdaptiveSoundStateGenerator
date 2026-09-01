@@ -2,6 +2,7 @@ import type { MentalState } from '../audio/states';
 import { cloneProfile, type SoundProfile } from '../audio/types';
 import { sampleArm } from '../personalization/bandit';
 import { PRIOR_ARM_ID } from '../personalization/candidates';
+import type { ServeContext } from '../personalization/context';
 import type { PersonalizationMode, PersonalizationState } from '../storage/types';
 import type { AdaptationAction, HrTrend, SegmentObservation } from './types';
 
@@ -41,6 +42,8 @@ export interface AdaptationInput {
   softenedAlready: boolean;
   observation: SegmentObservation;
   personalization: PersonalizationState;
+  /** Serving context of the running session (time of day × mono), if known. */
+  context?: ServeContext;
   rng?: () => number;
 }
 
@@ -130,7 +133,7 @@ function resampleExcluding(input: AdaptationInput): string | undefined {
   const tried = new Set([input.currentArmId, ...input.previousArmIds]);
   const rng = input.rng ?? Math.random;
   for (let i = 0; i < RESAMPLE_ATTEMPTS; i++) {
-    const draw = sampleArm(input.personalization, input.state, rng);
+    const draw = sampleArm(input.personalization, input.state, rng, input.context);
     if (!tried.has(draw)) return draw;
   }
   return tried.has(PRIOR_ARM_ID) ? undefined : PRIOR_ARM_ID;

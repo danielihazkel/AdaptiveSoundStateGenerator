@@ -8,11 +8,17 @@ import {
   computeReward,
   CUSTOMIZED_VALUE_CAP,
   CUSTOMIZED_WEIGHT,
+  DISTRACTION_ADJUST,
   END_CREDIT_MIN_SCALE,
   IMPLICIT_ONLY_WEIGHT,
   INTERVAL_SESSION_WEIGHT,
   OPEN_ENDED_TARGET_SEC,
+  REPLAY_CHOICE_BLEND,
+  REPLAY_CHOICE_VALUE,
+  REPLAY_WEIGHT,
   scoreSession,
+  SKIPPED_RATING_PENALTY,
+  USE_AGAIN_ADJUST,
   VOLUME_PENALTY_FLOOR,
 } from './reward';
 
@@ -270,5 +276,88 @@ describe('computeCredits (Phase 3 segments)', () => {
       expect(computeCredits(makeRecord({ intervals: plan, servedBy: 'preset' }))).toEqual([]);
       expect(computeCredits(makeRecord({ intervals: plan, recovered: true }))).toEqual([]);
     });
+  });
+});
+
+describe('skipped ratings (PRD §9)', () => {
+  it('score a little below an unrated session, at implicit weight', () => {
+    const unrated = scoreSession(makeRecord());
+    const skipped = scoreSession(makeRecord({ feedbackSkipped: true }));
+    expect(skipped.weight).toBe(IMPLICIT_ONLY_WEIGHT);
+    expect(skipped.value).toBeCloseTo(unrated.value - SKIPPED_RATING_PENALTY, 10);
+  });
+
+  it('a rating given after a skip wins over the skip', () => {
+    expect(scoreSession(rated(4, { feedbackSkipped: true }))).toEqual(scoreSession(rated(4)));
+  });
+});
+
+describe('replay and preset credits (PRD §15)', () => {
+  const sourceArm = () => ({ state: 'focus' as const, armId: 'noise-up' });
+
+  it('credit the source arm, blending the choice with the outcome at reduced weight', () => {
+    const replay = rated(4, { servedArmId: undefined, servedBy: undefined, replayOfSessionId: 'src' });
+    const outcome = scoreSession(replay);
+    const [credit] = computeCredits(replay, { sourceArm });
+    expect(credit.armId).toBe('noise-up');
+    expect(credit.reward.value).toBeCloseTo(
+      REPLAY_CHOICE_BLEND * REPLAY_CHOICE_VALUE + (1 - REPLAY_CHOICE_BLEND) * outcome.value,
+      10,
+    );
+    expect(credit.reward.weight).toBeCloseTo(outcome.weight * REPLAY_WEIGHT, 10);
+  });
+
+  it('a poor replay still credits less than a good one', () => {
+    const good = computeCredits(rated(5, { servedArmId: undefined, replayOfSessionId: 'src' }), { sourceArm })[0];
+    const bad = computeCredits(rated(1, { servedArmId: undefined, replayOfSessionId: 'src' }), { sourceArm })[0];
+    expect(bad.reward.value).toBeLessThan(good.reward.value);
+  });
+
+  it('works for presets that carry a source, through the same resolver', () => {
+    const preset = makeRecord({ servedArmId: undefined, servedBy: 'preset', presetId: 'p1' });
+    expect(computeCredits(preset, { sourceArm })).toHaveLength(1);
+    expect(computeCredits(preset)).toEqual([]);
+    expect(computeReward(preset)).toBeNull();
+  });
+
+  it('yields nothing without a resolvable or same-state source, or for recovered sessions', () => {
+    const replay = makeRecord({ servedArmId: undefined, servedBy: undefined, replayOfSessionId: 'src' });
+    expect(computeCredits(replay)).toEqual([]);
+    expect(computeCredits(replay, { sourceArm: () => null })).toEqual([]);
+    expect(computeCredits(replay, { sourceArm: () => ({ state: 'relax', armId: 'x' }) })).toEqual([]);
+    expect(computeCredits({ ...replay, recovered: true }, { sourceArm })).toEqual([]);
+    // Ordinary served sessions never consult the resolver.
+    expect(computeCredits(makeRecord(), { sourceArm: () => { throw new Error('no'); } })).toHaveLength(1);
+  });
+});
+
+describe('PRD §9 extras: distraction and use-again', () => {
+  it('records without the fields score exactly as before', () => {
+    expect(scoreSession(rated(4))).toEqual({
+      value: Math.min(1, 0.7 * 0.75 + 0.3 * 0.65),
+      weight: 1,
+    });
+  });
+
+  it('are monotonic nudges on top of the same rating', () => {
+    const fb = (extra: object) => rated(3, { feedback: { rating: 3, ratedAt: 'x', ...extra } });
+    const plain = scoreSession(fb({})).value;
+    expect(scoreSession(fb({ distraction: 1 })).value).toBeCloseTo(plain + DISTRACTION_ADJUST[1], 10);
+    expect(scoreSession(fb({ distraction: 2 })).value).toBeCloseTo(plain, 10);
+    expect(scoreSession(fb({ distraction: 3 })).value).toBeLessThan(plain);
+    expect(scoreSession(fb({ useAgain: true })).value).toBeCloseTo(plain + USE_AGAIN_ADJUST.yes, 10);
+    expect(scoreSession(fb({ useAgain: false })).value).toBeCloseTo(plain + USE_AGAIN_ADJUST.no, 10);
+    expect(scoreSession(fb({ distraction: 3, useAgain: false })).value).toBeLessThan(
+      scoreSession(fb({ distraction: 1, useAgain: true })).value,
+    );
+    // Never enough to flip a rating band: a 4 with the worst extras beats a 2 with the best.
+    const worst4 = scoreSession(rated(4, { feedback: { rating: 4, ratedAt: 'x', distraction: 3, useAgain: false } }));
+    const best2 = scoreSession(rated(2, { feedback: { rating: 2, ratedAt: 'x', distraction: 1, useAgain: true } }));
+    expect(worst4.value).toBeGreaterThan(best2.value);
+    expect(worst4.weight).toBe(1);
+  });
+
+  it('ignore the extras without a rating (they only ever arrive with one)', () => {
+    expect(scoreSession(makeRecord())).toEqual(scoreSession(makeRecord()));
   });
 });

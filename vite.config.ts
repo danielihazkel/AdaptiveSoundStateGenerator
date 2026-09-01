@@ -1,8 +1,13 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  test: {
+    // Node by default; React suites opt into jsdom per file.
+    setupFiles: ["src/test/setup.ts"],
+  },
   plugins: [
     react(),
     // Installable + offline: every build asset is precached, so the app

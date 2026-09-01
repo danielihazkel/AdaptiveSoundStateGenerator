@@ -1,4 +1,5 @@
-import type { SessionRecord, SessionSegment } from '../storage/types';
+import type { Distraction, SessionRecord, SessionSegment } from '../storage/types';
+import type { SourceArmResolver } from './sourceArm';
 
 /**
  * Maps a finished session onto a bandit reward (PRD §9): explicit 1–5 ratings
@@ -51,6 +52,39 @@ export const END_CREDIT_MIN_SCALE = 0.5;
  * adds its own rhythm, so the outcome credits the arm a little less cleanly.
  */
 export const INTERVAL_SESSION_WEIGHT = 0.8;
+/**
+ * Explicitly declining to rate is mild evidence the session wasn't worth a
+ * tap (PRD §9) — a small nudge below an unrated session, at implicit weight.
+ */
+export const SKIPPED_RATING_PENALTY = 0.05;
+/**
+ * Replaying a session or a preset saved from one is a positive label for the
+ * arm behind the sound (PRD §15): the *choice* counts REPLAY_CHOICE_VALUE,
+ * blended with how the replay actually went, at reduced weight — it is a
+ * second-hand observation of that arm.
+ */
+export const REPLAY_CHOICE_VALUE = 0.85;
+export const REPLAY_CHOICE_BLEND = 0.5;
+export const REPLAY_WEIGHT = 0.5;
+/**
+ * PRD §9 extras on the feedback screen, both optional. Small nudges on top
+ * of the rating: the rating already carries most of the signal, these
+ * disambiguate a "3" that was pleasant-but-distracting from one the user
+ * would happily hear again.
+ */
+export const DISTRACTION_ADJUST: Record<Distraction, number> = { 1: 0.03, 2: 0, 3: -0.06 };
+export const USE_AGAIN_ADJUST = { yes: 0.05, no: -0.08 } as const;
+
+/** Extra inputs for attribution that live outside the record itself. */
+export interface CreditContext {
+  /** Arm behind a replayed session / saved preset (sourceArm.ts). */
+  sourceArm?: SourceArmResolver;
+}
+
+/** A record the bandit can learn from, directly or through its source. */
+export function hasBanditSignal(record: SessionRecord): boolean {
+  return Boolean(record.servedArmId || record.replayOfSessionId || record.presetId);
+}
 
 export function computeReward(record: SessionRecord): RewardResult | null {
   // Preset sessions (and pre-Phase-2 records) were not served by the bandit.
@@ -73,12 +107,16 @@ export function scoreSession(record: SessionRecord): RewardResult {
   let value: number;
   let weight: number;
   if (record.feedback) {
-    const ratingNorm = (record.feedback.rating - 1) / 4;
+    const fb = record.feedback;
+    const ratingNorm = (fb.rating - 1) / 4;
     value = RATING_BLEND * ratingNorm + (1 - RATING_BLEND) * implicit;
     weight = 1;
+    if (fb.distraction !== undefined) value += DISTRACTION_ADJUST[fb.distraction] ?? 0;
+    if (fb.useAgain !== undefined) value += fb.useAgain ? USE_AGAIN_ADJUST.yes : USE_AGAIN_ADJUST.no;
   } else {
     value = implicit;
     weight = IMPLICIT_ONLY_WEIGHT;
+    if (record.feedbackSkipped) value -= SKIPPED_RATING_PENALTY;
   }
 
   value += Math.max(
@@ -107,8 +145,8 @@ export interface ArmCredit {
  * rating is recency-dominated, and splitting would smear credit onto arms the
  * user already marked 'worse' — scaled by that arm's share of the session.
  */
-export function computeCredits(record: SessionRecord): ArmCredit[] {
-  const credits = rawCredits(record);
+export function computeCredits(record: SessionRecord, ctx: CreditContext = {}): ArmCredit[] {
+  const credits = rawCredits(record, ctx);
   if (!record.intervals || credits.length === 0) return credits;
   return credits.map((c) => ({
     armId: c.armId,
@@ -116,10 +154,10 @@ export function computeCredits(record: SessionRecord): ArmCredit[] {
   }));
 }
 
-function rawCredits(record: SessionRecord): ArmCredit[] {
-  if (!record.servedArmId || record.servedBy === 'preset') return [];
+function rawCredits(record: SessionRecord, ctx: CreditContext): ArmCredit[] {
   // The app died mid-session: the truncated length says nothing about the sound.
   if (record.recovered) return [];
+  if (!record.servedArmId || record.servedBy === 'preset') return replayCredit(record, ctx);
   const segments = record.segments;
   if (!segments || segments.length === 0) {
     const reward = computeReward(record);
@@ -144,6 +182,25 @@ function rawCredits(record: SessionRecord): ArmCredit[] {
     reward: { value: endReward.value, weight: endReward.weight * scale },
   });
   return credits;
+}
+
+/**
+ * A replayed session (or a preset saved from one) never served an arm, but
+ * the user chose that sound again — credit the arm that produced it.
+ */
+function replayCredit(record: SessionRecord, ctx: CreditContext): ArmCredit[] {
+  if (!ctx.sourceArm || !(record.replayOfSessionId || record.presetId)) return [];
+  const source = ctx.sourceArm(record);
+  if (!source || source.state !== record.state) return [];
+  const outcome = scoreSession(record);
+  const value =
+    REPLAY_CHOICE_BLEND * REPLAY_CHOICE_VALUE + (1 - REPLAY_CHOICE_BLEND) * outcome.value;
+  return [
+    {
+      armId: source.armId,
+      reward: { value: Math.min(1, Math.max(0, value)), weight: outcome.weight * REPLAY_WEIGHT },
+    },
+  ];
 }
 
 function checkpointCredit(segment: SessionSegment): ArmCredit | null {

@@ -1,0 +1,1096 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`composeEffectiveParams > pins a representative sample of composed values 1`] = `
+[
+  {
+    "mono": {
+      "ambience": {
+        "level": 0.017499999999999998,
+        "type": "rain",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 18,
+        "carrier": 200,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.5,
+      },
+      "lowpassHz": 9000,
+      "noise": {
+        "level": 0.19599999999999998,
+        "type": "brown",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 18,
+      },
+      "stereoWidth": 0.7,
+      "tone": {
+        "frequency": 200,
+        "level": 0.0875,
+        "warmth": 0.5,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0.025,
+        "type": "rain",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 14,
+        "carrier": 200,
+        "level": 0.125,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.5,
+      },
+      "lowpassHz": 18000,
+      "noise": {
+        "level": 0.27999999999999997,
+        "type": "brown",
+      },
+      "pulse": {
+        "depth": 0.105,
+        "mode": "simple",
+        "rate": 14,
+      },
+      "stereoWidth": 0.7,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.5,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0.010000000000000002,
+        "type": "rain",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 14,
+        "carrier": 200,
+        "level": 0.1,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.9,
+      },
+      "lowpassHz": 10800,
+      "noise": {
+        "level": 0.3136,
+        "type": "brown",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.084,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.7,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.9,
+      },
+    },
+    "state": "focus",
+  },
+  {
+    "mono": {
+      "ambience": {
+        "level": 0.16799999999999998,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0.6000000000000001,
+      "binaural": {
+        "beat": 12,
+        "carrier": 180,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0.0308,
+        "movement": 0.3,
+        "richness": 0.4,
+        "rootHz": 110,
+        "softness": 0.8,
+      },
+      "lowpassHz": 9000,
+      "noise": {
+        "level": 0.07874999999999999,
+        "type": "pink",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 12,
+      },
+      "stereoWidth": 0.8,
+      "tone": {
+        "frequency": 180,
+        "level": 0.06999999999999999,
+        "warmth": 0.8,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0.24,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0.6000000000000001,
+      "binaural": {
+        "beat": 8,
+        "carrier": 180,
+        "level": 0.1,
+      },
+      "harmony": {
+        "level": 0.04400000000000001,
+        "movement": 0.3,
+        "richness": 0.4,
+        "rootHz": 110,
+        "softness": 0.8,
+      },
+      "lowpassHz": 18000,
+      "noise": {
+        "level": 0.11249999999999999,
+        "type": "pink",
+      },
+      "pulse": {
+        "depth": 0.055,
+        "mode": "simple",
+        "rate": 8,
+      },
+      "stereoWidth": 0.8,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.8,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0.09600000000000002,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 1.8000000000000003,
+      "binaural": {
+        "beat": 8,
+        "carrier": 180,
+        "level": 0.08000000000000002,
+      },
+      "harmony": {
+        "level": 0.056320000000000016,
+        "movement": 0.3,
+        "richness": 0.4,
+        "rootHz": 110,
+        "softness": 0.9,
+      },
+      "lowpassHz": 10800,
+      "noise": {
+        "level": 0.126,
+        "type": "pink",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.044000000000000004,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.8,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.9,
+      },
+    },
+    "state": "relax",
+  },
+  {
+    "mono": {
+      "ambience": {
+        "level": 0.0735,
+        "type": "space",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0.9000000000000001,
+      "binaural": {
+        "beat": 8,
+        "carrier": 140,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.5,
+      },
+      "lowpassHz": 1000,
+      "noise": {
+        "level": 0.20999999999999996,
+        "type": "brown",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 8,
+      },
+      "stereoWidth": 0.5,
+      "tone": {
+        "frequency": 140,
+        "level": 0.0525,
+        "warmth": 0.5,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0.105,
+        "type": "space",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0.9000000000000001,
+      "binaural": {
+        "beat": 4,
+        "carrier": 140,
+        "level": 0.075,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.5,
+      },
+      "lowpassHz": 2000,
+      "noise": {
+        "level": 0.30000000000000004,
+        "type": "brown",
+      },
+      "pulse": {
+        "depth": 0.035,
+        "mode": "simple",
+        "rate": 4,
+      },
+      "stereoWidth": 0.5,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.5,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0.041999999999999996,
+        "type": "space",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 2.7,
+      "binaural": {
+        "beat": 4,
+        "carrier": 140,
+        "level": 0.06,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.9,
+      },
+      "lowpassHz": 1200,
+      "noise": {
+        "level": 0.3360000000000001,
+        "type": "brown",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.028000000000000004,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.5,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.9,
+      },
+    },
+    "state": "sleep",
+  },
+  {
+    "mono": {
+      "ambience": {
+        "level": 0,
+        "type": "wind",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 1.0499999999999998,
+      "binaural": {
+        "beat": 26,
+        "carrier": 240,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.5,
+      },
+      "lowpassHz": 9000,
+      "noise": {
+        "level": 0.0336,
+        "type": "blue",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 26,
+      },
+      "stereoWidth": 0.9,
+      "tone": {
+        "frequency": 240,
+        "level": 0.0875,
+        "warmth": 0.5,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0,
+        "type": "wind",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 1.0499999999999998,
+      "binaural": {
+        "beat": 22,
+        "carrier": 240,
+        "level": 0.125,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.5,
+      },
+      "lowpassHz": 18000,
+      "noise": {
+        "level": 0.048,
+        "type": "blue",
+      },
+      "pulse": {
+        "bpm": 127.5,
+        "complexity": 0.42500000000000004,
+        "depth": 0.25,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.9,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.5,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0,
+        "type": "wind",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 3.1499999999999995,
+      "binaural": {
+        "beat": 22,
+        "carrier": 240,
+        "level": 0.1,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.9,
+      },
+      "lowpassHz": 10800,
+      "noise": {
+        "level": 0.053759999999999995,
+        "type": "blue",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.2,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.9,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.9,
+      },
+    },
+    "state": "energy",
+  },
+  {
+    "mono": {
+      "ambience": {
+        "level": 0.05775,
+        "type": "wind",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0.6000000000000001,
+      "binaural": {
+        "beat": 10,
+        "carrier": 160,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0.0364,
+        "movement": 0.4,
+        "richness": 0.5,
+        "rootHz": 105,
+        "softness": 0.7,
+      },
+      "lowpassHz": 9000,
+      "noise": {
+        "level": 0.052500000000000005,
+        "type": "pink",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 10,
+      },
+      "stereoWidth": 0.7,
+      "tone": {
+        "frequency": 160,
+        "level": 0.0875,
+        "warmth": 0.7,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0.0825,
+        "type": "wind",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0.6000000000000001,
+      "binaural": {
+        "beat": 6,
+        "carrier": 160,
+        "level": 0.125,
+      },
+      "harmony": {
+        "level": 0.052000000000000005,
+        "movement": 0.4,
+        "richness": 0.5,
+        "rootHz": 105,
+        "softness": 0.7,
+      },
+      "lowpassHz": 18000,
+      "noise": {
+        "level": 0.07500000000000001,
+        "type": "pink",
+      },
+      "pulse": {
+        "depth": 0.08499999999999999,
+        "mode": "simple",
+        "rate": 6,
+      },
+      "stereoWidth": 0.7,
+      "tone": {
+        "frequency": 210,
+        "level": 0.045,
+        "warmth": 0.7,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0.033,
+        "type": "wind",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 1.8000000000000003,
+      "binaural": {
+        "beat": 6,
+        "carrier": 160,
+        "level": 0.1,
+      },
+      "harmony": {
+        "level": 0.06656000000000001,
+        "movement": 0.4,
+        "richness": 0.5,
+        "rootHz": 105,
+        "softness": 0.9,
+      },
+      "lowpassHz": 10800,
+      "noise": {
+        "level": 0.084,
+        "type": "pink",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.06799999999999999,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.7,
+      "tone": {
+        "frequency": 210,
+        "level": 0.043199999999999995,
+        "warmth": 0.9,
+      },
+    },
+    "state": "meditation",
+  },
+  {
+    "mono": {
+      "ambience": {
+        "level": 0.105,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 11,
+        "carrier": 150,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0.027999999999999997,
+        "movement": 0.3,
+        "richness": 0.35,
+        "rootHz": 98,
+        "softness": 0.85,
+      },
+      "lowpassHz": 3000,
+      "noise": {
+        "level": 0.12040000000000001,
+        "type": "brown",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 11,
+      },
+      "stereoWidth": 0.85,
+      "tone": {
+        "frequency": 150,
+        "level": 0.06999999999999999,
+        "warmth": 0.85,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0.15,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 7,
+        "carrier": 150,
+        "level": 0.1,
+      },
+      "harmony": {
+        "level": 0.04000000000000001,
+        "movement": 0.3,
+        "richness": 0.35,
+        "rootHz": 98,
+        "softness": 0.85,
+      },
+      "lowpassHz": 6000,
+      "noise": {
+        "level": 0.17200000000000001,
+        "type": "brown",
+      },
+      "pulse": {
+        "depth": 0.13,
+        "mode": "simple",
+        "rate": 7,
+      },
+      "stereoWidth": 0.85,
+      "tone": {
+        "frequency": 160,
+        "level": 0.05500000000000001,
+        "warmth": 0.85,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0.06,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 7,
+        "carrier": 150,
+        "level": 0.08000000000000002,
+      },
+      "harmony": {
+        "level": 0.051200000000000016,
+        "movement": 0.3,
+        "richness": 0.35,
+        "rootHz": 98,
+        "softness": 0.9,
+      },
+      "lowpassHz": 3600,
+      "noise": {
+        "level": 0.19264000000000003,
+        "type": "brown",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.10400000000000001,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.85,
+      "tone": {
+        "frequency": 160,
+        "level": 0.052800000000000014,
+        "warmth": 0.9,
+      },
+    },
+    "state": "arousal",
+  },
+  {
+    "mono": {
+      "ambience": {
+        "level": 0.017499999999999998,
+        "type": "rain",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 33,
+        "carrier": 240,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.5,
+      },
+      "lowpassHz": 9000,
+      "noise": {
+        "level": 0.20999999999999996,
+        "type": "brown",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 33,
+      },
+      "stereoWidth": 0.6,
+      "tone": {
+        "frequency": 240,
+        "level": 0.0875,
+        "warmth": 0.5,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0.025,
+        "type": "rain",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 29,
+        "carrier": 240,
+        "level": 0.125,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.5,
+      },
+      "lowpassHz": 18000,
+      "noise": {
+        "level": 0.30000000000000004,
+        "type": "brown",
+      },
+      "pulse": {
+        "depth": 0.07500000000000001,
+        "mode": "simple",
+        "rate": 16,
+      },
+      "stereoWidth": 0.6,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.5,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0.010000000000000002,
+        "type": "rain",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 29,
+        "carrier": 240,
+        "level": 0.1,
+      },
+      "harmony": {
+        "level": 0,
+        "movement": 0.3,
+        "richness": 0.5,
+        "rootHz": 110,
+        "softness": 0.9,
+      },
+      "lowpassHz": 10800,
+      "noise": {
+        "level": 0.3360000000000001,
+        "type": "brown",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.06000000000000001,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.6,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.9,
+      },
+    },
+    "state": "flow",
+  },
+  {
+    "mono": {
+      "ambience": {
+        "level": 0.14699999999999996,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0.8999999999999999,
+      "binaural": {
+        "beat": 13,
+        "carrier": 200,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0.0364,
+        "movement": 0.25,
+        "richness": 0.35,
+        "rootHz": 110,
+        "softness": 0.8,
+      },
+      "lowpassHz": 4000,
+      "noise": {
+        "level": 0.06475,
+        "type": "pink",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 13,
+      },
+      "stereoWidth": 0.8,
+      "tone": {
+        "frequency": 200,
+        "level": 0.06999999999999999,
+        "warmth": 0.8,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0.21,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0.8999999999999999,
+      "binaural": {
+        "beat": 9,
+        "carrier": 200,
+        "level": 0.1,
+      },
+      "harmony": {
+        "level": 0.052000000000000005,
+        "movement": 0.25,
+        "richness": 0.35,
+        "rootHz": 110,
+        "softness": 0.8,
+      },
+      "lowpassHz": 8000,
+      "noise": {
+        "level": 0.0925,
+        "type": "pink",
+      },
+      "pulse": {
+        "depth": 0.3,
+        "mode": "simple",
+        "rate": 0.125,
+      },
+      "stereoWidth": 0.8,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.8,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0.08399999999999999,
+        "type": "ocean",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 2.6999999999999997,
+      "binaural": {
+        "beat": 9,
+        "carrier": 200,
+        "level": 0.08000000000000002,
+      },
+      "harmony": {
+        "level": 0.06656000000000001,
+        "movement": 0.25,
+        "richness": 0.35,
+        "rootHz": 110,
+        "softness": 0.9,
+      },
+      "lowpassHz": 4800,
+      "noise": {
+        "level": 0.10359999999999998,
+        "type": "pink",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.24,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.8,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.9,
+      },
+    },
+    "state": "calm",
+  },
+  {
+    "mono": {
+      "ambience": {
+        "level": 0.09799999999999999,
+        "type": "space",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 11.5,
+        "carrier": 220,
+        "level": 0,
+      },
+      "harmony": {
+        "level": 0.039200000000000006,
+        "movement": 0.7,
+        "richness": 0.525,
+        "rootHz": 146.8,
+        "softness": 0.7,
+      },
+      "lowpassHz": 9000,
+      "noise": {
+        "level": 0.052500000000000005,
+        "type": "pink",
+      },
+      "pulse": {
+        "depth": 0.24499999999999997,
+        "mode": "simple",
+        "rate": 11.5,
+      },
+      "stereoWidth": 0.9,
+      "tone": {
+        "frequency": 220,
+        "level": 0.077,
+        "warmth": 0.7,
+      },
+    },
+    "plain": {
+      "ambience": {
+        "level": 0.13999999999999999,
+        "type": "space",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 7.5,
+        "carrier": 220,
+        "level": 0.11,
+      },
+      "harmony": {
+        "level": 0.05600000000000001,
+        "movement": 0.7,
+        "richness": 0.525,
+        "rootHz": 146.8,
+        "softness": 0.7,
+      },
+      "lowpassHz": 18000,
+      "noise": {
+        "level": 0.07500000000000001,
+        "type": "pink",
+      },
+      "pulse": {
+        "depth": 0.08,
+        "mode": "simple",
+        "rate": 7.5,
+      },
+      "stereoWidth": 0.9,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.7,
+      },
+    },
+    "program": {
+      "ambience": {
+        "level": 0.05600000000000001,
+        "type": "space",
+      },
+      "ambience2": {
+        "level": 0,
+        "type": "ocean",
+      },
+      "bassDb": 0,
+      "binaural": {
+        "beat": 7.5,
+        "carrier": 220,
+        "level": 0.08800000000000001,
+      },
+      "harmony": {
+        "level": 0.07168000000000001,
+        "movement": 0.7,
+        "richness": 0.525,
+        "rootHz": 146.8,
+        "softness": 0.9,
+      },
+      "lowpassHz": 10800,
+      "noise": {
+        "level": 0.084,
+        "type": "pink",
+      },
+      "pulse": {
+        "bpm": 96,
+        "complexity": 0.4,
+        "depth": 0.064,
+        "mode": "pattern",
+      },
+      "stereoWidth": 0.9,
+      "tone": {
+        "frequency": 220,
+        "level": 0,
+        "warmth": 0.9,
+      },
+    },
+    "state": "creative",
+  },
+]
+`;

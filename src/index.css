@@ -460,6 +460,28 @@ input[type="checkbox"] {
   color: var(--warning-text);
 }
 
+.toast-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* "New version ready" — pinned above the safe area so it never hides content. */
+.notice.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(calc(100% - 1.5rem), 34rem);
+  margin: 0;
+  z-index: 20;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+}
+
+.error-fallback {
+  margin: 1.5rem 0;
+}
+
 .mono-toggle {
   display: inline-flex;
   align-items: center;
@@ -803,6 +825,18 @@ input[type="checkbox"] {
   margin-top: 2rem;
 }
 
+/* Optional PRD §9 questions above the rating: label + chip row. */
+.feedback-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.9rem 0;
+}
+
+.feedback-extra .setup-question {
+  margin: 0;
+}
+
 .feedback h2 {
   font-size: 1.2rem;
   margin-bottom: 1.25rem;
@@ -957,6 +991,53 @@ input[type="checkbox"] {
 .sparkline-hit:hover {
   fill: var(--accent);
   fill-opacity: 0.25;
+}
+
+/* Per-variation comparison table (PRD §10). */
+.insight-arms-wrap {
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+
+.insight-arms {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.insight-arms th,
+.insight-arms td {
+  padding: 0.3rem 0.4rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+}
+
+.insight-arms thead th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.insight-arms .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-arms tr.best th,
+.insight-arms tr.best td {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.insight-arms .badge {
+  margin-left: 0.4rem;
+}
+
+.insight-ci {
+  font-size: 0.72rem;
+  opacity: 0.7;
 }
 
 .insight-facts {

@@ -147,7 +147,7 @@ export function importBundle(bundle: ExportBundle): ImportSummary {
       bundle.settings.disclaimerAcknowledgedAt,
   });
 
-  savePersonalization(rebuildFromSessions(loadSessions()));
+  savePersonalization(rebuildFromSessions(loadSessions(), loadPresets()));
 
   return {
     presetsAdded: newPresets.length,

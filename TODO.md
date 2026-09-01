@@ -93,6 +93,21 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Shareable links: `src/share/shareLink.ts` (deflate + base64url in `#share=`), import modal on open, Share buttons on programs / presets / editor
 - [ ] Verify by ear: calm + box breathing — circle and swell agree, holds are plateaus, no clicks; sleep 10 min with a 3-min wake-up rises then chimes; focus intervals 2/1 ×2 chime at each switch and end after the last block; a 20-min interval export contains the cues; a shared link imports in a private window
 
+## Phase 8 — Robustness & learning loop
+
+- [x] Engine composition extracted into a pure function with an exact oracle test over every state × arm × arc × program × breath × mono — `src/audio/compose.ts`, `src/audio/mixPolicy.ts`, `src/audio/compose.test.ts`
+- [x] Error boundary around lazy screens + root, chunk-load "Reload", background-error notice — `src/ui/ErrorBoundary.tsx`, `src/app/appErrors.ts`
+- [x] Service-worker update toast (Update / Later; deferred while a session or export runs) — `src/app/swUpdate.ts`, `src/ui/UpdateToast.tsx`
+- [x] jsdom + Testing Library harness; tests for the session orchestrator, adaptation loop, setup/feedback screens, dialogs, radio groups, error boundary, stored-data startup — `src/test/`, `*.test.tsx`
+- [x] Candidate set v3: harmony on/off, bass-up, warmth-up, ambience-alt (gated on audibility; the no-op ambience-off on energy dropped); version bumps rebuild the posterior from sessions instead of resetting — `src/personalization/candidates.ts`, `ensurePersonalizationVersion`
+- [x] Reward fixes: skipped-rating penalty, replay / preset-saved-from-session credits the source arm (`Preset.sourceSessionId`), 60-session recency decay with an undecayed cold-start counter — `src/personalization/reward.ts`, `sourceArm.ts`, `bandit.ts`
+- [x] PRD §9 feedback extras (distraction 1–3, use again) as optional chips; small reward nudges; history badges — `src/ui/FeedbackScreen.tsx`
+- [x] Insights: per-variation table (sessions, score ± interval) and "works best at" time of day — `src/personalization/insights.ts`, `src/ui/InsightsScreen.tsx`
+- [x] Contextual bandit: per-(state, time-of-day × mono) statistics shrunk toward the state posterior; fixed-seed regression pins the context-free draws — `src/personalization/context.ts`, `bandit.ts`
+- [x] Cross-tab: session Web Lock (a second tab cannot start a session), native `storage`-event cache refresh, startup settle sweep under a lock — `src/platform/tabGuard.ts`, `src/storage/storage.ts`
+- [x] IndexedDB session records (5 000 cap) behind a write-through cache with verified one-time migration and localStorage fallback — `src/storage/sessionDb.ts`, `src/storage/storage.ts`
+- [ ] Verify in-browser: update toast appears after a rebuild with the preview tab open and reloads only on Update; deleting a built chunk and opening History shows the boundary with Reload; a v2 personalization payload survives the upgrade; feedback chips land in History; Insights shows the variation table; migration moves records into IndexedDB (DevTools → Application) and a second tab is refused a session
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs

@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { STATES } from './audio/states';
 import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
@@ -44,6 +52,9 @@ import { useQuickStart } from './app/useQuickStart';
 import { useShareImport } from './app/useShareImport';
 import { useTabGuard } from './app/useTabGuard';
 import { ShareImportModal } from './ui/ShareImportModal';
+import { ErrorBoundary, reloadForChunkError } from './ui/ErrorBoundary';
+import { UpdateToast } from './ui/UpdateToast';
+import { clearAppError, getAppError, subscribeAppErrors } from './app/appErrors';
 
 // Power-user screens load on demand so the first paint (setup → session)
 // doesn't carry the lab, editor, history, and insights code.
@@ -142,7 +153,7 @@ export function App() {
   });
   const tabGuard = useTabGuard();
   const share = useShareImport();
-  useQuickStart(selection);
+  useQuickStart(selection, data.sessionsLoaded);
 
   // Theme: explicit choice stamps data-theme; 'system' leaves it to the OS.
   const theme = settings.theme ?? 'system';
@@ -200,15 +211,17 @@ export function App() {
 
   // First-run tour: new users see it once after the disclaimer; anyone with
   // sessions already predates it and just gets it marked as seen.
-  const showTour = screen === 'setup' && shouldShowTour(settings, data.historyAvailable);
+  const showTour =
+    screen === 'setup' && data.sessionsLoaded && shouldShowTour(settings, data.historyAvailable);
   useEffect(() => {
-    if (shouldAutoCompleteTour(settings, data.historyAvailable)) {
+    if (data.sessionsLoaded && shouldAutoCompleteTour(settings, data.historyAvailable)) {
       updateSettings({ onboardingCompletedAt: new Date().toISOString() });
     }
-  }, [settings, data.historyAvailable, updateSettings]);
+  }, [settings, data.historyAvailable, data.sessionsLoaded, updateSettings]);
 
   // Closing the tab mid-session drops the session record; mid-export it
   // drops the render. Ask first.
+  const appError = useSyncExternalStore(subscribeAppErrors, getAppError, getAppError);
   const guardUnload = screen === 'session' || exporter.progress !== null;
   // A waiting service-worker update reloads only once this goes false.
   useEffect(() => {
@@ -322,6 +335,31 @@ export function App() {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {appError && screen !== 'session' && (
+        <div className="notice warning" role="alert">
+          <span>
+            {appError.chunkLoad
+              ? "Part of the app couldn't be loaded — it may have been updated since you opened it."
+              : `Something went wrong in the background (${appError.message}). Your session keeps playing.`}
+          </span>
+          <span className="toast-actions">
+            {appError.chunkLoad && (
+              <button type="button" className="chip" onClick={reloadForChunkError}>
+                Reload
+              </button>
+            )}
+            <button
+              type="button"
+              className="chip"
+              aria-label="Dismiss error notice"
+              onClick={clearAppError}
+            >
+              ✕
+            </button>
+          </span>
         </div>
       )}
 
@@ -471,6 +509,7 @@ export function App() {
 
       {screen === 'setup' && <DataPanel onImported={data.reloadAll} onImportShare={importShare} />}
 
+      <ErrorBoundary key={screen}>
       <Suspense fallback={SCREEN_LOADING}>
       {screen === 'insights' && (
         <InsightsScreen insights={data.insights} onBack={() => navigate('setup')} />
@@ -526,6 +565,9 @@ export function App() {
         />
       )}
       </Suspense>
+      </ErrorBoundary>
+
+      {screen !== 'session' && <UpdateToast />}
 
       {screen === 'session' && controller && session.liveProfile && (
         <SessionView

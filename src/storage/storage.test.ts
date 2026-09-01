@@ -18,6 +18,8 @@ import {
   markBanditResolved,
   markFeedbackSkipped,
   newId,
+  onStorageChanged,
+  withStorageLock,
   QUARANTINE_SUFFIX,
   savePersonalization,
   savePreset,
@@ -25,6 +27,15 @@ import {
   saveSettings,
 } from './storage';
 import { defaultSettings, modeFor, SCHEMA_VERSION, type Preset, type SessionRecord } from './types';
+import { fakeIndexedDb, flushIndexedDb } from '../test/fakeIndexedDb';
+import { SESSION_STORE } from './sessionDb';
+import {
+  initSessionStore,
+  MAX_SESSION_RECORDS_DB,
+  overwriteSessions,
+  resetSessionStoreForTests,
+  sessionStoreBackend,
+} from './storage';
 
 // Node has no localStorage — a Map-backed stand-in matching the parts we use.
 function fakeLocalStorage(): Storage {
@@ -165,6 +176,17 @@ describe('sessions', () => {
   it('ignores feedback for unknown sessions', () => {
     appendSession(makeSession());
     expect(() => attachFeedback('nope', 5)).not.toThrow();
+  });
+
+  it('attachFeedback stores the optional PRD §9 extras only when given', () => {
+    const a = makeSession();
+    appendSession(a);
+    attachFeedback(a.id, { rating: 3, distraction: 3 });
+    expect(loadSessions()[0].feedback).toMatchObject({ rating: 3, distraction: 3 });
+    expect(loadSessions()[0].feedback).not.toHaveProperty('useAgain');
+    attachFeedback(a.id, { rating: 5, useAgain: true });
+    expect(loadSessions()[0].feedback).toMatchObject({ rating: 5, useAgain: true });
+    expect(loadSessions()[0].feedback).not.toHaveProperty('distraction');
   });
 
   it('caps stored records at 500', () => {
@@ -344,5 +366,180 @@ describe('schema forward-compatibility', () => {
     expect(
       localStorage.getItem('resonance.v1.personalization' + QUARANTINE_SUFFIX),
     ).not.toBeNull();
+  });
+});
+
+describe('cross-tab hooks', () => {
+  const g = globalThis as { window?: unknown };
+
+  it('onStorageChanged is a no-op without a window and filters to our keys', () => {
+    const originalWindow = g.window;
+    delete g.window;
+    expect(() => onStorageChanged(() => {})()).not.toThrow();
+
+    const handlers = new Map<string, (e: unknown) => void>();
+    g.window = {
+      addEventListener: (type: string, fn: (e: unknown) => void) => handlers.set(type, fn),
+      removeEventListener: (type: string) => handlers.delete(type),
+    };
+    const seen: string[] = [];
+    const off = onStorageChanged((key) => seen.push(key));
+    const fire = handlers.get('storage')!;
+    fire({ key: 'resonance.v1.sessions' });
+    fire({ key: 'other-app.thing' });
+    fire({ key: null });
+    expect(seen).toEqual(['resonance.v1.sessions', '*']);
+    off();
+    expect(handlers.size).toBe(0);
+    if (originalWindow === undefined) delete g.window;
+    else g.window = originalWindow;
+  });
+
+  it('withStorageLock runs once: under the lock when available, synchronously otherwise', async () => {
+    let runs = 0;
+    withStorageLock(() => runs++, undefined);
+    expect(runs).toBe(1);
+
+    let inLock = 0;
+    const locks = {
+      request: async (_name: string, cb: () => void) => {
+        inLock++;
+        cb();
+      },
+    } as unknown as LockManager;
+    withStorageLock(() => runs++, locks);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(runs).toBe(2);
+    expect(inLock).toBe(1);
+
+    const broken = { request: () => Promise.reject(new Error('nope')) } as unknown as LockManager;
+    withStorageLock(() => runs++, broken);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(runs).toBe(3);
+  });
+});
+
+describe('IndexedDB session store', () => {
+  const SESSIONS_KEY = 'resonance.v1.sessions';
+
+  afterEach(() => {
+    resetSessionStoreForTests();
+  });
+
+  it('serves from localStorage until initialised, and when IndexedDB is unavailable', async () => {
+    const a = makeSession();
+    appendSession(a);
+    expect(sessionStoreBackend()).toBeNull();
+    expect(loadSessions().map((s) => s.id)).toEqual([a.id]);
+    expect(await initSessionStore(undefined)).toBe('localStorage');
+    expect(sessionStoreBackend()).toBe('localStorage');
+    expect(loadSessions().map((s) => s.id)).toEqual([a.id]);
+    expect(localStorage.getItem(SESSIONS_KEY)).not.toBeNull();
+  });
+
+  it('migrates localStorage records into IndexedDB once, verified, then retires the copy', async () => {
+    const older = makeSession({ startedAt: '2026-08-01T10:00:00.000Z' });
+    const newer = makeSession({ startedAt: '2026-08-02T10:00:00.000Z' });
+    appendSession(older);
+    appendSession(newer);
+    const fake = fakeIndexedDb();
+    expect(await initSessionStore(fake.factory)).toBe('indexeddb');
+    expect(loadSessions().map((s) => s.id)).toEqual([newer.id, older.id]);
+    expect(fake.rows(SESSION_STORE).size).toBe(2);
+    expect(localStorage.getItem(SESSIONS_KEY)).toBeNull();
+    expect(localStorage.getItem(SESSIONS_KEY + '.migratedAt')).not.toBeNull();
+    // Idempotent: a second init shares the first attempt.
+    expect(await initSessionStore(fake.factory)).toBe('indexeddb');
+    expect(fake.opens).toBe(1);
+  });
+
+  it('writes through: append, feedback, skip, resolve and overwrite all reach IndexedDB', async () => {
+    const fake = fakeIndexedDb();
+    await initSessionStore(fake.factory);
+    const a = makeSession();
+    appendSession(a);
+    expect(loadSessions()[0].id).toBe(a.id);
+    await flushIndexedDb();
+    expect(fake.rows(SESSION_STORE).has(a.id)).toBe(true);
+
+    attachFeedback(a.id, { rating: 4, useAgain: true });
+    markFeedbackSkipped(a.id);
+    markBanditResolved(a.id);
+    expect(loadSessions()[0]).toMatchObject({ feedback: { rating: 4, useAgain: true }, feedbackSkipped: true });
+    expect(loadSessions()[0].banditResolvedAt).toBeTruthy();
+    await flushIndexedDb();
+    const stored = fake.rows(SESSION_STORE).get(a.id) as SessionRecord;
+    expect(stored.feedback?.rating).toBe(4);
+    expect(stored.feedbackSkipped).toBe(true);
+    expect(stored.banditResolvedAt).toBeTruthy();
+    // The cache hands out shared records: the original object was never mutated.
+    expect(a.feedback).toBeUndefined();
+    // localStorage stays retired.
+    expect(localStorage.getItem(SESSIONS_KEY)).toBeNull();
+
+    const b = makeSession({ startedAt: new Date(Date.now() + 60_000).toISOString() });
+    overwriteSessions([a, b]);
+    expect(loadSessions().map((s) => s.id)).toEqual([b.id, a.id]);
+    await flushIndexedDb();
+    expect([...fake.rows(SESSION_STORE).keys()].sort()).toEqual([a.id, b.id].sort());
+  });
+
+  it('caps the IndexedDB store, dropping the oldest records', async () => {
+    const fake = fakeIndexedDb();
+    await initSessionStore(fake.factory);
+    for (let i = 0; i <= MAX_SESSION_RECORDS_DB; i += 1) {
+      appendSession(makeSession({ id: 'r' + i, startedAt: new Date(2026, 0, 1, 0, 0, i).toISOString() }));
+    }
+    const kept = loadSessions();
+    expect(kept).toHaveLength(MAX_SESSION_RECORDS_DB);
+    expect(kept[0].id).toBe('r' + MAX_SESSION_RECORDS_DB);
+    expect(kept.some((s) => s.id === 'r0')).toBe(false);
+    await flushIndexedDb();
+    expect(fake.rows(SESSION_STORE).size).toBe(MAX_SESSION_RECORDS_DB);
+  });
+
+  it('keeps localStorage intact when the migration cannot be verified', async () => {
+    appendSession(makeSession());
+    const fake = fakeIndexedDb();
+    // A store whose count() always reports empty: the post-migration check must fail.
+    const factory = {
+      open: (name: string) => {
+        const req = fake.factory.open(name) as unknown as {
+          onsuccess: (() => void) | null;
+          result: { transaction: (n: string, m: string) => IDBTransaction };
+        };
+        let userSuccess: (() => void) | null = null;
+        Object.defineProperty(req, 'onsuccess', {
+          configurable: true,
+          set: (fn: (() => void) | null) => {
+            userSuccess = fn;
+          },
+          get: () => () => {
+            const db = req.result;
+            const realTransaction = db.transaction.bind(db);
+            db.transaction = (n: string, m: string) => {
+              const tx = realTransaction(n, m);
+              const realObjectStore = tx.objectStore.bind(tx);
+              tx.objectStore = (storeName: string) => {
+                const store = realObjectStore(storeName);
+                const realCount = store.count.bind(store);
+                store.count = () => {
+                  const r = realCount();
+                  Object.defineProperty(r, 'result', { get: () => 0, configurable: true });
+                  return r;
+                };
+                return store;
+              };
+              return tx;
+            };
+            userSuccess?.();
+          },
+        });
+        return req as unknown as IDBOpenDBRequest;
+      },
+    } as unknown as IDBFactory;
+    expect(await initSessionStore(factory)).toBe('localStorage');
+    expect(localStorage.getItem(SESSIONS_KEY)).not.toBeNull();
+    expect(loadSessions()).toHaveLength(1);
   });
 });

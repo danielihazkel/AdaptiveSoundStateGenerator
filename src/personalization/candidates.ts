@@ -3,7 +3,12 @@ import {
   STATES,
   type MentalState,
 } from '../audio/states';
-import { cloneProfile, type NoiseType, type SoundProfile } from '../audio/types';
+import {
+  cloneProfile,
+  type AmbienceType,
+  type NoiseType,
+  type SoundProfile,
+} from '../audio/types';
 
 /**
  * Bandit arms for the Phase 2 optimizer (PRD §9/§16).
@@ -29,7 +34,14 @@ import { cloneProfile, type NoiseType, type SoundProfile } from '../audio/types'
 // 2026-09: generated interval (Pomodoro) sessions now serve an arm too — the
 // arm perturbs the base sound the program then softens during breaks. Recipe
 // math is untouched, so no bump; reward.ts down-weights those sessions.
-export const CANDIDATE_SET_VERSION = 2;
+// v3: the Phase 4–5 sound (harmonic pad, bass, warmth) and the ambience
+// *type* join the menu — harmony-on/off, bass-up, warmth-up, ambience-alt.
+// Bumps are ADDITIVE: existing recipes keep their ids and math, so on upgrade
+// the posterior is rebuilt from the session records (personalizer.ts
+// ensurePersonalizationVersion) rather than reset. If a recipe's math ever
+// has to change, retire its id and introduce a new one (e.g. `beat-down-2`)
+// so a rebuild cannot resurrect stale statistics under the old name.
+export const CANDIDATE_SET_VERSION = 3;
 
 export interface CandidateSpec {
   /** Stable across releases — persisted in SessionRecord.servedArmId. */
@@ -63,6 +75,20 @@ const NOISE_SWAP: Partial<Record<NoiseType, NoiseType>> = {
   white: 'blue',
 };
 
+/** Curated "same mood, different texture" pairs for the ambience-alt arm. */
+const AMBIENCE_SWAP: Record<AmbienceType, AmbienceType> = {
+  rain: 'forest',
+  forest: 'rain',
+  ocean: 'wind',
+  wind: 'ocean',
+  space: 'fireplace',
+  fireplace: 'space',
+  cafe: 'rain',
+};
+
+/** The pad the harmony-on arm introduces where a state has none. */
+const HARMONY_ON = { level: 0.12, richness: 0.4, movement: 0.3 } as const;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -91,13 +117,17 @@ function shiftCarrier(deltaHz: number) {
 }
 
 /**
- * Arm menu per state: the identity prior plus 10 perturbations — 11 total.
- * Deliberately small: Thompson sampling needs a handful of pulls per arm to
- * differentiate, and the data rate is roughly one session a day.
+ * Arm menu per state: the identity prior plus 12–14 perturbations. Kept
+ * deliberately small: Thompson sampling needs a handful of pulls per arm to
+ * differentiate, and the data rate is roughly one session a day — so the v3
+ * arms are gated on being *audible* against the state's prior (a warmth arm
+ * on a state with neither tone nor pad would be a wasted pull).
  * carrier-low only (no carrier-high): lower carriers read as warmer/deeper,
  * the direction users most plausibly prefer over the §8 defaults.
  */
 export function candidatesFor(state: MentalState): CandidateSpec[] {
+  // Gating looks at the state's character, not a particular intensity.
+  const reference = STATES[state].buildProfile(0.5);
   const specs: CandidateSpec[] = [
     { id: PRIOR_ARM_ID, label: 'State default', apply: cloneProfile },
     { id: 'beat-down', label: 'Slower beat', apply: scaleBeat(state, 0.75) },
@@ -177,15 +207,79 @@ export function candidatesFor(state: MentalState): CandidateSpec[] {
       return next;
     },
   });
+  // (v3) Only where the state ships with ambience — on energy this was a
+  // no-op arm, a wasted pull at one session a day.
+  if (reference.ambience.enabled) {
+    specs.push({
+      id: 'ambience-off',
+      label: 'No ambience',
+      apply: (prior) => {
+        const next = cloneProfile(prior);
+        next.ambience.enabled = false;
+        return next;
+      },
+    });
+  }
+
+  // --- v3: Phase 4–5 sound ---------------------------------------------------
+  // The pad as a clean on/off contrast: states that ship with one can lose
+  // it, states without one can gain a soft, slow-moving pad.
+  if (reference.harmony.enabled) {
+    specs.push({
+      id: 'harmony-off',
+      label: 'No harmonic pad',
+      apply: (prior) => {
+        const next = cloneProfile(prior);
+        next.harmony.enabled = false;
+        return next;
+      },
+    });
+  } else {
+    specs.push({
+      id: 'harmony-on',
+      label: 'Soft harmonic pad',
+      apply: (prior) => {
+        const next = cloneProfile(prior);
+        next.harmony.enabled = true;
+        next.harmony.level = HARMONY_ON.level;
+        next.harmony.richness = HARMONY_ON.richness;
+        next.harmony.movement = HARMONY_ON.movement;
+        return next;
+      },
+    });
+  }
   specs.push({
-    id: 'ambience-off',
-    label: 'No ambience',
+    id: 'bass-up',
+    label: 'More bass',
     apply: (prior) => {
       const next = cloneProfile(prior);
-      next.ambience.enabled = false;
+      next.bass = clamp(prior.bass + 0.25, 0, 0.6);
       return next;
     },
   });
+  // Warmth only shapes the tone layer and softens the pad — inaudible otherwise.
+  if (reference.tone.enabled || reference.harmony.enabled) {
+    specs.push({
+      id: 'warmth-up',
+      label: 'Warmer tone',
+      apply: (prior) => {
+        const next = cloneProfile(prior);
+        next.tone.warmth = Math.min(1, prior.tone.warmth + 0.25);
+        return next;
+      },
+    });
+  }
+  if (reference.ambience.enabled) {
+    specs.push({
+      id: 'ambience-alt',
+      label: 'Different ambience',
+      apply: (prior) => {
+        const next = cloneProfile(prior);
+        next.ambience.type = AMBIENCE_SWAP[prior.ambience.type];
+        return next;
+      },
+    });
+  }
 
   return specs;
 }

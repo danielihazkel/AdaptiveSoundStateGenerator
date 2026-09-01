@@ -68,9 +68,25 @@ export interface Preset {
   profile: SoundProfile;
   /** Pinned to the top of its state's strip. Absent on presets saved before this existed. */
   favorite?: boolean;
+  /**
+   * The session this preset was saved from, when it was saved from the
+   * feedback screen. Lets a preset replay credit the arm that produced the
+   * sound (PRD §15: replaying a liked sound is a positive label).
+   */
+  sourceSessionId?: string;
 }
 
 export type Rating = 1 | 2 | 3 | 4 | 5;
+/** PRD §9 "Distraction" scale: 1 = not at all, 2 = a little, 3 = very. */
+export type Distraction = 1 | 2 | 3;
+
+/** What the feedback screen collects: the rating, plus two optional PRD §9 questions. */
+export interface FeedbackInput {
+  rating: Rating;
+  distraction?: Distraction;
+  /** "Would you use this again?" */
+  useAgain?: boolean;
+}
 
 /**
  * One stretch of a session played under a single arm (Phase 3, PRD §17).
@@ -119,6 +135,9 @@ export interface SessionRecord {
   feedback?: {
     rating: Rating;
     ratedAt: string; // ISO
+    /** Optional PRD §9 extras; absent on records rated before they existed. */
+    distraction?: Distraction;
+    useAgain?: boolean;
   };
   /** Bandit candidate recipe that produced the served profile (absent for presets). */
   servedArmId?: string;
@@ -194,7 +213,20 @@ export interface ArmStats {
 
 export interface PersonalizationState {
   schemaVersion: typeof SCHEMA_VERSION;
-  /** Must match candidates.ts CANDIDATE_SET_VERSION or stats are reset. */
+  /** Must match candidates.ts CANDIDATE_SET_VERSION or stats are rebuilt/reset. */
   candidateSetVersion: number;
   arms: Partial<Record<MentalState, Record<string, ArmStats>>>;
+  /**
+   * Sessions resolved per state — an undecayed count, so the cold-start gate
+   * keeps meaning "N sessions" while the arm statistics above decay toward
+   * recent evidence (bandit.ts). Absent on payloads from before decay existed;
+   * eligibleSessionCount then falls back to Σn.
+   */
+  resolved?: Partial<Record<MentalState, number>>;
+  /**
+   * Per-(state, context) arm statistics for the contextual bandit
+   * (personalization/context.ts): state → context key → arm id → stats.
+   * Optional and fully rebuildable from the session records.
+   */
+  contexts?: Partial<Record<MentalState, Record<string, Record<string, ArmStats>>>>;
 }

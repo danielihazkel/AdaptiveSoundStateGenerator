@@ -35,8 +35,10 @@ export function parseQuickStart(search: string): QuickStart | null {
  * it from the address bar. It pre-fills only — audio needs a tap, so the
  * user still presses Begin.
  */
-export function useQuickStart(selection: SetupSelection): void {
+export function useQuickStart(selection: SetupSelection, ready = true): void {
   useEffect(() => {
+    // "Play last" needs the session store; the URL is consumed once it's up.
+    if (!ready) return;
     const quick = parseQuickStart(window.location.search);
     if (!quick) return;
     const params = new URLSearchParams(window.location.search);
@@ -58,7 +60,7 @@ export function useQuickStart(selection: SetupSelection): void {
       selection.setEndAt(null);
     }
     if (quick.intensity !== undefined) selection.setIntensity(quick.intensity);
-    // Mount-only: the URL is consumed once.
+    // Runs once the store is ready; the URL is consumed exactly once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 }

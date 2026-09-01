@@ -1,5 +1,6 @@
 import { STATES } from '../audio/states';
 import type { SoundComponent, StateInsights } from '../personalization/insights';
+import { TIME_BUCKET_LABELS } from '../personalization/context';
 import type { TrendDirection } from '../personalization/trends';
 import { Sparkline } from './Sparkline';
 
@@ -105,11 +106,57 @@ export function InsightsScreen(props: {
               </div>
             )}
 
+            {insight.arms.length > 0 && (
+              <div className="insight-arms-wrap">
+                <p className="insight-label">Variations tried</p>
+                <table className="insight-arms">
+                  <thead>
+                    <tr>
+                      <th scope="col">Variation</th>
+                      <th scope="col" className="num">
+                        Sessions
+                      </th>
+                      <th scope="col" className="num">
+                        Score
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {insight.arms.map((arm) => (
+                      <tr key={arm.id} className={arm.isBest ? 'best' : undefined}>
+                        <th scope="row">
+                          {arm.label}
+                          {arm.isBest && <span className="badge">best</span>}
+                        </th>
+                        <td className="num">{arm.pulls.toFixed(1)}</td>
+                        <td className="num">
+                          {Math.round(arm.mean * 100)}%
+                          <span className="insight-ci"> ±{Math.round(arm.ci * 100)}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             <dl className="insight-facts">
               {insight.bestArm && (
                 <>
                   <dt>Best variation</dt>
                   <dd>{insight.bestArm.label}</dd>
+                </>
+              )}
+              {insight.bestByTime.length > 0 && (
+                <>
+                  <dt>Works best at</dt>
+                  <dd>
+                    {insight.bestByTime.map((b) => (
+                      <div key={b.bucket}>
+                        {TIME_BUCKET_LABELS[b.bucket].toLowerCase()} · {b.label}
+                      </div>
+                    ))}
+                  </dd>
                 </>
               )}
               {insight.preferredBeatRange && (
