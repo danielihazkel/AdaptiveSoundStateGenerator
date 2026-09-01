@@ -14,10 +14,15 @@
  * to background-tab timer throttling. Channels keep independent generator
  * state (decorrelated = wide), with slow-LFO phases offset per channel and
  * event schedulers seeded independently, so a bird or a clink lands on one
- * side. Type switches crossfade equal-power over ~100 ms inside the
- * processor, so setType is click-free.
+ * side. Type switches crossfade equal-power inside the processor — ~100 ms
+ * by default (setType is click-free), or as long as the message's
+ * `fadeSeconds` asks, so a program can dissolve rain into a fireplace over
+ * several seconds.
  */
 export const AMBIENCE_PROCESSOR_NAME = 'resonance-ambience';
+
+/** Default type crossfade; message `fadeSeconds` overrides per switch. */
+export const AMBIENCE_DEFAULT_FADE_SECONDS = 0.1;
 
 /** Types the processor can render — must cover every AmbienceType. */
 export const AMBIENCE_PROCESSOR_TYPES = [
@@ -33,7 +38,7 @@ export const AMBIENCE_PROCESSOR_TYPES = [
 /** Exported for tests only — evaluated under Node with worklet globals stubbed. */
 export const processorSource = /* js */ `
 const TYPES = ${JSON.stringify(AMBIENCE_PROCESSOR_TYPES)};
-const FADE_SECONDS = 0.1;
+const DEFAULT_FADE_SECONDS = ${AMBIENCE_DEFAULT_FADE_SECONDS};
 const TWO_PI = Math.PI * 2;
 
 function onePoleCoeff(cutoffHz) {
@@ -340,14 +345,19 @@ class AmbienceProcessor extends AudioWorkletProcessor {
     this.type = 'rain';
     this.prevType = null;
     this.fade = 1; // 0 → 1 progress of the crossfade into this.type
+    this.fadeSeconds = DEFAULT_FADE_SECONDS;
     this.states = new Map(); // "type:channel" → generator state
     this.scratch = new Float32Array(128);
     this.port.onmessage = (event) => {
-      const t = event.data && event.data.type;
+      const data = event.data || {};
+      const t = data.type;
       if (TYPES.indexOf(t) !== -1 && t !== this.type) {
         this.prevType = this.type;
         this.type = t;
         this.fade = 0;
+        const f = data.fadeSeconds;
+        this.fadeSeconds =
+          typeof f === 'number' && isFinite(f) && f > 0 ? f : DEFAULT_FADE_SECONDS;
       }
     };
   }
@@ -366,7 +376,7 @@ class AmbienceProcessor extends AudioWorkletProcessor {
     const output = outputs[0];
     const len = output[0] ? output[0].length : 128;
     const fading = this.prevType !== null && this.fade < 1;
-    const fadeStep = 1 / (FADE_SECONDS * sampleRate);
+    const fadeStep = 1 / (this.fadeSeconds * sampleRate);
     if (this.scratch.length < len) this.scratch = new Float32Array(len);
 
     for (let ch = 0; ch < output.length; ch++) {

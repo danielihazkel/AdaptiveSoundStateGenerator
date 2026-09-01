@@ -26,8 +26,12 @@ export class NoiseLayer {
     this.setType(type);
   }
 
-  setType(type: NoiseType): void {
-    this.node.port.postMessage({ type });
+  /**
+   * Switch colour; the worklet crossfades equal-power over `fadeSeconds`
+   * (default ~100 ms — click-free for a slider tap; programs pass longer).
+   */
+  setType(type: NoiseType, fadeSeconds?: number): void {
+    this.node.port.postMessage({ type, fadeSeconds });
   }
 
   setLevel(level: number, timeConstant?: number): void {

@@ -57,10 +57,15 @@ export class AmbienceLayer {
     this.applyType(type);
   }
 
-  setType(type: AmbienceType): void {
+  /**
+   * Switch type; the worklet crossfades equal-power over `fadeSeconds`
+   * (default ~100 ms — click-free for a slider tap; programs pass longer,
+   * and the synth↔recording ramps stretch to match).
+   */
+  setType(type: AmbienceType, fadeSeconds?: number): void {
     if (type === this.type) return;
     this.type = type;
-    this.applyType(type);
+    this.applyType(type, fadeSeconds);
   }
 
   setLevel(level: number, timeConstant?: number): void {
@@ -86,16 +91,22 @@ export class AmbienceLayer {
     this.gain.disconnect();
   }
 
-  private applyType(type: AmbienceType): void {
+  private applyType(type: AmbienceType, fadeSeconds?: number): void {
     this.loadGeneration += 1;
     // Always start with the synthesized version — the worklet crossfades
     // between its own types internally, so this is instant and click-free.
+    // A long program fade stretches the source ramps to the same scale
+    // (a setTargetAtTime constant lands in ~3τ).
+    const tc =
+      fadeSeconds !== undefined && fadeSeconds > 0
+        ? Math.max(SOURCE_SWITCH_TIME_CONSTANT, fadeSeconds / 3)
+        : SOURCE_SWITCH_TIME_CONSTANT;
     this.stopSample();
-    this.node.port.postMessage({ type });
-    ramp(this.ctx, this.synthGain.gain, 1, SOURCE_SWITCH_TIME_CONSTANT);
-    ramp(this.ctx, this.sampleGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
+    this.node.port.postMessage({ type, fadeSeconds });
+    ramp(this.ctx, this.synthGain.gain, 1, tc);
+    ramp(this.ctx, this.sampleGain.gain, 0, tc);
     if (hasSampleUpgrade(type)) {
-      this.loadPromise = this.startSample(type, this.loadGeneration).catch(() => {
+      this.loadPromise = this.startSample(type, this.loadGeneration, tc).catch(() => {
         // Load failures leave the synthesized version playing — never propagate.
       });
     } else {
@@ -104,7 +115,11 @@ export class AmbienceLayer {
   }
 
   /** Swaps in the recording for `type` once loaded; no-op when there is none. */
-  private async startSample(type: SampleAmbienceType, generation: number): Promise<void> {
+  private async startSample(
+    type: SampleAmbienceType,
+    generation: number,
+    timeConstant: number = SOURCE_SWITCH_TIME_CONSTANT,
+  ): Promise<void> {
     const loop = await loadAmbienceBuffer(this.ctx, type);
     if (generation !== this.loadGeneration) return; // stale — type changed again
     if (!loop) return; // no recording shipped: the synthesized version stays
@@ -118,8 +133,8 @@ export class AmbienceLayer {
     source.connect(this.sampleGain);
     source.start();
     this.sampleSource = source;
-    ramp(this.ctx, this.sampleGain.gain, 1, SOURCE_SWITCH_TIME_CONSTANT);
-    ramp(this.ctx, this.synthGain.gain, 0, SOURCE_SWITCH_TIME_CONSTANT);
+    ramp(this.ctx, this.sampleGain.gain, 1, timeConstant);
+    ramp(this.ctx, this.synthGain.gain, 0, timeConstant);
   }
 
   private stopSample(): void {

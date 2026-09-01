@@ -128,4 +128,26 @@ describe('ambience processor', () => {
     proc.port.onmessage?.({ data: { type: 'lava' } });
     expect(stats(renderSeconds(proc, 0.5)[0]).rms).toBeGreaterThan(0.05); // still rain
   });
+
+  it('crossfades over fadeSeconds when asked, ~100 ms otherwise', () => {
+    const fading = (proc: ProcessorLike) =>
+      (proc as unknown as { prevType: string | null }).prevType !== null;
+    const quick = new Processor();
+    renderSeconds(quick, 0.2);
+    quick.port.onmessage?.({ data: { type: 'fireplace' } });
+    renderSeconds(quick, 0.2);
+    expect(fading(quick)).toBe(false);
+
+    const slow = new Processor();
+    renderSeconds(slow, 0.2);
+    slow.port.onmessage?.({ data: { type: 'fireplace', fadeSeconds: 3 } });
+    renderSeconds(slow, 1);
+    expect(fading(slow)).toBe(true);
+    // Both generators run and blend during the fade — still a sane level.
+    const mid = stats(renderSeconds(slow, 1)[0]);
+    expect(mid.finite).toBe(true);
+    expect(mid.rms).toBeGreaterThan(0.05);
+    renderSeconds(slow, 1.2);
+    expect(fading(slow)).toBe(false);
+  });
 });
