@@ -1,5 +1,11 @@
 import { useState } from 'react';
 import { STATES, type MentalState } from '../audio/states';
+import {
+  AMBIENCE_TYPES,
+  NOISE_TYPES,
+  type AmbienceType,
+  type NoiseType,
+} from '../audio/types';
 import { programExportSelection } from '../export/programExport';
 import type { Mp3Exporter } from '../export/useMp3Export';
 import { newId } from '../storage/id';
@@ -54,8 +60,16 @@ function SegmentRow(props: {
 }) {
   const s = props.segment;
   const [showTexture, setShowTexture] = useState(false);
+  const [showSound, setShowSound] = useState(false);
   const last = props.index === props.count - 1;
   const edit = (change: Partial<ProgramSegment>) => props.onChange({ ...s, ...change });
+  /** Set or remove an optional override (absent = base sound). */
+  const editOverride = <K extends keyof ProgramSegment>(key: K, value: ProgramSegment[K] | undefined) => {
+    const next = { ...s };
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+    props.onChange(next);
+  };
 
   return (
     <div className="segment-row">
@@ -262,6 +276,151 @@ function SegmentRow(props: {
               value={s.warmth}
               display={pct(s.warmth)}
               onChange={(v) => edit({ warmth: v })}
+            />
+          )}
+        </>
+      )}
+
+      <button
+        type="button"
+        className="advanced-toggle"
+        aria-expanded={showSound}
+        onClick={() => setShowSound((v) => !v)}
+      >
+        {showSound ? '▾ Hide sound' : '▸ Sound'}
+      </button>
+      {showSound && (
+        <>
+          <p className="hint">
+            Absolute overrides for this phase — unchecked means the base sound.
+            Beat and carrier glide across the phase boundary; noise and
+            ambience dissolve over a few seconds.
+          </p>
+          <label className="control">
+            <span>Beat</span>
+            <label className="segment-open-toggle">
+              <input
+                type="checkbox"
+                checked={s.beatHz !== undefined}
+                onChange={(e) => editOverride('beatHz', e.target.checked ? 10 : undefined)}
+              />
+              override
+            </label>
+            <span className="value">
+              {s.beatHz === undefined ? 'base sound' : `${s.beatHz.toFixed(1)} Hz`}
+            </span>
+          </label>
+          {s.beatHz !== undefined && (
+            <Slider
+              label=""
+              min={0.5}
+              max={40}
+              step={0.5}
+              value={s.beatHz}
+              display={`${s.beatHz.toFixed(1)} Hz`}
+              onChange={(v) => edit({ beatHz: v })}
+            />
+          )}
+          <label className="control">
+            <span>Carrier</span>
+            <label className="segment-open-toggle">
+              <input
+                type="checkbox"
+                checked={s.carrierHz !== undefined}
+                onChange={(e) => editOverride('carrierHz', e.target.checked ? 200 : undefined)}
+              />
+              override
+            </label>
+            <span className="value">
+              {s.carrierHz === undefined ? 'base sound' : `${Math.round(s.carrierHz)} Hz`}
+            </span>
+          </label>
+          {s.carrierHz !== undefined && (
+            <Slider
+              label=""
+              min={60}
+              max={600}
+              step={5}
+              value={s.carrierHz}
+              display={`${Math.round(s.carrierHz)} Hz`}
+              onChange={(v) => edit({ carrierHz: v })}
+            />
+          )}
+          <label className="control">
+            <span>Noise color</span>
+            <label className="segment-open-toggle">
+              <input
+                type="checkbox"
+                checked={s.noiseType !== undefined}
+                onChange={(e) => editOverride('noiseType', e.target.checked ? 'pink' : undefined)}
+              />
+              override
+            </label>
+            {s.noiseType !== undefined ? (
+              <select
+                value={s.noiseType}
+                onChange={(e) => edit({ noiseType: e.target.value as NoiseType })}
+              >
+                {NOISE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t[0].toUpperCase() + t.slice(1)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="value">base sound</span>
+            )}
+          </label>
+          <label className="control">
+            <span>Ambience</span>
+            <label className="segment-open-toggle">
+              <input
+                type="checkbox"
+                checked={s.ambienceType !== undefined}
+                onChange={(e) => editOverride('ambienceType', e.target.checked ? 'rain' : undefined)}
+              />
+              override
+            </label>
+            {s.ambienceType !== undefined ? (
+              <select
+                value={s.ambienceType}
+                onChange={(e) => edit({ ambienceType: e.target.value as AmbienceType })}
+              >
+                {AMBIENCE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t === 'cafe' ? 'Café' : t[0].toUpperCase() + t.slice(1)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="value">base sound</span>
+            )}
+          </label>
+          <label className="control">
+            <span>Pad richness</span>
+            <label className="segment-open-toggle">
+              <input
+                type="checkbox"
+                checked={s.harmonyRichness !== undefined}
+                onChange={(e) =>
+                  editOverride('harmonyRichness', e.target.checked ? 0.5 : undefined)
+                }
+              />
+              override
+            </label>
+            <span className="value">
+              {s.harmonyRichness === undefined ? 'base sound' : pct(s.harmonyRichness)}
+            </span>
+          </label>
+          {s.harmonyRichness !== undefined && (
+            <Slider
+              label=""
+              min={0}
+              max={1}
+              step={0.01}
+              value={s.harmonyRichness}
+              display={pct(s.harmonyRichness)}
+              onChange={(v) => edit({ harmonyRichness: v })}
             />
           )}
         </>

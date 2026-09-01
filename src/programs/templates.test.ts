@@ -84,6 +84,14 @@ describe('PROGRAM_TEMPLATES', () => {
     expect(peak.ambienceScale!).toBe(
       Math.max(...program.segments.map((s) => s.ambienceScale!)),
     );
+    // The afterglow dissolves the ocean into a fireplace (Phase 9 override) —
+    // and the override survives the normalizer untouched.
+    const afterglow = program.segments[4];
+    expect(afterglow.ambienceType).toBe('fireplace');
+    expect(normalizeProgram(program).segments[4].ambienceType).toBe('fireplace');
+    for (const segment of program.segments.slice(0, 4)) {
+      expect(segment.ambienceType).toBeUndefined();
+    }
   });
 
   it('passionate peaks at 98–105 BPM with the highest complexity and strong bass', () => {

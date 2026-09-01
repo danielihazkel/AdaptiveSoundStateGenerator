@@ -41,6 +41,8 @@ interface PhaseSpec {
   bassScale: number;
   ambienceScale: number;
   warmth: number;
+  /** Phase 9: a phase may dissolve into a different ambience (absolute override). */
+  ambienceType?: SoundProfile['ambience']['type'];
 }
 
 function contextProfile(base: MentalState, intensity: number, o: BaseOverrides): SoundProfile {
@@ -78,7 +80,7 @@ function contextTemplate(
       const segments: ProgramSegment[] = phases.map((phase) => {
         const startMin = cursor;
         if (phase.endMin !== null) cursor = phase.endMin;
-        return {
+        const segment: ProgramSegment = {
           id: newId(),
           startMin,
           endMin: phase.endMin,
@@ -93,6 +95,9 @@ function contextTemplate(
           ambienceScale: phase.ambienceScale,
           warmth: phase.warmth,
         };
+        // Only materialize when present so the normalizer round-trip stays exact.
+        if (phase.ambienceType !== undefined) segment.ambienceType = phase.ambienceType;
+        return segment;
       });
       return {
         id: newId(),
@@ -265,7 +270,7 @@ const intimate = contextTemplate(
     { endMin: 12, label: 'Rising interest', description: 'Increasing rhythmic interest', intensity: 0.55, bpmRange: [82, 88], complexity: 0.3, harmonyScale: 1.1, bassScale: 0.9, ambienceScale: 1.0, warmth: 0.8 },
     { endMin: 20, label: 'Blossom', description: 'High pleasantness, richer harmony', intensity: 0.7, bpmRange: [88, 94], complexity: 0.5, harmonyScale: 1.3, bassScale: 1.0, ambienceScale: 1.1, warmth: 0.8 },
     { endMin: 30, label: 'Peak', description: 'Fullest rhythm, bass, and immersion', intensity: 0.85, bpmRange: [92, 96], complexity: 0.7, harmonyScale: 1.4, bassScale: 1.3, ambienceScale: 1.5, warmth: 0.75 },
-    { endMin: null, label: 'Afterglow', description: 'Soft sustained warmth', intensity: 0.6, bpmRange: [80, 88], complexity: 0.35, harmonyScale: 1.2, bassScale: 0.9, ambienceScale: 1.2, warmth: 0.9 },
+    { endMin: null, label: 'Afterglow', description: 'Soft sustained warmth by the fire', intensity: 0.6, bpmRange: [80, 88], complexity: 0.35, harmonyScale: 1.2, bassScale: 0.9, ambienceScale: 1.2, warmth: 0.9, ambienceType: 'fireplace' },
   ],
 );
 
