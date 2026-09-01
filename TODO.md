@@ -117,6 +117,15 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Sleep-onset detection → early wind-down: pure detector (`src/biometrics/sleepOnset.ts`: sustained + steady drop below baseline), 30 s watcher (`src/app/sleepOnsetWatcher.ts`), `SessionController.windDown()` (completed, sleep fade, no chime; `+15 min` cancels), opt-in `Settings.sleepOnsetFade` toggle in the heart-rate panel, `sleepOnsetSec` on records/checkpoints, reward full-completion + bonus, "fell asleep" history badge, "Asleep — fading out 🌙" phase copy
 - [ ] Verify by ear: program with rain→fireplace + pink→brown dissolves (no click); Space 0→1 on meditation at constant loudness; 20-min sleep-program export with space 0.3 seamless at the 15:00 chunk seam; `?simhr=sleep` fades a sleep session out after ~15 min with the toggle on
 
+## Phase 10 — Prove the flywheel (PRD §18)
+
+- [x] Held-out baseline: after cold start every `HOLDOUT_EVERY`-th explore session serves the pure state default tagged `servedBy: 'baseline'` (still trains the prior arm; locked mode never holds out) — `src/personalization/personalizer.ts`
+- [x] "Is personalization working?" — `personalizationLift` (`src/personalization/trends.ts`): default-sound vs personalized sessions, weighted means + Kish-effective-n 95 % intervals, presets/replays/customized/recovered excluded; panel on the Insights card with both bars, lift verdict, held-out count — `src/ui/InsightsScreen.tsx`
+- [x] Implicit signals: user pause count + paused time on `SessionResult`/`SessionRecord` (interruptions excluded; paused *duration* deliberately unscored), pause penalty mirroring volume tweaks; recovered sessions now yield one ×0.25 implicit credit and skip the skipped-rating penalty — `src/session/sessionController.ts`, `src/personalization/reward.ts`
+- [x] Empirical-variance posterior: `sumSq` finally used (`blendedVariance` + `MIN_POSTERIOR_STD` floor); context observations narrow the spread too — `src/personalization/bandit.ts`
+- [ ] Deliberately skipped: backgrounded-tab time as a reward signal (screen-locked listening is *expected* use); weekday/length context dimensions (too little data per cell at ~1 session/day); mood-before check-in (belongs with the settings/UX batch)
+- [ ] Verify in-browser: after ~14 explore sessions on one state the Insights card shows the flywheel panel with a held-out count; a paused-twice session scores below an unpaused twin in the variation table over time
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs
