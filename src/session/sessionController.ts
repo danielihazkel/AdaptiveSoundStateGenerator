@@ -69,6 +69,10 @@ export interface SessionResult {
   completed: boolean;
   /** Elapsed seconds at which windDown() fired (sleep onset), if it did. */
   woundDownAtSec?: number;
+  /** User-initiated pauses (PRD §9 implicit signal); interruptions excluded. */
+  pauseCount?: number;
+  /** Total wall-clock seconds spent in user-initiated pauses. */
+  pausedSec?: number;
 }
 
 export interface SessionSnapshot {
@@ -124,6 +128,10 @@ export class SessionController {
   private startedAt = '';
   /** Elapsed seconds at which windDown() pinned the end, else null. */
   private woundDownAtSec: number | null = null;
+  /** User pauses (PRD §9): count + accumulated wall time; not interruptions. */
+  private pauseCount = 0;
+  private pausedMs = 0;
+  private pausedAt: number | null = null;
   private readonly clock = new ElapsedClock();
   private interval: ReturnType<typeof setInterval> | undefined;
   private alarmTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -158,6 +166,9 @@ export class SessionController {
     this.config = config;
     this.resumeFailed = false;
     this.woundDownAtSec = null;
+    this.pauseCount = 0;
+    this.pausedMs = 0;
+    this.pausedAt = null;
     this.startedAt = new Date().toISOString();
     this.clock.start();
     this.nextCheckpointSec = config.checkpointSec ?? Infinity;
@@ -182,6 +193,8 @@ export class SessionController {
 
   async pause(): Promise<void> {
     if (this.snapshot.phase !== 'running') return;
+    this.pauseCount += 1;
+    this.pausedAt = Date.now();
     this.clock.pause();
     this.setPhase('paused');
     await this.engine.pause();
@@ -201,8 +214,16 @@ export class SessionController {
       return;
     }
     this.resumeFailed = false;
+    this.settlePause();
     this.clock.resume();
     this.setPhase('running');
+  }
+
+  /** Close an open pause span (resume, stop, or session end while paused). */
+  private settlePause(): void {
+    if (this.pausedAt === null) return;
+    this.pausedMs += Date.now() - this.pausedAt;
+    this.pausedAt = null;
   }
 
   /**
@@ -418,12 +439,16 @@ export class SessionController {
 
   private emitResult(completed: boolean): void {
     if (!this.config) return;
+    this.settlePause();
     this.onComplete?.({
       config: this.config,
       startedAt: this.startedAt,
       actualDurationSec: Math.round(this.clock.elapsedMs() / 1000),
       completed,
       ...(this.woundDownAtSec !== null ? { woundDownAtSec: this.woundDownAtSec } : {}),
+      ...(this.pauseCount > 0
+        ? { pauseCount: this.pauseCount, pausedSec: Math.round(this.pausedMs / 1000) }
+        : {}),
     });
   }
 

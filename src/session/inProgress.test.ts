@@ -40,7 +40,14 @@ describe('recoverSession', () => {
     expect(recoverSession(checkpoint({ elapsedSec: 5000 }))!.actualDurationSec).toBe(3600);
   });
 
-  it('a recovered session carries no bandit credit', () => {
-    expect(computeCredits(recoverSession(checkpoint())!)).toEqual([]);
+  it('a recovered session earns one down-weighted implicit credit (Phase 10)', () => {
+    const record = recoverSession(checkpoint({ servedArmId: 'prior', servedBy: 'bandit' }))!;
+    const credits = computeCredits(record);
+    expect(credits).toHaveLength(1);
+    expect(credits[0].armId).toBe('prior');
+    // 0.25 recovered × 0.6 implicit-only — well under a normal credit.
+    expect(credits[0].reward.weight).toBeLessThan(0.2);
+    // Without a served arm there is still nothing to credit.
+    expect(computeCredits(recoverSession(checkpoint({ servedArmId: undefined }))!)).toEqual([]);
   });
 });

@@ -128,6 +128,10 @@ export interface SessionRecord {
   customized: boolean;
   /** Count of mid-session master-volume changes — implicit signal (PRD §9). */
   volumeAdjustments: number;
+  /** User-initiated pauses (PRD §9 implicit signal); absent = 0 / pre-Phase-10. */
+  pauseCount?: number;
+  /** Wall-clock seconds spent paused by the user. */
+  pausedSec?: number;
   monoMode: boolean;
   /** Replaying a saved preset is a high-confidence positive label (PRD §15). */
   presetId?: string;

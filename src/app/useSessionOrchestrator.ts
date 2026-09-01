@@ -166,6 +166,8 @@ export function useSessionOrchestrator(deps: {
       completed: result.completed,
       customized: customizedRef.current,
       volumeAdjustments: volumeAdjustmentsRef.current,
+      pauseCount: result.pauseCount,
+      pausedSec: result.pausedSec,
       monoMode: engine?.isMonoMode ?? false,
       presetId: result.config.presetId,
       programId: sessionIntervalsRef.current ? undefined : result.config.program?.id,

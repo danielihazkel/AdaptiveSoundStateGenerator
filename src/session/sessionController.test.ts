@@ -595,3 +595,51 @@ describe('windDown (sleep-onset fade, Phase 9)', () => {
     expect(results).toEqual([]);
   });
 });
+
+describe('pause tracking (PRD §9 implicit signal)', () => {
+  let engine: ReturnType<typeof stubEngine>;
+  let controller: SessionController;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'Date'] });
+    engine = stubEngine();
+    controller = new SessionController(engine as unknown as AudioEngine);
+  });
+
+  afterEach(() => {
+    controller.dispose();
+    vi.useRealTimers();
+  });
+
+  it('reports user pauses and total paused time in the result', async () => {
+    const results: Array<{ pauseCount?: number; pausedSec?: number }> = [];
+    controller.onComplete = (r) =>
+      results.push({ pauseCount: r.pauseCount, pausedSec: r.pausedSec });
+    await controller.start(config({ durationSec: 120 }));
+    await vi.advanceTimersByTimeAsync(10_000);
+    await controller.pause();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await controller.resume();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await controller.pause();
+    await vi.advanceTimersByTimeAsync(15_000);
+    controller.stop(); // stopping while paused still settles the open span
+    expect(results).toHaveLength(1);
+    expect(results[0].pauseCount).toBe(2);
+    expect(results[0].pausedSec).toBeGreaterThanOrEqual(44);
+    expect(results[0].pausedSec).toBeLessThanOrEqual(46);
+  });
+
+  it('leaves the fields absent with no pauses and ignores interruptions', async () => {
+    const results: Array<{ pauseCount?: number }> = [];
+    controller.onComplete = (r) => results.push({ pauseCount: r.pauseCount });
+    await controller.start(config({ durationSec: 30 }));
+    // An external interruption is not a user pause.
+    engine.emitContextState('suspended');
+    expect(controller.getSnapshot().phase).toBe('interrupted');
+    await controller.resume();
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(results).toHaveLength(1);
+    expect(results[0].pauseCount).toBeUndefined();
+  });
+});

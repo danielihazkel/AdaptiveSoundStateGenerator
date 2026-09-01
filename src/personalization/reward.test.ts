@@ -274,7 +274,11 @@ describe('computeCredits (Phase 3 segments)', () => {
       expect(segmented).toHaveLength(2);
       expect(segmented[0].reward.weight).toBeCloseTo(CHECKPOINT_WEIGHT * INTERVAL_SESSION_WEIGHT, 6);
       expect(computeCredits(makeRecord({ intervals: plan, servedBy: 'preset' }))).toEqual([]);
-      expect(computeCredits(makeRecord({ intervals: plan, recovered: true }))).toEqual([]);
+      // Recovered sessions now earn one down-weighted implicit credit
+      // (Phase 10) — the interval down-weight stacks on top.
+      const recovered = computeCredits(makeRecord({ intervals: plan, recovered: true }));
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0].reward.weight).toBeLessThan(INTERVAL_SESSION_WEIGHT * 0.5);
     });
   });
 });
@@ -396,5 +400,43 @@ describe('sleep-onset wind-down (Phase 9)', () => {
     expect(woundDown.value).toBeGreaterThan(stoppedEarly.value);
     expect(woundDown.value).toBeGreaterThan(ranFully.value); // the bonus
     expect(woundDown.weight).toBe(stoppedEarly.weight);
+  });
+});
+
+describe('pause penalty and recovered partial credit (Phase 10)', () => {
+  it('penalizes repeated pauses but not the first, with a floor', () => {
+    const none = computeReward(makeRecord({ feedbackSkipped: true }))!;
+    const one = computeReward(makeRecord({ feedbackSkipped: true, pauseCount: 1, pausedSec: 60 }))!;
+    const three = computeReward(makeRecord({ feedbackSkipped: true, pauseCount: 3, pausedSec: 60 }))!;
+    const many = computeReward(makeRecord({ feedbackSkipped: true, pauseCount: 30, pausedSec: 600 }))!;
+    expect(one.value).toBeCloseTo(none.value, 12); // first pause is free
+    expect(three.value).toBeLessThan(one.value);
+    // The floor caps the damage: 30 pauses cost no more than the -0.12 floor.
+    expect(many.value).toBeLessThanOrEqual(three.value);
+    expect(many.value).toBeGreaterThanOrEqual(none.value - 0.12 - 1e-12);
+  });
+
+  it('recovered sessions yield one down-weighted implicit credit, no skip penalty', () => {
+    const recovered = makeRecord({
+      recovered: true,
+      feedbackSkipped: true,
+      completed: false,
+      actualDurationSec: 900,
+    });
+    const credits = computeCredits(recovered);
+    expect(credits).toHaveLength(1);
+    expect(credits[0].armId).toBe(recovered.servedArmId);
+    const normal = computeReward(makeRecord({ actualDurationSec: 900, completed: false }))!;
+    expect(credits[0].reward.weight).toBeLessThan(normal.weight);
+    // No skipped-rating penalty: same value as an unrated, unskipped session
+    // of the same length.
+    const unrated = computeReward(
+      makeRecord({ actualDurationSec: 900, completed: false }),
+    )!;
+    expect(credits[0].reward.value).toBeCloseTo(unrated.value, 12);
+    // Recovered presets and replays still credit nothing.
+    expect(
+      computeCredits(makeRecord({ recovered: true, servedBy: 'preset', presetId: 'p' })),
+    ).toEqual([]);
   });
 });

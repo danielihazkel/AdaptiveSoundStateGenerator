@@ -64,6 +64,22 @@ export const SKIPPED_RATING_PENALTY = 0.05;
  * a small positive nudge on top (Phase 9).
  */
 export const SLEEP_ONSET_ADJUST = 0.1;
+
+/**
+ * Pauses (PRD §9): one pause is life happening; repeated pauses read as the
+ * sound not holding the user. Same shape as the volume-tweak penalty.
+ * Time spent paused is deliberately not scored — a long lunch break says
+ * nothing about the sound.
+ */
+export const PAUSE_PENALTY_PER = 0.04;
+export const PAUSE_PENALTY_FLOOR = -0.12;
+
+/**
+ * A recovered session (the app died) still carries one honest signal: the
+ * sound played that long without being stopped. Credit the truncated
+ * implicit score at a small weight instead of discarding it.
+ */
+export const RECOVERED_WEIGHT = 0.25;
 /**
  * Replaying a session or a preset saved from one is a positive label for the
  * arm behind the sound (PRD §15): the *choice* counts REPLAY_CHOICE_VALUE,
@@ -128,7 +144,9 @@ export function scoreSession(record: SessionRecord): RewardResult {
   } else {
     value = implicit;
     weight = IMPLICIT_ONLY_WEIGHT;
-    if (record.feedbackSkipped) value -= SKIPPED_RATING_PENALTY;
+    // Recovered sessions auto-set feedbackSkipped, but nobody declined a
+    // prompt they never saw.
+    if (record.feedbackSkipped && !record.recovered) value -= SKIPPED_RATING_PENALTY;
   }
 
   if (record.sleepOnsetSec !== undefined) value += SLEEP_ONSET_ADJUST;
@@ -136,6 +154,10 @@ export function scoreSession(record: SessionRecord): RewardResult {
   value += Math.max(
     VOLUME_PENALTY_FLOOR,
     -VOLUME_PENALTY_PER_TWEAK * Math.max(record.volumeAdjustments - 1, 0),
+  );
+  value += Math.max(
+    PAUSE_PENALTY_FLOOR,
+    -PAUSE_PENALTY_PER * Math.max((record.pauseCount ?? 0) - 1, 0),
   );
 
   if (record.customized) {
@@ -169,8 +191,21 @@ export function computeCredits(record: SessionRecord, ctx: CreditContext = {}): 
 }
 
 function rawCredits(record: SessionRecord, ctx: CreditContext): ArmCredit[] {
-  // The app died mid-session: the truncated length says nothing about the sound.
-  if (record.recovered) return [];
+  // The app died mid-session: the truncated length is only a weak positive
+  // ("played this long, never stopped") — a single down-weighted implicit
+  // credit to the served arm, nothing for presets/replays.
+  if (record.recovered) {
+    if (!record.servedArmId || record.servedBy === 'preset') return [];
+    const reward = computeReward(record);
+    return reward
+      ? [
+          {
+            armId: record.servedArmId,
+            reward: { value: reward.value, weight: reward.weight * RECOVERED_WEIGHT },
+          },
+        ]
+      : [];
+  }
   if (!record.servedArmId || record.servedBy === 'preset') return replayCredit(record, ctx);
   const segments = record.segments;
   if (!segments || segments.length === 0) {
