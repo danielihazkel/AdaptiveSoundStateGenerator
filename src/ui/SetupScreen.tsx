@@ -3,6 +3,7 @@ import { BREATH_PATTERNS, type BreathingPatternId } from '../audio/breathing';
 import { STATES, type MentalState } from '../audio/states';
 import { BREATH_STATES, WAKE_UP_STATES } from '../session/sessionOptions';
 import { EXPORT_MAX_SECONDS } from '../export/renderTimeline';
+import { exportMaxSeconds } from '../export/options';
 import type { Mp3Exporter } from '../export/useMp3Export';
 import {
   DEFAULT_INTERVALS,
@@ -27,6 +28,7 @@ import {
 import { formatDuration } from './format';
 import { useRadioGroup } from './useRadioGroup';
 import { ExportRow } from './ExportRow';
+import { PresetStrip } from './PresetStrip';
 import { DurationPicker } from './DurationPicker';
 import { HeadphoneHint, NoDrivingWarning } from './SafetyNotices';
 import { ShareButton } from './ShareButton';
@@ -47,6 +49,8 @@ export function SetupScreen(props: {
   /** "End at HH:MM" mode, or null for a fixed length. */
   endAt: string | null;
   onEndAtChange: (endAt: string | null) => void;
+  openEnded: boolean;
+  onOpenEndedChange: (openEnded: boolean) => void;
   breathingPattern: BreathingPatternId;
   onBreathingPatternChange: (id: BreathingPatternId) => void;
   wakeUp: NonNullable<Settings['wakeUp']>;
@@ -80,6 +84,9 @@ export function SetupScreen(props: {
   onMinutesChange: (minutes: number) => void;
   onSelectPreset: (preset: Preset | undefined) => void;
   onDeletePreset: (id: string) => void;
+  onRenamePreset: (id: string, name: string) => void;
+  onToggleFavoritePreset: (id: string, favorite: boolean) => void;
+  onMovePreset: (id: string, direction: -1 | 1) => void;
   onSelectProgram: (program: Program | undefined) => void;
   onDeleteProgram: (id: string) => void;
   onNewProgram: (template: ProgramTemplate) => void;
@@ -114,9 +121,14 @@ export function SetupScreen(props: {
     : Math.max(chosenMinutes, programMinMinutes);
   const showIntervals = !selectedProgram && INTERVAL_STATES.has(props.state);
   const showBreathing = !selectedProgram && BREATH_STATES.has(props.state);
-  const showWakeUp = !selectedProgram && WAKE_UP_STATES.has(props.state);
-  const exportCapped = sessionMinutes * 60 > EXPORT_MAX_SECONDS;
-  const exportMinutes = exportCapped ? EXPORT_MAX_SECONDS / 60 : sessionMinutes;
+  // "Until I stop" only applies to a plain session: programs and intervals
+  // fix their own length.
+  const openEnded = props.openEnded && !selectedProgram && !intervals;
+  const showWakeUp = !selectedProgram && !openEnded && WAKE_UP_STATES.has(props.state);
+  const exportMaxSec = exportMaxSeconds(props.exporter.options, EXPORT_MAX_SECONDS);
+  const exportFormat = props.exporter.options.format.toUpperCase();
+  const exportCapped = !openEnded && sessionMinutes * 60 > exportMaxSec;
+  const exportMinutes = exportCapped ? exportMaxSec / 60 : sessionMinutes;
   const themeGroup = useRadioGroup<Theme>({
     items: THEMES,
     value: props.theme,
@@ -231,7 +243,14 @@ export function SetupScreen(props: {
           onChange={props.onMinutesChange}
           endAt={props.endAt}
           onEndAtChange={props.onEndAtChange}
+          openEnded={openEnded}
+          onOpenEndedChange={props.onOpenEndedChange}
         />
+        {openEnded && (
+          <p className="hint">
+            Plays until you press Stop — the sound settles into its steady state and stays there.
+          </p>
+        )}
         {selectedProgram && chosenMinutes < programMinMinutes && (
           <p className="hint">
             “{selectedProgram.name}” needs at least {programMinMinutes} min — the
@@ -324,37 +343,15 @@ export function SetupScreen(props: {
       {statePresets.length > 0 && (
         <section className="setup-section">
           <h2 className="setup-question">Your saved sounds</h2>
-          <div className="preset-strip">
-            {statePresets.map((preset) => (
-              <span
-                key={preset.id}
-                className={`chip preset-chip${
-                  preset.id === props.selectedPresetId ? ' selected' : ''
-                }`}
-              >
-                <button
-                  type="button"
-                  className="preset-name"
-                  aria-pressed={preset.id === props.selectedPresetId}
-                  onClick={() =>
-                    props.onSelectPreset(
-                      preset.id === props.selectedPresetId ? undefined : preset,
-                    )
-                  }
-                >
-                  {preset.name}
-                </button>
-                <button
-                  type="button"
-                  className="preset-delete"
-                  aria-label={`Delete preset ${preset.name}`}
-                  onClick={() => props.onDeletePreset(preset.id)}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
+          <PresetStrip
+            presets={statePresets}
+            selectedId={props.selectedPresetId}
+            onSelect={props.onSelectPreset}
+            onDelete={props.onDeletePreset}
+            onRename={props.onRenamePreset}
+            onToggleFavorite={props.onToggleFavoritePreset}
+            onMove={props.onMovePreset}
+          />
           {props.selectedPresetId && (
             <div className="preset-strip program-actions">
               <span className="hint">Replaying your saved sound for this state.</span>
@@ -531,9 +528,11 @@ export function SetupScreen(props: {
         >
           {props.starting
             ? 'Starting…'
-            : props.endAt !== null && !selectedProgram && !intervals
-              ? `► Begin · ends ${props.endAt}`
-              : `► Begin ${formatMinutes(sessionMinutes)}`}
+            : openEnded
+              ? '► Begin · until you stop'
+              : props.endAt !== null && !selectedProgram && !intervals
+                ? `► Begin · ends ${props.endAt}`
+                : `► Begin ${formatMinutes(sessionMinutes)}`}
         </button>
       </div>
       {props.startError && (
@@ -544,12 +543,20 @@ export function SetupScreen(props: {
 
       <ExportRow
         exporter={props.exporter}
-        label={`⤓ Download ${exportMinutes} min MP3`}
+        label={
+          openEnded
+            ? `⤓ Download ${exportFormat}`
+            : `⤓ Download ${exportMinutes} min ${exportFormat}`
+        }
         onDownload={props.onDownload}
+        disabled={openEnded}
       />
+      {openEnded && !props.exporter.progress && (
+        <p className="hint">Pick a length above to download this sound.</p>
+      )}
       {exportCapped && !props.exporter.progress && (
         <p className="hint">
-          Downloads are capped at {EXPORT_MAX_SECONDS / 60} minutes — the file will
+          {exportFormat} downloads are capped at {exportMaxSec / 60} minutes — the file will
           cover the first {exportMinutes} min of this session.
         </p>
       )}

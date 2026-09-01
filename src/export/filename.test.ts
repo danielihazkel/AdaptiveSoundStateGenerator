@@ -13,4 +13,8 @@ describe('exportFilename', () => {
   it('falls back to "session" when nothing sluggable remains', () => {
     expect(exportFilename('★☆★', 30)).toBe('resonance-session-30min.mp3');
   });
+
+  it('uses the chosen format as the extension', () => {
+    expect(exportFilename('focus', 60, 'wav')).toBe('resonance-focus-60min.wav');
+  });
 });

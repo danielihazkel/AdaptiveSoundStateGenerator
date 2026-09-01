@@ -6,7 +6,7 @@ import { chooseProfile } from '../personalization/personalizer';
 import { resolveSessionProgram } from '../app/resolveSessionProgram';
 import type { IntervalPlan } from '../programs/intervals';
 import { programMinDurationSec, type Program } from '../programs/types';
-import type { Preset, Settings } from '../storage/types';
+import type { Preset, SessionRecord, Settings } from '../storage/types';
 import type { ExportSelection } from './offlineRenderer';
 
 export interface SetupExportInput {
@@ -23,6 +23,8 @@ export interface SetupExportInput {
   /** Guided breathing / wake-up settings; absent = neither. */
   breathingPattern?: BreathingPatternId;
   wakeUp?: Settings['wakeUp'];
+  /** A history record the setup screen is replaying; its sound is what Begin would play. */
+  replay?: SessionRecord | null;
 }
 
 /**
@@ -39,16 +41,26 @@ export function resolveSetupExport(input: SetupExportInput): {
   const selectedPreset = input.presets.find(
     (p) => p.id === input.selectedPresetId && p.state === input.state,
   );
-  const resolved = resolveSessionProgram({
+  const programInput = {
     programs: input.programs,
     selectedProgramId: input.selectedProgramId,
     intervals: input.intervals ?? null,
     state: input.state,
     intensity: input.intensity,
-    presetProfile: selectedPreset?.profile,
-  });
+    baseProfile: selectedPreset?.profile,
+    replay: selectedPreset ? null : input.replay,
+  };
+  let resolved = resolveSessionProgram(programInput);
+  if (resolved.generated && !resolved.fromReplay && !selectedPreset) {
+    // Same base a session would get, served deterministically.
+    resolved = resolveSessionProgram({
+      ...programInput,
+      baseProfile: chooseProfile(input.state, input.intensity, 'locked').profile,
+    });
+  }
   const program = resolved.program;
   const preset = program ? undefined : selectedPreset;
+  const replay = program || preset ? null : (input.replay ?? null);
   const chimeEnabled = input.chimeEnabled;
   if (program) {
     return {
@@ -80,6 +92,20 @@ export function resolveSetupExport(input: SetupExportInput): {
         wakeUp,
       },
       label: preset.name,
+    };
+  }
+  if (replay && replay.state === input.state) {
+    return {
+      sel: {
+        profile: normalizeProfile(replay.profile),
+        state: input.state,
+        durationSec,
+        program: null,
+        chimeEnabled,
+        breathing,
+        wakeUp,
+      },
+      label: input.state,
     };
   }
   const served = chooseProfile(input.state, input.intensity, 'locked');

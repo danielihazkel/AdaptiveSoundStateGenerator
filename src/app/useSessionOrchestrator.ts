@@ -128,12 +128,15 @@ export function useSessionOrchestrator(deps: {
     const profile = engine?.getProfile() ?? result.config.profile;
     const served = servedRef.current;
     const meta = adaptation.getMeta();
+    // The controller clears `openEnded` when Stop turns into the end fade;
+    // the checkpoint remembers how the session was configured.
+    const openEnded = checkpointRef.current?.openEnded === true;
     const record: SessionRecord = {
       id: newId(),
       startedAt: result.startedAt,
       state: result.config.state,
       intensity: result.config.intensity,
-      plannedDurationSec: result.config.durationSec,
+      plannedDurationSec: openEnded ? result.actualDurationSec : result.config.durationSec,
       actualDurationSec: result.actualDurationSec,
       completed: result.completed,
       customized: customizedRef.current,
@@ -156,6 +159,7 @@ export function useSessionOrchestrator(deps: {
           ? result.config.breathing.id
           : undefined,
       wakeUp: result.config.wakeUp,
+      openEnded: openEnded || undefined,
     };
     appendSession(record);
     deps.onSessionStored();
@@ -230,27 +234,42 @@ export function useSessionOrchestrator(deps: {
         : deps.presets.find(
             (p) => p.id === selection.selectedPresetId && p.state === mentalState,
           );
-      const resolved = resolveSessionProgram({
+      // A history replay only applies to the state it was recorded for; a
+      // chosen preset or saved program overrides it.
+      const replayCandidate = direct ?? (selectedPreset ? null : selection.replay);
+      const programInput = {
         programs: deps.programs,
         selectedProgramId: direct ? undefined : selection.selectedProgramId,
         intervals: direct ? null : selection.intervals,
         state: mentalState,
         intensity,
-        presetProfile: selectedPreset?.profile,
-      });
+        baseProfile: selectedPreset?.profile,
+        replay: replayCandidate,
+      };
+      let resolved = resolveSessionProgram(programInput);
+      // A generated interval program with no preset and no replay under it
+      // is built on the bandit's served sound: the arm perturbs the base the
+      // program then shapes, so interval sessions train the personalizer
+      // like plain ones. Saved programs snapshot a user-authored sound the
+      // arms were never calibrated against, so they stay out of the bandit.
+      let servedForProgram: ServedProfile | null = null;
+      if (resolved.generated && !resolved.fromReplay && !selectedPreset) {
+        servedForProgram = chooseProfile(mentalState, intensity, modeFor(settings, mentalState));
+        resolved = resolveSessionProgram({ ...programInput, baseProfile: servedForProgram.profile });
+      }
       const program = resolved.program;
       // A saved program owns the sound; a generated interval program is
       // built on the preset, which stays attributed.
       const preset = program && !resolved.generated ? undefined : selectedPreset;
-      sessionIntervalsRef.current = resolved.generated ? selection.intervals : null;
-      // A history replay only applies to the state it was recorded for.
-      const replaying = direct ?? (!program && !preset ? selection.replay : null);
+      sessionIntervalsRef.current = resolved.intervals;
+      const replaying = resolved.fromReplay || (!program && !preset) ? replayCandidate : null;
       let profile: SoundProfile;
       if (program) {
-        // Program sessions play the program's snapshot; like presets they
-        // bypass the bandit entirely.
+        // Program sessions play the program's snapshot. Saved programs and
+        // preset/replay-based interval programs bypass the bandit; an
+        // interval program on a served sound credits that arm.
         profile = normalizeProfile(program.baseProfile);
-        servedRef.current = null;
+        servedRef.current = servedForProgram;
       } else if (preset) {
         profile = cloneProfile(preset.profile);
         servedRef.current = null;
@@ -289,18 +308,30 @@ export function useSessionOrchestrator(deps: {
       biometrics.resetForSession();
 
       // Presets adapt away from the exact sound the user chose — never do
-      // that. The toggle turns checkpoints off entirely. Program sessions
-      // never adapt either (v1): the program owns the session's shape.
+      // that. The toggle turns checkpoints off entirely. Saved programs never
+      // adapt: the program owns the session's shape. A generated interval
+      // program on a served sound does — the arm swap replaces the base the
+      // program keeps shaping (a check-in may land during a break; v1
+      // accepts that).
       const adaptationOn =
-        !preset && !program && !replaying && settings.adaptationEnabled !== false;
+        !preset &&
+        !replaying &&
+        (!program || resolved.generated) &&
+        settings.adaptationEnabled !== false;
       // A program's closed phases must all play out; extra time extends the
       // open-ended final phase.
+      // "Until I stop": plain sessions only. A replayed open-ended session
+      // is open-ended again; a program or preset fixes its own length.
+      const openEnded = !program && (direct ? direct.openEnded === true : selection.openEnded);
       const durationSec = program
         ? resolved.generated
           ? programMinDurationSec(program)
           : Math.max(minutes * 60, programMinDurationSec(program))
         : minutes * 60;
-      const wakeUp = program ? undefined : (wakeUpFor(sessionState, settings.wakeUp, durationSec) ?? undefined);
+      const wakeUp =
+        program || openEnded
+          ? undefined
+          : (wakeUpFor(sessionState, settings.wakeUp, durationSec) ?? undefined);
       setLiveProfile(profile);
       const controller = controllerRef.current!;
       await controller.start({
@@ -316,6 +347,7 @@ export function useSessionOrchestrator(deps: {
         wakeUp,
         checkpointSec: adaptationOn ? ADAPT_INTERVAL_SEC : undefined,
         endGuardSec: END_GUARD_SEC,
+        openEnded,
       });
       checkpointRef.current = {
         startedAt: new Date().toISOString(),
@@ -332,6 +364,7 @@ export function useSessionOrchestrator(deps: {
         servedBy: preset ? 'preset' : servedRef.current?.servedBy,
         breathingPattern: breathing && breathing.id !== 'pulse' ? breathing.id : undefined,
         wakeUp,
+        openEnded: openEnded || undefined,
       };
       startCheckpointing(controller);
       deps.onSessionStarted();

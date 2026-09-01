@@ -29,9 +29,12 @@ export function SessionView(props: {
   const stateDef = STATES[props.mentalState];
   const durationSec = snapshot.elapsedSec + snapshot.remainingSec;
   // Plain sessions can grow by +15 min up to the longest "End at" span.
-  const extendable = !props.program && durationSec + EXTEND_SEC <= MAX_END_AT_MINUTES * 60;
+  const extendable =
+    !props.program && !snapshot.openEnded && durationSec + EXTEND_SEC <= MAX_END_AT_MINUTES * 60;
   useSessionPlatform(props.controller, snapshot, {
-    title: `${stateDef.label} · ${Math.round(durationSec / 60)} min`,
+    title: snapshot.openEnded
+      ? `${stateDef.label} · until you stop`
+      : `${stateDef.label} · ${Math.round(durationSec / 60)} min`,
     subtitle: props.program ? `Resonance · ${props.program.name}` : undefined,
     durationSec,
   });

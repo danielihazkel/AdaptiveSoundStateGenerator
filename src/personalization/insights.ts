@@ -4,6 +4,14 @@ import type { PersonalizationState, SessionRecord } from '../storage/types';
 import { posteriorFor } from './bandit';
 import { candidatesFor } from './candidates';
 import { scoreSession } from './reward';
+import {
+  bestFoundAfter,
+  completionRate,
+  ratingTrend,
+  trendDirection,
+  type TrendDirection,
+  type TrendPoint,
+} from './trends';
 
 /**
  * Personal sound profile aggregations (PRD §10) — pure functions over session
@@ -18,7 +26,26 @@ export const MIN_NOISE_SESSIONS = 3;
 /** Sessions scoring at least this count as "worked" for volume preference. */
 export const GOOD_SESSION_SCORE = 0.5;
 
-export type SoundComponent = 'binaural' | 'noise' | 'isochronic' | 'tone' | 'ambience';
+export type SoundComponent =
+  | 'binaural'
+  | 'noise'
+  | 'isochronic'
+  | 'rhythm'
+  | 'tone'
+  | 'harmony'
+  | 'bass'
+  | 'ambience';
+
+export const SOUND_COMPONENTS: readonly SoundComponent[] = [
+  'binaural',
+  'noise',
+  'isochronic',
+  'rhythm',
+  'tone',
+  'harmony',
+  'bass',
+  'ambience',
+];
 
 export interface ComponentEffectiveness {
   component: SoundComponent;
@@ -40,6 +67,13 @@ export interface StateInsights {
   /** Median master volume of sessions that worked. */
   preferredVolume: number | null;
   typicalDurationMin: number | null;
+  /** Session quality over time (PRD §18 — the rating trend is the core proof point). */
+  trend: TrendPoint[];
+  trendDirection: TrendDirection;
+  /** Share of sessions that ran to their end; null with nothing to count. */
+  completionRate: number | null;
+  /** Session count at which the current best variation was first played and settled. */
+  bestFoundAfter: number | null;
 }
 
 interface Scored {
@@ -68,7 +102,16 @@ function weightedPercentile(pairs: Array<[number, number]>, p: number): number {
 }
 
 function componentEnabled(record: SessionRecord, component: SoundComponent): boolean {
-  return record.profile[component].enabled;
+  const p = record.profile;
+  switch (component) {
+    case 'rhythm':
+      // A BPM pattern grid rather than a plain pulse — only audible with the pulse on.
+      return p.isochronic.enabled && p.rhythm.mode !== 'simple';
+    case 'bass':
+      return p.bass > 0;
+    default:
+      return p[component].enabled;
+  }
 }
 
 function computeStateInsights(
@@ -79,6 +122,8 @@ function computeStateInsights(
   const ratings = scored
     .filter((s) => s.record.feedback)
     .map((s) => s.record.feedback!.rating);
+  const records = scored.map((s) => s.record);
+  const trend = ratingTrend(records);
 
   // Best-known variation from the bandit posterior, once an arm has real data.
   let bestArm: StateInsights['bestArm'] = null;
@@ -92,9 +137,7 @@ function computeStateInsights(
     }
   }
 
-  const componentEffectiveness: ComponentEffectiveness[] = (
-    ['binaural', 'noise', 'isochronic', 'tone', 'ambience'] as SoundComponent[]
-  ).map((component) => {
+  const componentEffectiveness: ComponentEffectiveness[] = SOUND_COMPONENTS.map((component) => {
     const on = scored.filter((s) => componentEnabled(s.record, component));
     const totalWeight = on.reduce((acc, s) => acc + s.weight, 0);
     return {
@@ -154,6 +197,10 @@ function computeStateInsights(
         .map((s) => s.record.profile.masterVolume),
     ),
     typicalDurationMin: median(scored.map((s) => s.record.plannedDurationSec / 60)),
+    trend,
+    trendDirection: trendDirection(trend),
+    completionRate: completionRate(records),
+    bestFoundAfter: bestFoundAfter(records, bestArm?.id),
   };
 }
 

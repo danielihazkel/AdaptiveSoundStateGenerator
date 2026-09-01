@@ -3,18 +3,33 @@ import { STATES } from './audio/states';
 import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
 import type { Program } from './programs/types';
-import { deletePreset, deleteProgram, newId, savePreset, saveProgram } from './storage/storage';
+import {
+  deletePreset,
+  deleteProgram,
+  movePresetInList,
+  newId,
+  renamePreset,
+  savePreset,
+  saveProgram,
+  setPresetFavorite,
+} from './storage/storage';
+import type { SharePayload } from './share/shareLink';
 import { DEFAULT_WAKE_UP, modeFor, type Theme } from './storage/types';
 import { BiometricsPanel } from './ui/BiometricsPanel';
 import { CoachInput } from './ui/CoachInput';
 import { DataPanel } from './ui/DataPanel';
 import { FeedbackScreen } from './ui/FeedbackScreen';
 import { MorningPromptModal } from './ui/MorningPrompt';
+import { OnboardingTour } from './ui/OnboardingTour';
+import { shouldAutoCompleteTour, shouldShowTour } from './ui/onboarding';
 import { DisclaimerModal, FooterDisclaimer } from './ui/SafetyNotices';
 import { SetupScreen } from './ui/SetupScreen';
 import { SessionView } from './app/SessionView';
 import { setReloadBusy } from './app/reloadGate';
 import type { Screen } from './app/types';
+import { importSharePayload } from './app/importShare';
+import { screenForHash } from './app/router';
+import { useHashScreen } from './app/useHashScreen';
 import { useAdaptationLoop } from './app/useAdaptationLoop';
 import { useBiometrics } from './app/useBiometrics';
 import { useCoach } from './app/useCoach';
@@ -76,24 +91,55 @@ function applyTheme(theme: Theme): void {
     ?.setAttribute('content', THEME_COLOR[resolved]);
 }
 
+/** `?lab` opens the lab directly; otherwise the hash names the screen. The editor needs a draft, so it can't be a landing screen. */
+function initialScreen(): Screen {
+  if (new URLSearchParams(window.location.search).has('lab')) return 'lab';
+  const fromHash = screenForHash(window.location.hash);
+  return fromHash && fromHash !== 'programEditor' ? fromHash : 'setup';
+}
+
 /**
  * Screen routing and wiring. The behavior lives in src/app/: stored data,
  * setup selection, the coach, biometrics, the adaptation loop, and the
  * session orchestrator that owns the audio engine.
  */
 export function App() {
-  const [screen, setScreen] = useState<Screen>(() =>
-    new URLSearchParams(window.location.search).has('lab') ? 'lab' : 'setup',
-  );
   /** Draft under edit in the program editor screen. */
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
+  // Mirrors the draft synchronously so a navigation issued in the same tick
+  // as `setEditingProgram` (open editor) sees it.
+  const editingProgramRef = useRef<Program | null>(null);
+  const setDraft = (program: Program | null) => {
+    editingProgramRef.current = program;
+    setEditingProgram(program);
+  };
+  // The orchestrator and the adaptation loop reference each other; the loop
+  // reaches the orchestrator through a ref that is synced after each commit
+  // (never written during render), and only ever dereferences it at call
+  // time (checkpoints). The screen transition guard reads it the same way.
+  const sessionRef = useRef<SessionOrchestrator | null>(null);
+  const { screen, navigate } = useHashScreen({
+    initial: initialScreen,
+    // Every screen change — app button or browser Back — passes through here,
+    // so leaving the lab or the editor cleans up the same way either way.
+    transition: (from, to) => {
+      if (from === 'lab') sessionRef.current?.releaseLab();
+      if (from === 'programEditor') setDraft(null);
+      if (to === 'lab' && !sessionRef.current?.prepareLab()) return false;
+      if (to === 'programEditor' && !editingProgramRef.current) return false;
+      return true;
+    },
+  });
 
   const data = useStoredData(screen);
   const { settings, updateSettings, presets, programs } = data;
   const coach = useCoach();
   const selection = useSetupSelection({ onUserOverride: coach.reset });
   const biometrics = useBiometrics();
-  const exporter = useMp3Export();
+  const exporter = useMp3Export({
+    options: settings.export,
+    onOptionsChange: (next) => updateSettings({ export: next }),
+  });
   const tabGuard = useTabGuard();
   const share = useShareImport();
   useQuickStart(selection);
@@ -109,9 +155,9 @@ export function App() {
     return () => media.removeEventListener('change', onChange);
   }, [theme]);
 
-  // Screens are conditionally rendered, not routed — move focus to the
-  // heading on each change so keyboard and screen-reader users land at the
-  // top of the new screen instead of on a vanished button.
+  // Screens are conditionally rendered (the hash only mirrors them) — move
+  // focus to the heading on each change so keyboard and screen-reader users
+  // land at the top of the new screen instead of on a vanished button.
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstRenderRef = useRef(true);
   useEffect(() => {
@@ -122,11 +168,6 @@ export function App() {
     headingRef.current?.focus();
   }, [screen]);
 
-  // The orchestrator and the adaptation loop reference each other; the loop
-  // reaches the orchestrator through a ref that is synced after each commit
-  // (never written during render), and only ever dereferences it at call
-  // time (checkpoints).
-  const sessionRef = useRef<SessionOrchestrator | null>(null);
   const adaptation = useAdaptationLoop({
     getEngine: () => sessionRef.current?.getEngine() ?? null,
     getController: () => sessionRef.current?.getController() ?? null,
@@ -143,8 +184,8 @@ export function App() {
     coach,
     onSessionStored: data.bumpData,
     onPresetSaved: data.refreshPresets,
-    onFinished: setScreen,
-    onSessionStarted: () => setScreen('session'),
+    onFinished: navigate,
+    onSessionStarted: () => navigate('session'),
   });
   useLayoutEffect(() => {
     sessionRef.current = session;
@@ -154,8 +195,17 @@ export function App() {
     morningPrompt: data.morningPrompt,
     setMorningPrompt: data.setMorningPrompt,
     bumpData: data.bumpData,
-    onDone: () => setScreen('setup'),
+    onDone: () => navigate('setup'),
   });
+
+  // First-run tour: new users see it once after the disclaimer; anyone with
+  // sessions already predates it and just gets it marked as seen.
+  const showTour = screen === 'setup' && shouldShowTour(settings, data.historyAvailable);
+  useEffect(() => {
+    if (shouldAutoCompleteTour(settings, data.historyAvailable)) {
+      updateSettings({ onboardingCompletedAt: new Date().toISOString() });
+    }
+  }, [settings, data.historyAvailable, updateSettings]);
 
   // Closing the tab mid-session drops the session record; mid-export it
   // drops the render. Ask first.
@@ -187,6 +237,7 @@ export function App() {
       intervals: selection.intervals,
       breathingPattern: settings.breathingPattern,
       wakeUp: settings.wakeUp,
+      replay: selection.replay,
     });
     void exporter.start(sel, label);
   };
@@ -199,22 +250,27 @@ export function App() {
     void session.begin({ replayOf: data.lastSession });
   };
 
-  const openLab = () => {
-    if (session.prepareLab()) setScreen('lab');
-  };
-
-  const closeLab = () => {
-    session.releaseLab();
-    setScreen('setup');
+  const openEditor = (program: Program) => {
+    setDraft(program);
+    navigate('programEditor');
   };
 
   const handleSaveProgram = (program: Program) => {
     saveProgram(program);
     data.refreshPrograms();
     selection.selectProgram(program);
-    setEditingProgram(null);
-    setScreen('setup');
+    navigate('setup');
   };
+
+  // Links and saved share files land in the same place.
+  const importShare = (payload: SharePayload) =>
+    importSharePayload(payload, {
+      refreshPrograms: data.refreshPrograms,
+      refreshPresets: data.refreshPresets,
+      selectProgram: selection.selectProgram,
+      selectState: selection.selectState,
+      selectPreset: selection.selectPreset,
+    });
 
   const lastSession = session.getLastSession();
   const controller = session.getController();
@@ -229,28 +285,22 @@ export function App() {
         />
       )}
 
-      {settings.disclaimerAcknowledgedAt && data.morningPrompt && screen === 'setup' && (
+      {showTour && (
+        <OnboardingTour
+          onDone={() => updateSettings({ onboardingCompletedAt: new Date().toISOString() })}
+        />
+      )}
+
+      {settings.disclaimerAcknowledgedAt && !showTour && data.morningPrompt && screen === 'setup' && (
         <MorningPromptModal onRate={feedback.morningRate} onDismiss={feedback.morningDismiss} />
       )}
 
-      {settings.disclaimerAcknowledgedAt && !data.morningPrompt && share.pending && screen === 'setup' && (
+      {settings.disclaimerAcknowledgedAt && !showTour && !data.morningPrompt && share.pending && screen === 'setup' && (
         <ShareImportModal
           pending={share.pending}
           onDismiss={share.dismiss}
           onImport={(payload) => {
-            const now = new Date().toISOString();
-            if (payload.kind === 'program') {
-              const program = { ...payload.program, id: newId(), createdAt: now };
-              saveProgram(program);
-              data.refreshPrograms();
-              selection.selectProgram(program);
-            } else {
-              const preset = { id: newId(), createdAt: now, ...payload.preset };
-              savePreset(preset);
-              data.refreshPresets();
-              selection.selectState(preset.state);
-              selection.selectPreset(preset);
-            }
+            importShare(payload);
             share.dismiss();
           }}
         />
@@ -323,6 +373,8 @@ export function App() {
           minutes={selection.minutes}
           endAt={selection.endAt}
           onEndAtChange={selection.setEndAt}
+          openEnded={selection.openEnded}
+          onOpenEndedChange={selection.setOpenEnded}
           breathingPattern={settings.breathingPattern ?? 'pulse'}
           onBreathingPatternChange={(id) => updateSettings({ breathingPattern: id })}
           wakeUp={settings.wakeUp ?? DEFAULT_WAKE_UP}
@@ -346,21 +398,29 @@ export function App() {
             data.refreshPresets();
             selection.forgetPreset(id);
           }}
+          onRenamePreset={(id, name) => {
+            renamePreset(id, name);
+            data.refreshPresets();
+          }}
+          onToggleFavoritePreset={(id, favorite) => {
+            setPresetFavorite(id, favorite);
+            data.refreshPresets();
+          }}
+          onMovePreset={(id, direction) => {
+            movePresetInList(id, direction);
+            data.refreshPresets();
+          }}
           onSelectProgram={selection.selectProgram}
           onDeleteProgram={(id) => {
             deleteProgram(id);
             data.refreshPrograms();
             selection.forgetProgram(id);
           }}
-          onNewProgram={(template) => {
-            setEditingProgram(template.build(selection.mentalState, selection.intensity));
-            setScreen('programEditor');
-          }}
-          onEditProgram={(program) => {
-            setEditingProgram(program);
-            setScreen('programEditor');
-          }}
-          onOpenLab={openLab}
+          onNewProgram={(template) =>
+            openEditor(template.build(selection.mentalState, selection.intensity))
+          }
+          onEditProgram={openEditor}
+          onOpenLab={() => navigate('lab')}
           onToggleMono={(mono) => {
             updateSettings({ monoMode: mono });
             session.setMonoMode(mono);
@@ -378,7 +438,7 @@ export function App() {
           replay={selection.replay}
           onClearReplay={selection.clearReplay}
           startError={session.startError}
-          onShowHistory={() => setScreen('history')}
+          onShowHistory={() => navigate('history')}
           onModeChange={(mode) =>
             updateSettings({
               personalizationMode: {
@@ -387,7 +447,7 @@ export function App() {
               },
             })
           }
-          onShowInsights={() => setScreen('insights')}
+          onShowInsights={() => navigate('insights')}
           onBegin={() => void session.begin()}
           exporter={exporter}
           onDownload={handleDownload}
@@ -409,11 +469,11 @@ export function App() {
         />
       )}
 
-      {screen === 'setup' && <DataPanel onImported={data.reloadAll} />}
+      {screen === 'setup' && <DataPanel onImported={data.reloadAll} onImportShare={importShare} />}
 
       <Suspense fallback={SCREEN_LOADING}>
       {screen === 'insights' && (
-        <InsightsScreen insights={data.insights} onBack={() => setScreen('setup')} />
+        <InsightsScreen insights={data.insights} onBack={() => navigate('setup')} />
       )}
 
       {screen === 'history' && (
@@ -423,13 +483,13 @@ export function App() {
           presets={presets}
           onReplay={(record) => {
             selection.replayFrom(record);
-            setScreen('setup');
+            navigate('setup');
           }}
           onUseProgram={(program) => {
             selection.selectProgram(program);
-            setScreen('setup');
+            navigate('setup');
           }}
-          onBack={() => setScreen('setup')}
+          onBack={() => navigate('setup')}
         />
       )}
 
@@ -439,10 +499,7 @@ export function App() {
           exporter={exporter}
           chimeEnabled={settings.chimeEnabled}
           onSave={handleSaveProgram}
-          onCancel={() => {
-            setEditingProgram(null);
-            setScreen('setup');
-          }}
+          onCancel={() => navigate('setup')}
         />
       )}
 
@@ -465,7 +522,7 @@ export function App() {
             });
             data.refreshPresets();
           }}
-          onBack={closeLab}
+          onBack={() => navigate('setup')}
         />
       )}
       </Suspense>

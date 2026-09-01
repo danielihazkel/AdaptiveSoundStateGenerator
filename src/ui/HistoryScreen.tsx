@@ -101,7 +101,7 @@ export function HistoryScreen(props: {
                 )
               ) : (
                 <button type="button" className="chip" onClick={() => props.onReplay(s)}>
-                  ↺ Replay
+                  ↺ {s.intervals ? 'Replay intervals' : 'Replay'}
                 </button>
               )}
             </div>

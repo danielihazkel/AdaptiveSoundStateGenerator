@@ -146,7 +146,7 @@ export function ProgramRunPanel(props: {
       {!active && selection !== '' && (
         <ExportRow
           exporter={props.exporter}
-          label="⤓ Download MP3"
+          label={`⤓ Download ${props.exporter.options.format.toUpperCase()}`}
           onDownload={() => {
             const program = resolveProgram();
             if (!program) return;

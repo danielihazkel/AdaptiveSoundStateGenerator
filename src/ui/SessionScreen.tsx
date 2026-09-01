@@ -38,7 +38,7 @@ export function SessionScreen(props: {
   };
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const { phase, remainingSec, elapsedSec, resumeFailed } = props.snapshot;
+  const { phase, remainingSec, elapsedSec, resumeFailed, openEnded } = props.snapshot;
   // elapsedSec is already whole seconds, so this coalesces the two 500 ms
   // ticks per second into one evaluation.
   const { programPhase, programBpm } = useMemo(
@@ -59,14 +59,14 @@ export function SessionScreen(props: {
           {props.stateDef.emoji} {props.stateDef.label}
           {props.program && ` · ${props.program.name}`}
         </span>
-        <div className="session-clock" aria-label="Time remaining">
-          {formatClock(remainingSec)}
+        <div className="session-clock" aria-label={openEnded ? 'Time elapsed' : 'Time remaining'}>
+          {formatClock(openEnded ? elapsedSec : remainingSec)}
         </div>
         <p className="hint session-phase" aria-live="polite">
           {phase === 'paused' && 'Paused'}
           {phase === 'interrupted' && 'Interrupted'}
           {phase === 'ending' && 'Winding down…'}
-          {phase === 'running' && 'Playing'}
+          {phase === 'running' && (openEnded ? 'Playing · until you stop' : 'Playing')}
           {phase === 'alarm' && 'Time to wake up'}
         </p>
         {programPhase && (

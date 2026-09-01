@@ -18,11 +18,12 @@ export function recoverSession(checkpoint: InProgressSession): SessionRecord | n
     startedAt: checkpoint.startedAt,
     state: checkpoint.state,
     intensity: checkpoint.intensity,
-    plannedDurationSec: checkpoint.plannedDurationSec,
-    actualDurationSec: Math.min(
-      Math.round(checkpoint.elapsedSec),
-      checkpoint.plannedDurationSec,
-    ),
+    plannedDurationSec: checkpoint.openEnded
+      ? Math.round(checkpoint.elapsedSec)
+      : checkpoint.plannedDurationSec,
+    actualDurationSec: checkpoint.openEnded
+      ? Math.round(checkpoint.elapsedSec)
+      : Math.min(Math.round(checkpoint.elapsedSec), checkpoint.plannedDurationSec),
     completed: false,
     customized: false,
     volumeAdjustments: 0,
@@ -36,6 +37,7 @@ export function recoverSession(checkpoint: InProgressSession): SessionRecord | n
     servedBy: checkpoint.servedBy,
     breathingPattern: checkpoint.breathingPattern,
     wakeUp: checkpoint.wakeUp,
+    openEnded: checkpoint.openEnded,
     feedbackSkipped: true,
     recovered: true,
   };

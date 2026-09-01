@@ -47,6 +47,12 @@ export interface SessionConfig {
   checkpointSec?: number;
   /** No checkpoint fires with less than this much session time left. */
   endGuardSec?: number;
+  /**
+   * "Until I stop": no planned end. `durationSec` is ignored; Stop is the
+   * natural end (a short fade, `completed: true`) rather than an early stop.
+   * Plain sessions only — never with a program, a wake-up, or an "End at".
+   */
+  openEnded?: boolean;
 }
 
 export interface CheckpointInfo {
@@ -66,7 +72,10 @@ export interface SessionResult {
 export interface SessionSnapshot {
   phase: SessionPhase;
   elapsedSec: number;
+  /** Always 0 for an open-ended session. */
   remainingSec: number;
+  /** The session has no planned end (SessionConfig.openEnded). */
+  openEnded?: boolean;
   /** The last resume() could not restart audio (context refused to resume). */
   resumeFailed?: boolean;
 }
@@ -78,6 +87,16 @@ export const EXTEND_SEC = 15 * 60;
 export const SNOOZE_SEC = 5 * 60;
 /** The alarm gives up (session completes) if nobody dismisses it. */
 export const ALARM_MAX_SEC = 120;
+/**
+ * Open-ended sessions evaluate the state's arc as if the session were this
+ * long, but never past ARC_PLATEAU_T — the arc ramps in normally and then
+ * holds its plateau; its ease-down is designed to land in an end fade that
+ * never comes.
+ */
+export const OPEN_ARC_REFERENCE_SEC = 45 * 60;
+export const ARC_PLATEAU_T = 0.75;
+/** Stopping an open-ended session fades over the state's end fade, capped here. */
+export const OPEN_ENDED_STOP_FADE_MAX_SEC = 10;
 
 /**
  * Owns the session lifecycle: wall-clock timer, pause/resume, interruption
@@ -187,7 +206,8 @@ export class SessionController {
   async extend(sec: number = EXTEND_SEC): Promise<void> {
     const phase = this.snapshot.phase;
     const config = this.config;
-    if (!config || config.program || (phase !== 'running' && phase !== 'ending')) return;
+    if (!config || config.program || config.openEnded) return;
+    if (phase !== 'running' && phase !== 'ending') return;
     config.durationSec += sec;
     if (phase === 'ending') {
       await this.engine.start();
@@ -220,7 +240,11 @@ export class SessionController {
     this.setPhase('running');
   }
 
-  /** Early stop — counts as an implicit negative-ish signal (PRD §9). */
+  /**
+   * Early stop — counts as an implicit negative-ish signal (PRD §9). For an
+   * open-ended session Stop *is* the planned end: the session winds down
+   * with its end fade and completes.
+   */
   stop(): void {
     const phase = this.snapshot.phase;
     if (phase === 'alarm') {
@@ -228,9 +252,25 @@ export class SessionController {
       return;
     }
     if (phase !== 'running' && phase !== 'paused' && phase !== 'interrupted') return;
+    const config = this.config;
+    if (config?.openEnded && phase === 'running') {
+      // Hand the end to tick(): pin the duration to "now + fade" and let the
+      // ordinary ending → finished path (and its chime rule) play out.
+      const fade = Math.min(resolveEndFadeSeconds(config.state), OPEN_ENDED_STOP_FADE_MAX_SEC);
+      config.durationSec = this.elapsedMs() / 1000 + fade;
+      config.openEnded = false;
+      this.tick();
+      return;
+    }
     this.clock.pause();
     clearInterval(this.interval);
     this.engine.stop();
+    if (config?.openEnded) {
+      // Paused or interrupted: nothing is audible to fade; still a natural end.
+      this.setPhase('finished');
+      this.emitResult(true);
+      return;
+    }
     this.setPhase('stoppedEarly');
     this.emitResult(false);
   }
@@ -259,7 +299,12 @@ export class SessionController {
     const config = this.config;
     if (!config) return;
 
-    const remainingMs = config.durationSec * 1000 - this.elapsedMs();
+    // An open-ended session has no end to approach: its remaining time is
+    // treated as infinite, so neither ending branch below can fire and the
+    // end guard never blocks a checkpoint.
+    const remainingMs = config.openEnded
+      ? Infinity
+      : config.durationSec * 1000 - this.elapsedMs();
     const wakeUp = !config.program && config.wakeUp !== undefined;
     const fadeSeconds = resolveEndFadeSeconds(config.state, wakeUp);
 
@@ -319,7 +364,7 @@ export class SessionController {
         }
       } else {
         this.engine.setArcModulation(
-          evaluateArc(this.arc(config), this.elapsedMs() / (config.durationSec * 1000)),
+          evaluateArc(this.arc(config), this.arcT(config)),
           EVOLUTION_TIME_CONSTANT,
         );
       }
@@ -329,6 +374,13 @@ export class SessionController {
 
   private arc(config: SessionConfig) {
     return resolveArc(config.state, { wakeUp: config.wakeUp, durationSec: config.durationSec });
+  }
+
+  /** Normalised arc time: elapsed over the planned length, or the open-ended plateau hold. */
+  private arcT(config: SessionConfig): number {
+    const elapsedSec = this.elapsedMs() / 1000;
+    if (config.openEnded) return Math.min(elapsedSec / OPEN_ARC_REFERENCE_SEC, ARC_PLATEAU_T);
+    return elapsedSec / config.durationSec;
   }
 
   private elapsedMs(): number {
@@ -350,14 +402,15 @@ export class SessionController {
   }
 
   private publish(phase: SessionPhase = this.snapshot.phase): void {
-    const elapsedSec = Math.min(
-      Math.round(this.elapsedMs() / 1000),
-      this.config?.durationSec ?? 0,
-    );
+    const openEnded = this.config?.openEnded === true;
+    const elapsedSec = openEnded
+      ? Math.round(this.elapsedMs() / 1000)
+      : Math.min(Math.round(this.elapsedMs() / 1000), this.config?.durationSec ?? 0);
     this.snapshot = {
       phase,
       elapsedSec,
-      remainingSec: Math.max((this.config?.durationSec ?? 0) - elapsedSec, 0),
+      remainingSec: openEnded ? 0 : Math.max((this.config?.durationSec ?? 0) - elapsedSec, 0),
+      ...(openEnded ? { openEnded: true } : {}),
       ...(this.resumeFailed ? { resumeFailed: true } : {}),
     };
     for (const listener of this.listeners) listener();

@@ -20,6 +20,12 @@ export const IMPLICIT_BASE = 0.15;
 export const IMPLICIT_SPAN = 0.5;
 /** Unrated sessions carry reduced confidence. */
 export const IMPLICIT_ONLY_WEIGHT = 0.6;
+/**
+ * An open-ended session has no planned length to complete. Staying this long
+ * by choice counts as a full completion; leaving sooner scales down the same
+ * way an early stop does.
+ */
+export const OPEN_ENDED_TARGET_SEC = 25 * 60;
 /** One volume tweak is settling in; each further tweak signals wrongness. */
 export const VOLUME_PENALTY_PER_TWEAK = 0.05;
 export const VOLUME_PENALTY_FLOOR = -0.15;
@@ -40,6 +46,11 @@ export const CHECKPOINT_WEIGHT = 0.25;
 export const CHECKPOINT_VALUES = { better: 0.85, same: 0.55, worse: 0.2 } as const;
 /** End-of-session reward weight is scaled by the last segment's share, floored here. */
 export const END_CREDIT_MIN_SCALE = 0.5;
+/**
+ * An interval (Pomodoro) program softens the served sound during breaks and
+ * adds its own rhythm, so the outcome credits the arm a little less cleanly.
+ */
+export const INTERVAL_SESSION_WEIGHT = 0.8;
 
 export function computeReward(record: SessionRecord): RewardResult | null {
   // Preset sessions (and pre-Phase-2 records) were not served by the bandit.
@@ -52,8 +63,9 @@ export function computeReward(record: SessionRecord): RewardResult | null {
  * aggregations (PRD §10), which cover every session including presets.
  */
 export function scoreSession(record: SessionRecord): RewardResult {
-  const fraction =
-    record.plannedDurationSec > 0
+  const fraction = record.openEnded
+    ? Math.min(record.actualDurationSec / OPEN_ENDED_TARGET_SEC, 1)
+    : record.plannedDurationSec > 0
       ? Math.min(record.actualDurationSec / record.plannedDurationSec, 1)
       : 0;
   const implicit = IMPLICIT_BASE + IMPLICIT_SPAN * fraction;
@@ -96,6 +108,15 @@ export interface ArmCredit {
  * user already marked 'worse' — scaled by that arm's share of the session.
  */
 export function computeCredits(record: SessionRecord): ArmCredit[] {
+  const credits = rawCredits(record);
+  if (!record.intervals || credits.length === 0) return credits;
+  return credits.map((c) => ({
+    armId: c.armId,
+    reward: { value: c.reward.value, weight: c.reward.weight * INTERVAL_SESSION_WEIGHT },
+  }));
+}
+
+function rawCredits(record: SessionRecord): ArmCredit[] {
   if (!record.servedArmId || record.servedBy === 'preset') return [];
   // The app died mid-session: the truncated length says nothing about the sound.
   if (record.recovered) return [];

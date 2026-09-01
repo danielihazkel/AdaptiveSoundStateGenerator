@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { MentalState } from '../audio/states';
 import type { CoachPlan } from '../coach/mapToSession';
-import { INTERVAL_STATES, type IntervalPlan } from '../programs/intervals';
+import { INTERVAL_STATES, normalizeIntervalPlan, type IntervalPlan } from '../programs/intervals';
 import type { Program } from '../programs/types';
 import { minutesUntil } from '../session/wallClock';
 import type { Preset, SessionRecord } from '../storage/types';
@@ -20,7 +20,13 @@ export function useSetupSelection(opts: {
   const [intensity, setIntensityState] = useState(0.5);
   const [minutes, setMinutes] = useState(30);
   /** "End at HH:MM" — when set, the duration is resolved from the wall clock at Begin. */
-  const [endAt, setEndAt] = useState<string | null>(null);
+  const [endAt, setEndAtState] = useState<string | null>(null);
+  /** "Until I stop" — no planned length. Exclusive with "End at". */
+  const [openEnded, setOpenEndedState] = useState(false);
+  const setEndAt = (next: string | null) => {
+    setEndAtState(next);
+    if (next !== null) setOpenEndedState(false);
+  };
   const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>();
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>();
   /** Session from history whose exact profile the next session replays. */
@@ -39,6 +45,11 @@ export function useSetupSelection(opts: {
     setMinutes,
     endAt,
     setEndAt,
+    openEnded,
+    setOpenEnded: (next: boolean) => {
+      setOpenEndedState(next);
+      if (next) setEndAtState(null);
+    },
     /**
      * Minutes the next session will run. Resolved at call time — the setup
      * screen may sit open for a while, and "end at 07:00" must mean 07:00.
@@ -96,8 +107,10 @@ export function useSetupSelection(opts: {
     /** Replay the exact sound of an earlier session (history screen). */
     replayFrom: (record: SessionRecord) => {
       setReplay(record);
-      setEndAt(null);
-      setIntervalsState(null);
+      setEndAtState(null);
+      setOpenEndedState(record.openEnded === true);
+      // An interval session replays its plan too (the sound comes from the record).
+      setIntervalsState(record.intervals ? normalizeIntervalPlan(record.intervals) : null);
       setMentalState(record.state);
       setIntensityState(record.intensity);
       setSelectedPresetId(undefined);
@@ -109,7 +122,8 @@ export function useSetupSelection(opts: {
       setMentalState(plan.state);
       setIntensityState(plan.intensity);
       setMinutes(plan.minutes);
-      setEndAt(null);
+      setEndAtState(null);
+      setOpenEndedState(false);
       setSelectedPresetId(undefined);
     },
   };

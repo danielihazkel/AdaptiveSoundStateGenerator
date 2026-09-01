@@ -62,6 +62,11 @@ function disabledHarmony(): SoundProfile['harmony'] {
   return { enabled: false, level: 0.25, richness: 0.5, movement: 0.3, rootHz: 110 };
 }
 
+/** The second ambience bed is a user choice, never part of a state prior. */
+function disabledAmbience2(): SoundProfile['ambience2'] {
+  return { enabled: false, type: 'ocean', level: 0.1 };
+}
+
 /** Isochronic pulses above ~16 Hz stop being perceived as rhythm. */
 export const MAX_PULSE_RATE_HZ = 16;
 
@@ -89,6 +94,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         },
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'rain', level: 0.05 }, // PRD §8
+        ambience2: disabledAmbience2(),
         harmony: disabledHarmony(),
         bass: 0,
         stereoWidth: 0.7,
@@ -116,6 +122,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         isochronic: { enabled: true, rate: beat, depth: lerp(0.08, 0.03, t) },
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'ocean', level: 0.4 }, // PRD §8
+        ambience2: disabledAmbience2(),
         harmony: {
           enabled: true,
           level: lerp(0.08, 0.14, t),
@@ -150,6 +157,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         isochronic: { enabled: true, rate: beat, depth: lerp(0.05, 0.02, t) },
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'space', level: 0.15 }, // dark, sits under the 2 kHz lowpass
+        ambience2: disabledAmbience2(),
         harmony: disabledHarmony(),
         bass: lerp(0.1, 0.2, t), // body under the lowpass without raising it
         stereoWidth: 0.5,
@@ -181,6 +189,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         // Driving groove: ~120-140 BPM sits in the music-tempo arousal range.
         rhythm: { mode: 'pattern', bpm: lerp(115, 140, t), complexity: lerp(0.3, 0.55, t) },
         ambience: { enabled: false, type: 'wind', level: 0.1 }, // bright pulse wants no bed
+        ambience2: disabledAmbience2(),
         harmony: disabledHarmony(),
         bass: lerp(0.1, 0.25, t),
         stereoWidth: 0.9,
@@ -207,6 +216,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         isochronic: { enabled: true, rate: beat, depth: lerp(0.05, 0.12, t) },
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'wind', level: 0.15 },
+        ambience2: disabledAmbience2(),
         harmony: {
           enabled: true,
           level: lerp(0.1, 0.16, t),
@@ -239,6 +249,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         isochronic: { enabled: true, rate: beat, depth: lerp(0.08, 0.18, t) },
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'ocean', level: 0.25 }, // slow breathing-like bed
+        ambience2: disabledAmbience2(),
         harmony: { enabled: true, level: 0.1, richness: 0.35, movement: 0.3, rootHz: 98 },
         bass: 0,
         stereoWidth: 0.85,
@@ -274,6 +285,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         },
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'rain', level: 0.05 },
+        ambience2: disabledAmbience2(),
         harmony: disabledHarmony(),
         bass: 0,
         stereoWidth: 0.6,
@@ -304,6 +316,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         isochronic: { enabled: true, rate: lerp(0.15, 0.1, t), depth: lerp(0.25, 0.35, t) },
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'ocean', level: 0.35 }, // nature sound aids stress recovery (Alvarsson 2010)
+        ambience2: disabledAmbience2(),
         harmony: {
           enabled: true,
           level: lerp(0.1, 0.16, t),
@@ -338,6 +351,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         isochronic: { enabled: true, rate: beat, depth: lerp(0.06, 0.1, t) },
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'space', level: 0.2 },
+        ambience2: disabledAmbience2(),
         harmony: {
           enabled: true,
           level: lerp(0.1, 0.18, t),

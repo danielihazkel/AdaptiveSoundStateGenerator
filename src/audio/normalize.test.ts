@@ -114,9 +114,26 @@ describe('normalizeProfile', () => {
       p.isochronic.rate,
       p.isochronic.depth,
       p.ambience.level,
+      p.ambience2.level,
       p.stereoWidth,
       p.lowpassHz,
     ];
     for (const n of numbers) expect(Number.isFinite(n)).toBe(true);
+  });
+
+  it('profiles saved before the second ambience bed come back with it disabled', () => {
+    const legacy = structuredClone(defaultProfile) as Partial<SoundProfile>;
+    delete legacy.ambience2;
+    const p = normalizeProfile(legacy);
+    expect(p.ambience2).toEqual(defaultProfile.ambience2);
+    expect(p.ambience2.enabled).toBe(false);
+  });
+
+  it('clamps and completes an invalid second ambience', () => {
+    const p = normalizeProfile({
+      ...defaultProfile,
+      ambience2: { enabled: true, type: 'volcano', level: 7 },
+    });
+    expect(p.ambience2).toEqual({ enabled: true, type: defaultProfile.ambience2.type, level: 1 });
   });
 });

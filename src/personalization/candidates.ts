@@ -26,6 +26,9 @@ import { cloneProfile, type NoiseType, type SoundProfile } from '../audio/types'
 // flow/calm/creative additions deliberately did NOT bump the version: recipe
 // math is unchanged, and arm stats measure relative preference against the
 // prior, which shifts with it.
+// 2026-09: generated interval (Pomodoro) sessions now serve an arm too — the
+// arm perturbs the base sound the program then softens during breaks. Recipe
+// math is untouched, so no bump; reward.ts down-weights those sessions.
 export const CANDIDATE_SET_VERSION = 2;
 
 export interface CandidateSpec {

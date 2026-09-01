@@ -9,6 +9,8 @@ import {
   type ProgramSegment,
 } from '../programs/types';
 import { ExportRow } from './ExportRow';
+import { exportMaxSeconds } from '../export/options';
+import { EXPORT_MAX_SECONDS } from '../export/renderTimeline';
 import { ShareButton } from './ShareButton';
 import { Slider } from './Slider';
 import { StatePicker } from './StatePicker';
@@ -299,8 +301,9 @@ export function ProgramEditor(props: {
   /** The program as it would be saved — also what Download renders. */
   const commit = (): Program =>
     normalizeProgram({ ...draft, name: draft.name.trim() || 'Program' });
+  const exportMaxSec = exportMaxSeconds(props.exporter.options, EXPORT_MAX_SECONDS);
   const exportMinutes = Math.round(
-    programExportSelection(commit(), props.chimeEnabled).sel.durationSec / 60,
+    Math.min(programExportSelection(commit(), props.chimeEnabled).sel.durationSec, exportMaxSec) / 60,
   );
 
   const editSegments = (segments: ProgramSegment[]) =>
@@ -431,7 +434,7 @@ export function ProgramEditor(props: {
       </div>
       <ExportRow
         exporter={props.exporter}
-        label={`⤓ Download ${exportMinutes} min MP3`}
+        label={`⤓ Download ${exportMinutes} min ${props.exporter.options.format.toUpperCase()}`}
         onDownload={() => {
           const { sel, label } = programExportSelection(commit(), props.chimeEnabled);
           void props.exporter.start(sel, label);

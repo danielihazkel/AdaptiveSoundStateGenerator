@@ -6,8 +6,8 @@ import { useRadioGroup } from './useRadioGroup';
 export { MAX_CUSTOM_MINUTES, MIN_CUSTOM_MINUTES };
 
 const PRESET_MINUTES = [15, 30, 45, 60, 90];
-type Choice = number | 'custom' | 'endAt';
-const CHOICES: Choice[] = [...PRESET_MINUTES, 'custom', 'endAt'];
+type Choice = number | 'custom' | 'endAt' | 'open';
+const CHOICES: Choice[] = [...PRESET_MINUTES, 'custom', 'endAt', 'open'];
 
 /** Default "end at" — the next full hour, at least a few minutes away. */
 function defaultEndAt(now = new Date()): string {
@@ -17,9 +17,9 @@ function defaultEndAt(now = new Date()): string {
 }
 
 /**
- * PRD §4 step 3: 15/30/45/60/90 min, custom, or "end at HH:MM" (a nap or a
+ * PRD §4 step 3: 15/30/45/60/90 min, custom, "end at HH:MM" (a nap or a
  * night's sleep that must finish at a wall-clock time; the minutes are
- * resolved when the session starts).
+ * resolved when the session starts), or "until I stop" (no planned end).
  */
 export function DurationPicker(props: {
   minutes: number;
@@ -27,10 +27,18 @@ export function DurationPicker(props: {
   /** "End at" time (HH:MM) when that mode is active, else null. */
   endAt: string | null;
   onEndAtChange: (endAt: string | null) => void;
+  /** "Until I stop" mode. */
+  openEnded: boolean;
+  onOpenEndedChange: (openEnded: boolean) => void;
 }) {
   const [custom, setCustom] = useState(!PRESET_MINUTES.includes(props.minutes));
-  const choice: Choice =
-    props.endAt !== null ? 'endAt' : custom ? 'custom' : props.minutes;
+  const choice: Choice = props.openEnded
+    ? 'open'
+    : props.endAt !== null
+      ? 'endAt'
+      : custom
+        ? 'custom'
+        : props.minutes;
   // The "ends in" readout must track the clock while the picker sits open.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -41,6 +49,12 @@ export function DurationPicker(props: {
   }, [props.endAt]);
 
   const select = (next: Choice) => {
+    if (next === 'open') {
+      props.onEndAtChange(null);
+      props.onOpenEndedChange(true);
+      return;
+    }
+    props.onOpenEndedChange(false);
     if (next === 'endAt') {
       props.onEndAtChange(props.endAt ?? defaultEndAt());
       return;
@@ -89,6 +103,14 @@ export function DurationPicker(props: {
         onClick={() => select('endAt')}
       >
         End at…
+      </button>
+      <button
+        type="button"
+        className={`chip${choice === 'open' ? ' selected' : ''}`}
+        {...radio.itemProps('open')}
+        onClick={() => select('open')}
+      >
+        Until I stop
       </button>
       {choice === 'custom' && (
         <label className="custom-minutes">

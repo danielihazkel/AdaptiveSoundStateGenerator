@@ -151,6 +151,42 @@ export const AdvancedPanel = memo(function AdvancedPanel(props: {
 
       <section className="panel">
         <div className="panel-header">
+          <h2>Second ambience</h2>
+          <input
+            type="checkbox"
+            aria-label="Second ambience"
+            checked={p.ambience2.enabled}
+            onChange={(e) => edit((d) => (d.ambience2.enabled = e.target.checked))}
+          />
+        </div>
+        <p className="hint">Layer a second bed under the first — rain over a fireplace.</p>
+        <label className="control">
+          <span>Type</span>
+          <select
+            value={p.ambience2.type}
+            onChange={(e) => edit((d) => (d.ambience2.type = e.target.value as AmbienceType))}
+          >
+            {AMBIENCE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {AMBIENCE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+          <span />
+        </label>
+        <Slider
+          label="Level"
+          min={0}
+          max={1}
+          step={0.01}
+          value={p.ambience2.level}
+          display={pct(p.ambience2.level)}
+          onChange={(v) => edit((d) => (d.ambience2.level = v))}
+        />
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
           <h2>Binaural beats</h2>
           <input
             type="checkbox"

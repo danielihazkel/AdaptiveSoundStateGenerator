@@ -50,6 +50,10 @@ export function randomizeProfile(
   draft.ambience.enabled = rand() < 0.6;
   draft.ambience.type = pick(['rain', 'ocean', 'wind', 'space'] as const);
   draft.ambience.level = between(0.05, 0.4);
+  // A second bed now and then — always synth, always quieter than the first.
+  draft.ambience2.enabled = draft.ambience.enabled && rand() < 0.3;
+  draft.ambience2.type = pick(['rain', 'ocean', 'wind', 'space'] as const);
+  draft.ambience2.level = between(0.03, 0.2);
 
   draft.stereoWidth = between(0.4, 1);
   draft.lowpassHz = Math.round(between(2000, LOWPASS_OPEN_HZ));

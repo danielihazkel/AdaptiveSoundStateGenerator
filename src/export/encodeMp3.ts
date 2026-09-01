@@ -1,16 +1,19 @@
 import type { EncodeRequest, EncodeResponse } from './mp3.worker';
+import { DEFAULT_EXPORT_OPTIONS, type ExportOptions } from './options';
 
-export const MP3_KBPS = 192;
+/** Default MP3 bitrate. */
+export const MP3_KBPS = DEFAULT_EXPORT_OPTIONS.kbps;
 
 /**
- * Streaming MP3 encoder session backed by the worker. Push rendered chunks as
- * they arrive (their channel ArrayBuffers are transferred, not copied — after
- * a push the source AudioBuffer is detached, which is exactly what releases
- * that chunk's render memory on the main thread); the encoder runs while the
- * next chunk renders. `finish()` resolves with the file once the chunk pushed
- * with `last: true` has been flushed. Abort terminates the worker.
+ * Streaming encoder session backed by the worker (MP3 or WAV, per
+ * `options`). Push rendered chunks as they arrive (their channel
+ * ArrayBuffers are transferred, not copied — after a push the source
+ * AudioBuffer is detached, which is exactly what releases that chunk's
+ * render memory on the main thread); the encoder runs while the next chunk
+ * renders. `finish()` resolves with the file once the chunk pushed with
+ * `last: true` has been flushed. Abort terminates the worker.
  */
-export class Mp3Stream {
+export class EncodeStream {
   private readonly worker: Worker;
   private pushedSamples = 0;
   private readonly done: Promise<Blob>;
@@ -20,6 +23,7 @@ export class Mp3Stream {
     sampleRate: number,
     private readonly onProgress: (encodedSamples: number, pushedSamples: number) => void,
     private readonly signal?: AbortSignal,
+    options: ExportOptions = DEFAULT_EXPORT_OPTIONS,
   ) {
     this.worker = new Worker(new URL('./mp3.worker.ts', import.meta.url), {
       type: 'module',
@@ -42,8 +46,13 @@ export class Mp3Stream {
         this.settle?.resolve(msg.blob);
       } else this.fail(new Error(msg.message));
     };
-    this.worker.onerror = (e) => this.fail(new Error(e.message || 'MP3 worker failed'));
-    const start: EncodeRequest = { type: 'start', sampleRate, kbps: MP3_KBPS };
+    this.worker.onerror = (e) => this.fail(new Error(e.message || 'Encoding worker failed'));
+    const start: EncodeRequest = {
+      type: 'start',
+      sampleRate,
+      kbps: options.kbps,
+      format: options.format,
+    };
     this.worker.postMessage(start);
   }
 

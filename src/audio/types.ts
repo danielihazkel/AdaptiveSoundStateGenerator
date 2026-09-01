@@ -77,6 +77,16 @@ export interface SoundProfile {
     level: number; // 0..1
   };
   /**
+   * A second ambience bed layered with the first (rain over a fireplace).
+   * Same tap as `ambience`; a program's ambience swell scales both. Off by
+   * default so every profile saved before it existed sounds identical.
+   */
+  ambience2: {
+    enabled: boolean;
+    type: AmbienceType;
+    level: number; // 0..1
+  };
+  /**
    * Harmonic pad: stacked intervals (root/fifth/octave/third) over rootHz
    * with slow internal movement — real harmonic content beyond the single
    * tone. `richness` fades upper voices in continuously; `movement` drives
@@ -107,6 +117,7 @@ export const defaultProfile: SoundProfile = {
   isochronic: { enabled: false, rate: 10, depth: 0.1 },
   rhythm: { mode: 'simple', bpm: 80, complexity: 0 },
   ambience: { enabled: false, type: 'rain', level: 0.1 },
+  ambience2: { enabled: false, type: 'ocean', level: 0.1 },
   harmony: { enabled: false, level: 0.25, richness: 0.5, movement: 0.3, rootHz: 110 },
   bass: 0,
   stereoWidth: 0.7,
@@ -158,6 +169,7 @@ export function normalizeProfile(raw: unknown): SoundProfile {
   const isochronic = (p.isochronic ?? {}) as Record<string, unknown>;
   const rhythm = (p.rhythm ?? {}) as Record<string, unknown>;
   const ambience = (p.ambience ?? {}) as Record<string, unknown>;
+  const ambience2 = (p.ambience2 ?? {}) as Record<string, unknown>;
   const harmony = (p.harmony ?? {}) as Record<string, unknown>;
   return {
     masterVolume: num(p.masterVolume, d.masterVolume, 0, 1),
@@ -194,6 +206,13 @@ export function normalizeProfile(raw: unknown): SoundProfile {
       enabled: bool(ambience.enabled, d.ambience.enabled),
       type: oneOf(ambience.type, AMBIENCE_TYPES, d.ambience.type),
       level: num(ambience.level, d.ambience.level, 0, 1),
+    },
+    // Profiles saved before the second bed existed come back without it and
+    // must sound identical: it defaults to disabled.
+    ambience2: {
+      enabled: bool(ambience2.enabled, d.ambience2.enabled),
+      type: oneOf(ambience2.type, AMBIENCE_TYPES, d.ambience2.type),
+      level: num(ambience2.level, d.ambience2.level, 0, 1),
     },
     // Profiles saved before harmony/bass existed come back without them and
     // must sound identical: harmony defaults to disabled, bass to 0 dB.

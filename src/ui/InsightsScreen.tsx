@@ -1,13 +1,29 @@
 import { STATES } from '../audio/states';
 import type { SoundComponent, StateInsights } from '../personalization/insights';
+import type { TrendDirection } from '../personalization/trends';
+import { Sparkline } from './Sparkline';
 
 const COMPONENT_LABELS: Record<SoundComponent, string> = {
   binaural: 'Binaural beats',
   noise: 'Noise',
   isochronic: 'Rhythmic pulses',
+  rhythm: 'Pattern rhythm',
   tone: 'Pure tone',
+  harmony: 'Harmonic pad',
+  bass: 'Bass lift',
   ambience: 'Ambience',
 };
+
+const DIRECTION_LABELS: Record<TrendDirection, string> = {
+  up: 'getting better',
+  down: 'getting worse',
+  flat: 'holding steady',
+};
+
+function formatPointTitle(point: StateInsights['trend'][number]): string {
+  const day = new Date(point.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `${day} · ${Math.round(point.score * 100)}%${point.rated ? '' : ' (unrated)'}`;
+}
 
 function formatHz(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -39,6 +55,35 @@ export function InsightsScreen(props: {
                 {insight.avgRating !== null &&
                   ` · avg ${insight.avgRating.toFixed(1)}★`}
               </span>
+            </div>
+
+            <div className="insight-trend">
+              <Sparkline
+                values={insight.trend.map((p) => p.smoothed)}
+                titles={insight.trend.map(formatPointTitle)}
+                label={`Session quality over ${insight.trend.length} sessions, ${
+                  DIRECTION_LABELS[insight.trendDirection]
+                }`}
+              />
+              <div className="insight-trend-facts">
+                <span className="insight-trend-direction">
+                  {insight.trendDirection === 'up' && '↗ '}
+                  {insight.trendDirection === 'down' && '↘ '}
+                  {insight.trendDirection === 'flat' && '→ '}
+                  {DIRECTION_LABELS[insight.trendDirection]}
+                </span>
+                {insight.completionRate !== null && (
+                  <span className="insight-meta">
+                    {Math.round(insight.completionRate * 100)}% finished
+                  </span>
+                )}
+                {insight.bestFoundAfter !== null && (
+                  <span className="insight-meta">
+                    best variation found after {insight.bestFoundAfter}{' '}
+                    {insight.bestFoundAfter === 1 ? 'session' : 'sessions'}
+                  </span>
+                )}
+              </div>
             </div>
 
             {bars.length > 0 && (

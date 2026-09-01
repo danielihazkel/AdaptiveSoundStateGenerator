@@ -19,3 +19,19 @@ export function floatToInt16Block(
   }
   return n;
 }
+
+/**
+ * Interleave two channels into one 16-bit PCM buffer (L R L R …) with the
+ * same scaling and clamping as the block converter — the WAV writer's path.
+ */
+export function interleaveInt16(left: Float32Array, right: Float32Array): Int16Array {
+  const n = Math.min(left.length, right.length);
+  const out = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const l = Math.max(-1, Math.min(1, left[i]));
+    const r = Math.max(-1, Math.min(1, right[i]));
+    out[i * 2] = Math.round(l < 0 ? l * 32768 : l * 32767);
+    out[i * 2 + 1] = Math.round(r < 0 ? r * 32768 : r * 32767);
+  }
+  return out;
+}

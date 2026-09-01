@@ -1,17 +1,19 @@
 import { Mp3Encoder } from '@breezystack/lamejs';
-import { floatToInt16Block, MP3_BLOCK_SAMPLES } from './pcm';
+import { exportMime, type ExportFormat } from './options';
+import { floatToInt16Block, interleaveInt16, MP3_BLOCK_SAMPLES } from './pcm';
+import { wavHeader } from './wav';
 
 /**
- * Streaming MP3 encoding worker: keeps the multi-minute lamejs encode off
- * the main thread. One `start` opens the encoder; each `chunk` arrives with
- * its channel ArrayBuffers *transferred* (the chunk's render memory moves
- * here rather than being copied) and is encoded immediately, so at most one
- * chunk is alive at a time; the chunk flagged `last` flushes and returns the
- * whole file as a Blob.
+ * Streaming encoding worker: keeps the multi-minute encode off the main
+ * thread. One `start` opens the encoder (MP3 via lamejs, or a WAV writer);
+ * each `chunk` arrives with its channel ArrayBuffers *transferred* (the
+ * chunk's render memory moves here rather than being copied) and is encoded
+ * immediately, so at most one chunk is alive at a time; the chunk flagged
+ * `last` flushes and returns the whole file as a Blob.
  */
 
 export type EncodeRequest =
-  | { type: 'start'; sampleRate: number; kbps: number }
+  | { type: 'start'; sampleRate: number; kbps: number; format: ExportFormat }
   | {
       type: 'chunk';
       left: ArrayBuffer;
@@ -36,6 +38,8 @@ const PROGRESS_STEP_SAMPLES = 44100 * 5;
 const post = (msg: EncodeResponse) =>
   (self as { postMessage(m: EncodeResponse): void }).postMessage(msg);
 
+let format: ExportFormat = 'mp3';
+let sampleRate = 44100;
 let encoder: Mp3Encoder | null = null;
 const chunks: Uint8Array[] = [];
 const leftBlock = new Int16Array(MP3_BLOCK_SAMPLES);
@@ -47,6 +51,13 @@ let lastReported = 0;
 let carryLeft = new Float32Array(0);
 let carryRight = new Float32Array(0);
 
+function reportProgress(force = false): void {
+  if (force || encodedSamples - lastReported >= PROGRESS_STEP_SAMPLES) {
+    lastReported = encodedSamples;
+    post({ type: 'progress', samples: encodedSamples });
+  }
+}
+
 function encodeBlock(n: number): void {
   if (!encoder) throw new Error('encoder not started');
   const frame = encoder.encodeBuffer(
@@ -55,10 +66,7 @@ function encodeBlock(n: number): void {
   );
   if (frame.length > 0) chunks.push(frame);
   encodedSamples += n;
-  if (encodedSamples - lastReported >= PROGRESS_STEP_SAMPLES) {
-    lastReported = encodedSamples;
-    post({ type: 'progress', samples: encodedSamples });
-  }
+  reportProgress();
 }
 
 /**
@@ -100,11 +108,34 @@ function encodeFrames(left: Float32Array, right: Float32Array, flushAll: boolean
   carryRight = right.slice(whole);
 }
 
+/** WAV: plain interleaved 16-bit PCM, header prepended once the size is known. */
+function writeWav(left: Float32Array, right: Float32Array): void {
+  const pcm = interleaveInt16(left, right);
+  chunks.push(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
+  encodedSamples += left.length;
+  reportProgress();
+}
+
+function finishBlob(): Blob {
+  if (format === 'wav') {
+    const dataBytes = chunks.reduce((acc, c) => acc + c.byteLength, 0);
+    return new Blob([wavHeader(sampleRate, 2, dataBytes), ...chunks] as BlobPart[], {
+      type: exportMime('wav'),
+    });
+  }
+  if (!encoder) throw new Error('encoder not started');
+  const tail = encoder.flush();
+  if (tail.length > 0) chunks.push(tail);
+  return new Blob(chunks as BlobPart[], { type: exportMime('mp3') });
+}
+
 self.onmessage = (e: MessageEvent<EncodeRequest>) => {
   const msg = e.data;
   try {
     if (msg.type === 'start') {
-      encoder = new Mp3Encoder(2, msg.sampleRate, msg.kbps);
+      format = msg.format;
+      sampleRate = msg.sampleRate;
+      encoder = format === 'mp3' ? new Mp3Encoder(2, msg.sampleRate, msg.kbps) : null;
       chunks.length = 0;
       encodedSamples = 0;
       lastReported = 0;
@@ -114,13 +145,12 @@ self.onmessage = (e: MessageEvent<EncodeRequest>) => {
     }
     const left = new Float32Array(msg.left).subarray(msg.start, msg.end);
     const right = new Float32Array(msg.right).subarray(msg.start, msg.end);
-    encodeFrames(left, right, msg.last);
+    if (format === 'wav') writeWav(left, right);
+    else encodeFrames(left, right, msg.last);
     if (msg.last) {
-      if (!encoder) throw new Error('encoder not started');
-      const tail = encoder.flush();
-      if (tail.length > 0) chunks.push(tail);
-      post({ type: 'progress', samples: encodedSamples });
-      post({ type: 'done', blob: new Blob(chunks as BlobPart[], { type: 'audio/mpeg' }) });
+      const blob = finishBlob();
+      reportProgress(true);
+      post({ type: 'done', blob });
       encoder = null;
       chunks.length = 0;
     }

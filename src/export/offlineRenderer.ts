@@ -7,8 +7,10 @@ import type { SoundProfile } from '../audio/types';
 import { evaluateProgram } from '../programs/evaluator';
 import type { Program } from '../programs/types';
 import { evaluateArc, resolveArc, type WakeUp } from '../session/evolution';
+import { alignmentDelays, frac } from './phaseTracker';
 import {
   buildRenderPlan,
+  CHUNK_CROSSFADE_SEC,
   CHUNK_LEAD_SEC,
   EXPORT_SAMPLE_RATE,
   MODULATION_STEP_SEC,
@@ -39,6 +41,20 @@ export interface ExportSelection {
 const PULSE_HORIZON_SEC = 1.5;
 
 /**
+ * What one chunk hands the next: the rhythm pattern's scheduled pulses and
+ * bar position, and the tone/binaural oscillator phases (cycles, wrapped) at
+ * the seam's alignment instant — the middle of the crossfade, where the two
+ * renders are mixed at equal power.
+ */
+export interface ChunkHandover {
+  pulse: PulseHandover;
+  phases: number[];
+}
+
+/** Alignment instant relative to the *next* chunk's origin (its lead minus half the crossfade). */
+const ALIGN_AT_NEXT_CTX_SEC = CHUNK_LEAD_SEC - CHUNK_CROSSFADE_SEC / 2;
+
+/**
  * Render a full session offline, faster than realtime, by driving the
  * ordinary AudioEngine on an OfflineAudioContext — one per chunk (see
  * splitRenderPlan), each handed to `onChunk` as soon as it is done and then
@@ -50,9 +66,11 @@ const PULSE_HORIZON_SEC = 1.5;
  *
  * Chunks after the first start CHUNK_LEAD_SEC early on a fresh engine that is
  * jumped straight to the session's values at that moment (no fade-in, or the
- * end fade resumed mid-way). The rhythm pattern is the one thing a fresh
- * engine cannot re-derive — bar phase depends on the whole BPM history — so
- * the previous chunk hands over its scheduled pulses and next-pulse state.
+ * end fade resumed mid-way). Two things a fresh engine cannot re-derive are
+ * handed over from the previous chunk: the rhythm pattern's bar position
+ * (it depends on the whole BPM history) and the oscillator phases (the
+ * previous chunk's trackers integrated every frequency ramp; the next chunk
+ * delays each oscillator's start by under one period to match).
  *
  * Aborting stops the render at the next checkpoint (never resumed) and
  * rejects with an AbortError; the engine is disposed and the abandoned
@@ -66,7 +84,7 @@ export async function renderSessionChunks(
 ): Promise<void> {
   signal?.throwIfAborted();
   const plan = buildRenderPlan(sel);
-  let handover: PulseHandover | null = null;
+  let handover: ChunkHandover | null = null;
   for (const chunk of splitRenderPlan(plan)) {
     const buffer = await renderChunk(sel, plan, chunk, handover, onProgress, signal);
     handover = buffer.handover;
@@ -78,10 +96,10 @@ async function renderChunk(
   sel: ExportSelection,
   plan: RenderPlan,
   chunk: RenderChunk,
-  handover: PulseHandover | null,
+  handover: ChunkHandover | null,
   onProgress: (fraction01: number) => void,
   signal?: AbortSignal,
-): Promise<{ audio: AudioBuffer; handover: PulseHandover | null }> {
+): Promise<{ audio: AudioBuffer; handover: ChunkHandover | null }> {
   const ctx = new OfflineAudioContext({
     numberOfChannels: 2,
     length: Math.ceil(chunk.lengthSec * EXPORT_SAMPLE_RATE),
@@ -103,10 +121,10 @@ async function driveChunk(
   sel: ExportSelection,
   plan: RenderPlan,
   chunk: RenderChunk,
-  handover: PulseHandover | null,
+  handover: ChunkHandover | null,
   onProgress: (fraction01: number) => void,
   signal?: AbortSignal,
-): Promise<{ audio: AudioBuffer; handover: PulseHandover | null }> {
+): Promise<{ audio: AudioBuffer; handover: ChunkHandover | null }> {
   const toAbs = (ctxTime: number) => chunk.originSec + ctxTime;
   const toCtx = (absTime: number) => absTime - chunk.originSec;
   const arc = resolveArc(sel.state, {
@@ -146,18 +164,30 @@ async function driveChunk(
   // Breath cycle 0 is session t=0, i.e. ctx time −originSec in this chunk.
   if (!sel.program && sel.breathing) engine.setBreathPattern(sel.breathing, -chunk.originSec);
   applyModulation(chunk.originSec);
-  if (handover) engine.importPulseHandover(handover, -chunk.originSec);
+  if (handover) engine.importPulseHandover(handover.pulse, -chunk.originSec);
   engine.schedulePulsesUntil(MODULATION_STEP_SEC + PULSE_HORIZON_SEC);
   await engine.whenAmbienceReady();
   signal?.throwIfAborted();
+  // Every frequency ramp issued so far (build + the snap to this origin's
+  // values) is on the trackers, so the start delay that lands each
+  // oscillator on the previous chunk's phase at the seam is computable now.
+  // Modulation steps before the seam (τ = 2 s toward values a second of arc
+  // away) move the integral by far less than a thousandth of a cycle.
+  const oscillatorDelays = handover
+    ? alignmentDelays(engine.oscillatorPhaseTrackers(), handover.phases, ALIGN_AT_NEXT_CTX_SEC)
+    : null;
   if (chunk.fadeInProgress) {
-    engine.beginOffline({ fadeIn: false, gainFraction: chunk.fadeInProgress.gainFraction });
+    engine.beginOffline({
+      fadeIn: false,
+      gainFraction: chunk.fadeInProgress.gainFraction,
+      oscillatorDelays,
+    });
     if (chunk.fadeInProgress.remainingSec > 0) {
       engine.schedulePulsesUntil(toCtx(plan.durationSec));
       engine.scheduleOfflineEndFade(chunk.fadeInProgress.remainingSec);
     }
   } else {
-    engine.beginOffline({ fadeIn: chunk.index === 0 });
+    engine.beginOffline({ fadeIn: chunk.index === 0, oscillatorDelays });
   }
 
   let abort: (() => void) | undefined;
@@ -188,9 +218,16 @@ async function driveChunk(
     if (abort) signal?.removeEventListener('abort', abort);
   });
 
-  // Pulses that spill past the next chunk's origin, plus where the bar is.
-  const nextHandover = chunk.last
-    ? null
-    : engine.exportPulseHandover(chunk.lengthSec - CHUNK_LEAD_SEC, chunk.originSec);
-  return { audio, handover: nextHandover };
+  if (chunk.last) return { audio, handover: null };
+  // Pulses that spill past the next chunk's origin, plus where the bar is —
+  // and where each oscillator's phase sits at the seam's alignment instant
+  // (next origin + lead − half the crossfade, i.e. this chunk's end − half).
+  const alignAtCtx = chunk.lengthSec - CHUNK_CROSSFADE_SEC / 2;
+  return {
+    audio,
+    handover: {
+      pulse: engine.exportPulseHandover(chunk.lengthSec - CHUNK_LEAD_SEC, chunk.originSec),
+      phases: engine.oscillatorPhaseTrackers().map((tracker) => frac(tracker.phaseAt(alignAtCtx))),
+    },
+  };
 }

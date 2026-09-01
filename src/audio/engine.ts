@@ -3,6 +3,7 @@ import type { ArcModulation } from '../session/evolution';
 import { loadAmbienceWorklet } from './ambience-processor';
 import type { BreathPattern } from './breathing';
 import { playChime } from './chime';
+import type { OscillatorPhaseTracker } from '../export/phaseTracker';
 import { AmbienceLayer } from './layers/ambienceLayer';
 import { BinauralLayer } from './layers/binauralLayer';
 import { HarmonyLayer } from './layers/harmonyLayer';
@@ -122,6 +123,7 @@ export class AudioEngine {
     private readonly binaural: BinauralLayer,
     private readonly noise: NoiseLayer,
     private readonly ambience: AmbienceLayer,
+    private readonly ambience2: AmbienceLayer,
     private readonly harmony: HarmonyLayer,
     private profile: SoundProfile,
   ) {
@@ -215,18 +217,25 @@ export class AudioEngine {
     );
     mixBus.connect(pulse.input);
     const width = new StereoWidthNode(ctx, mixBus, p.stereoWidth);
-    const tone = new ToneLayer(ctx, width.input, p.tone.frequency);
+    // Offline engines record oscillator phase and defer start() so chunked
+    // exports can seam without a phase jump (export/phaseTracker.ts).
+    const tone = new ToneLayer(ctx, width.input, p.tone.frequency, { trackPhase: offline });
     const noise = new NoiseLayer(ctx, width.input, p.noise.type);
-    const binaural = new BinauralLayer(ctx, mixBus, p.binaural.carrier, p.binaural.beat);
-    // Post-pulse tap (see graph note above).
+    const binaural = new BinauralLayer(ctx, mixBus, p.binaural.carrier, p.binaural.beat, {
+      trackPhase: offline,
+    });
+    // Post-pulse tap (see graph note above). Two independent beds: each
+    // worklet instance keeps its own generator state, so rain over fireplace
+    // is two uncorrelated textures, not one doubled.
     const ambience = new AmbienceLayer(ctx, master, p.ambience.type);
+    const ambience2 = new AmbienceLayer(ctx, master, p.ambience2.type);
     // Tonal, mono-compatible — joins the width matrix like tone/noise, and
     // deliberately rides the pulse bus: rhythm pulsing the pad is the effect.
     const harmony = new HarmonyLayer(ctx, width.input, p.harmony.rootHz);
 
     const engine = new AudioEngine(
       ctx, offline, master, lowpass, bassShelf, limiter, monoGate, width, pulse, tone,
-      binaural, noise, ambience, harmony, p,
+      binaural, noise, ambience, ambience2, harmony, p,
     );
     engine.applyAll();
     return engine;
@@ -397,7 +406,13 @@ export class AudioEngine {
    * later chunks pick up mid-session and jump straight to `gainFraction` of
    * master volume (1 = playing normally, <1 = inside the end fade).
    */
-  beginOffline(opts: { fadeIn?: boolean; gainFraction?: number } = {}): void {
+  beginOffline(
+    opts: { fadeIn?: boolean; gainFraction?: number; oscillatorDelays?: readonly number[] | null } = {},
+  ): void {
+    // Tracked oscillators are stopped until now; every offline start passes
+    // through here, so a chunk can never render silent tone/binaural layers.
+    this.tone.start(opts.oscillatorDelays?.slice(0, ToneLayer.OSCILLATOR_COUNT) ?? null);
+    this.binaural.start(opts.oscillatorDelays?.slice(ToneLayer.OSCILLATOR_COUNT) ?? null);
     this.playing = true;
     const target = this.profile.masterVolume * (opts.gainFraction ?? 1);
     if (opts.fadeIn === false) {
@@ -408,6 +423,14 @@ export class AudioEngine {
   }
 
   /** Offline chunk handover — see PulseModulator.exportHandover. */
+  /**
+   * Phase trackers of the tone and binaural oscillators (offline engines
+   * only; empty otherwise), in the order beginOffline's delays apply to.
+   */
+  oscillatorPhaseTrackers(): OscillatorPhaseTracker[] {
+    return [...(this.tone.trackers ?? []), ...(this.binaural.trackers ?? [])];
+  }
+
   exportPulseHandover(fromCtxTime: number, ctxToAbs: number): PulseHandover {
     return this.pulse.exportHandover(fromCtxTime, ctxToAbs);
   }
@@ -443,7 +466,7 @@ export class AudioEngine {
 
   /** Pending async ambience sample load — await before startRendering(). */
   whenAmbienceReady(): Promise<void> {
-    return this.ambience.whenReady();
+    return Promise.all([this.ambience.whenReady(), this.ambience2.whenReady()]).then(() => undefined);
   }
 
   /**
@@ -608,6 +631,7 @@ export class AudioEngine {
     this.binaural.dispose();
     this.noise.dispose();
     this.ambience.dispose();
+    this.ambience2.dispose();
     this.harmony.dispose();
     this.width.dispose();
     this.pulse.dispose();
@@ -686,6 +710,15 @@ export class AudioEngine {
     this.ambience.setLevel(
       p.ambience.enabled
         ? p.ambience.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience.type]
+        : 0,
+      timeConstant,
+    );
+    // The second bed follows the same arc gain and program swell: a program
+    // that lifts ambience lifts the whole bed.
+    this.ambience2.setType(p.ambience2.type);
+    this.ambience2.setLevel(
+      p.ambience2.enabled
+        ? p.ambience2.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience2.type]
         : 0,
       timeConstant,
     );

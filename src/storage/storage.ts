@@ -1,5 +1,6 @@
 import { normalizeProfile } from '../audio/types';
 import { normalizeProgram, type Program } from '../programs/types';
+import { movePreset } from './presetOrder';
 import {
   defaultSettings,
   SCHEMA_VERSION,
@@ -245,6 +246,27 @@ export function deletePreset(id: string): void {
     PRESETS_KEY,
     loadPresets().filter((p) => p.id !== id),
   );
+}
+
+export function renamePreset(id: string, name: string): void {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  writeList(
+    PRESETS_KEY,
+    loadPresets().map((p) => (p.id === id ? { ...p, name: trimmed } : p)),
+  );
+}
+
+export function setPresetFavorite(id: string, favorite: boolean): void {
+  writeList(
+    PRESETS_KEY,
+    loadPresets().map((p) => (p.id === id ? { ...p, favorite } : p)),
+  );
+}
+
+/** One step up (-1) or down (+1) within the preset's displayed strip. */
+export function movePresetInList(id: string, direction: -1 | 1): void {
+  writeList(PRESETS_KEY, movePreset(loadPresets(), id, direction));
 }
 
 // --- Programs ----------------------------------------------------------------

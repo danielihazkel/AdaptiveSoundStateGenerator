@@ -1,4 +1,7 @@
 import { useRef, useState } from 'react';
+import { downloadJson } from '../platform/download';
+import { validateSharePayload, type SharePayload } from '../share/shareLink';
+import { describeSharePayload, isSharePayloadFile } from '../share/sharePayloadFile';
 import {
   buildExportBundle,
   importBundle,
@@ -6,36 +9,30 @@ import {
   type ExportBundle,
 } from '../storage/transfer';
 
-/** Give the browser time to start the download before the URL is revoked. */
-const REVOKE_DELAY_MS = 60_000;
+type Pending =
+  | { kind: 'bundle'; bundle: ExportBundle; fileName: string }
+  | { kind: 'share'; payload: SharePayload; fileName: string };
 
 /**
  * Manual export/import of all local data (PRD §14 — accounts deferred).
  * Collapsed by default at the bottom of the setup screen. Importing is a
  * two-step confirm: the file is parsed and validated first, then merged only
- * once the user has seen what it contains.
+ * once the user has seen what it contains. A share file (one program or
+ * sound saved from a Share button) is recognised and imported the same way
+ * a share link would be.
  */
-export function DataPanel(props: { onImported: () => void }) {
+export function DataPanel(props: {
+  onImported: () => void;
+  onImportShare: (payload: SharePayload) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ bundle: ExportBundle; fileName: string } | null>(
-    null,
-  );
+  const [pending, setPending] = useState<Pending | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
     const bundle = buildExportBundle();
-    const blob = new Blob([JSON.stringify(bundle, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `resonance-export-${bundle.exportedAt.slice(0, 10)}.json`;
-    anchor.click();
-    // Revoking synchronously races the download on some browsers — same
-    // defence as the MP3 export (exportSession.ts).
-    setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
+    downloadJson(bundle, `resonance-export-${bundle.exportedAt.slice(0, 10)}.json`);
     setMessage('Exported your sessions, presets, programs, and settings.');
   };
 
@@ -48,19 +45,38 @@ export function DataPanel(props: { onImported: () => void }) {
       setMessage('That file is not valid JSON.');
       return;
     }
+    if (isSharePayloadFile(raw)) {
+      const shared = validateSharePayload(raw);
+      if (!shared.ok) {
+        setMessage(shared.error);
+        return;
+      }
+      setMessage(null);
+      setPending({ kind: 'share', payload: shared.payload, fileName: file.name });
+      return;
+    }
     const result = validateBundle(raw);
     if (!result.ok) {
       setMessage(result.error);
       return;
     }
     setMessage(null);
-    setPending({ bundle: result.bundle, fileName: file.name });
+    setPending({ kind: 'bundle', bundle: result.bundle, fileName: file.name });
   };
 
   const confirmImport = () => {
     if (!pending) return;
-    const { bundle } = pending;
     setPending(null);
+    if (pending.kind === 'share') {
+      props.onImportShare(pending.payload);
+      setMessage(
+        pending.payload.kind === 'program'
+          ? 'Program imported and selected.'
+          : 'Sound imported and selected.',
+      );
+      return;
+    }
+    const { bundle } = pending;
     try {
       const summary = importBundle(bundle);
       setMessage(
@@ -119,10 +135,9 @@ export function DataPanel(props: { onImported: () => void }) {
           {pending && (
             <div className="notice import-confirm" role="group" aria-label="Confirm import">
               <span>
-                Merge up to {pending.bundle.sessions.length} sessions,{' '}
-                {pending.bundle.presets.length} presets, and{' '}
-                {pending.bundle.programs?.length ?? 0} programs from “{pending.fileName}”
-                into this device? Existing data is kept; duplicates are skipped.
+                {pending.kind === 'share'
+                  ? `Import ${describeSharePayload(pending.payload)} from “${pending.fileName}”?`
+                  : `Merge up to ${pending.bundle.sessions.length} sessions, ${pending.bundle.presets.length} presets, and ${pending.bundle.programs?.length ?? 0} programs from “${pending.fileName}” into this device? Existing data is kept; duplicates are skipped.`}
               </span>
               <div className="data-panel-actions">
                 <button type="button" className="chip selected" onClick={confirmImport}>

@@ -10,6 +10,8 @@ import {
   CUSTOMIZED_WEIGHT,
   END_CREDIT_MIN_SCALE,
   IMPLICIT_ONLY_WEIGHT,
+  INTERVAL_SESSION_WEIGHT,
+  OPEN_ENDED_TARGET_SEC,
   scoreSession,
   VOLUME_PENALTY_FLOOR,
 } from './reward';
@@ -208,5 +210,65 @@ describe('computeCredits (Phase 3 segments)', () => {
       }),
     )[0].reward.value;
     expect(penalized).toBeCloseTo(CHECKPOINT_VALUES.same - 0.1, 5);
+  });
+
+  describe('open-ended sessions', () => {
+    it('counts staying the target length as a full completion', () => {
+      const open = scoreSession(
+        makeRecord({
+          openEnded: true,
+          plannedDurationSec: OPEN_ENDED_TARGET_SEC,
+          actualDurationSec: OPEN_ENDED_TARGET_SEC,
+        }),
+      );
+      const fixed = scoreSession(makeRecord({ plannedDurationSec: 1800, actualDurationSec: 1800 }));
+      expect(open).toEqual(fixed);
+      const longer = scoreSession(
+        makeRecord({ openEnded: true, plannedDurationSec: 7200, actualDurationSec: 7200 }),
+      );
+      expect(longer).toEqual(fixed);
+    });
+
+    it('scales a short voluntary stay like an early stop', () => {
+      const brief = scoreSession(
+        makeRecord({
+          openEnded: true,
+          plannedDurationSec: OPEN_ENDED_TARGET_SEC / 5,
+          actualDurationSec: OPEN_ENDED_TARGET_SEC / 5,
+        }),
+      );
+      const early = scoreSession(makeRecord({ plannedDurationSec: 1800, actualDurationSec: 360 }));
+      expect(brief.value).toBeCloseTo(early.value, 6);
+      expect(brief.weight).toBe(early.weight);
+    });
+  });
+
+  describe('interval sessions', () => {
+    const plan = { workMin: 25, breakMin: 5, cycles: 4, boundaryChime: true };
+
+    it('credit the served arm at reduced weight', () => {
+      const plain = computeCredits(rated(5));
+      const interval = computeCredits(rated(5, { intervals: plan }));
+      expect(interval).toHaveLength(1);
+      expect(interval[0].armId).toBe(plain[0].armId);
+      expect(interval[0].reward.value).toBe(plain[0].reward.value);
+      expect(interval[0].reward.weight).toBeCloseTo(plain[0].reward.weight * INTERVAL_SESSION_WEIGHT, 6);
+    });
+
+    it('scale every segment credit, and still give nothing to preset or recovered sessions', () => {
+      const segmented = computeCredits(
+        rated(4, {
+          intervals: plan,
+          segments: [
+            { armId: 'prior', startSec: 0, endSec: 600, response: 'better', volumeAdjustments: 0 },
+            { armId: 'beat-up', startSec: 600, endSec: 1800, volumeAdjustments: 0 },
+          ],
+        }),
+      );
+      expect(segmented).toHaveLength(2);
+      expect(segmented[0].reward.weight).toBeCloseTo(CHECKPOINT_WEIGHT * INTERVAL_SESSION_WEIGHT, 6);
+      expect(computeCredits(makeRecord({ intervals: plan, servedBy: 'preset' }))).toEqual([]);
+      expect(computeCredits(makeRecord({ intervals: plan, recovered: true }))).toEqual([]);
+    });
   });
 });

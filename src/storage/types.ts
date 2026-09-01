@@ -2,6 +2,7 @@ import type { BreathingPatternId } from '../audio/breathing';
 import type { MentalState } from '../audio/states';
 import type { IntervalPlan } from '../programs/intervals';
 import type { SoundProfile } from '../audio/types';
+import type { ExportOptions } from '../export/options';
 
 /**
  * Local-first persistence model (PRD §14): everything on-device, no account.
@@ -31,6 +32,10 @@ export interface Settings {
   wakeUp?: { enabled: boolean; riseMinutes: number };
   /** Color theme; absent = follow the OS. */
   theme?: Theme;
+  /** ISO timestamp the first-run tour was finished or skipped; absent = not yet. */
+  onboardingCompletedAt?: string | null;
+  /** Download format / bitrate; absent = MP3 192 kbps. */
+  export?: ExportOptions;
 }
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -61,6 +66,8 @@ export interface Preset {
   state: MentalState;
   intensity: number;
   profile: SoundProfile;
+  /** Pinned to the top of its state's strip. Absent on presets saved before this existed. */
+  favorite?: boolean;
 }
 
 export type Rating = 1 | 2 | 3 | 4 | 5;
@@ -134,6 +141,11 @@ export interface SessionRecord {
   /** Ran a generated interval (Pomodoro) program — programId stays unset. */
   intervals?: IntervalPlan;
   /**
+   * "Until I stop": no planned length (plannedDurationSec equals the actual
+   * length). Stop was the natural end, so `completed` is true.
+   */
+  openEnded?: true;
+  /**
    * Reconstructed from the in-progress checkpoint after the app died
    * mid-session. Not the user's choice to stop, so it carries no bandit
    * signal (reward.ts) and is never offered for rating.
@@ -161,6 +173,7 @@ export interface InProgressSession {
   servedBy?: SessionRecord['servedBy'];
   breathingPattern?: SessionRecord['breathingPattern'];
   wakeUp?: { riseSec: number };
+  openEnded?: true;
   /** Listening time at the last checkpoint. */
   elapsedSec: number;
   updatedAt: string; // ISO

@@ -4,7 +4,14 @@ import { STATES } from '../audio/states';
 import { evaluateProgram } from '../programs/evaluator';
 import { BREATH_PATTERNS } from '../audio/breathing';
 import { defaultProgram } from '../programs/types';
-import { ALARM_MAX_SEC, SessionController, type SessionConfig } from './sessionController';
+import {
+  ALARM_MAX_SEC,
+  ARC_PLATEAU_T,
+  OPEN_ENDED_STOP_FADE_MAX_SEC,
+  SessionController,
+  type SessionConfig,
+} from './sessionController';
+import { evaluateArc, resolveArc } from './evolution';
 
 function stubEngine() {
   const contextListeners = new Set<(state: AudioContextState) => void>();
@@ -445,5 +452,68 @@ describe('SessionController — resume failure, extend, wake-up alarm', () => {
     controller.stop();
     expect(controller.phase).toBe('finished');
     expect(results).toEqual([true]);
+  });
+
+  describe('open-ended sessions', () => {
+    it('never winds down on its own and reports elapsed time, not remaining', async () => {
+      await controller.start(config({ durationSec: 0, openEnded: true }));
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(controller.phase).toBe('running');
+      expect(engine.endSession).not.toHaveBeenCalled();
+      const snap = controller.getSnapshot();
+      expect(snap.openEnded).toBe(true);
+      expect(snap.elapsedSec).toBe(600);
+      expect(snap.remainingSec).toBe(0);
+    });
+
+    it('stop() while running is the natural end: a short fade, then finished/completed', async () => {
+      const results: boolean[] = [];
+      controller.onComplete = (r) => results.push(r.completed);
+      await controller.start(config({ durationSec: 0, openEnded: true }));
+      await vi.advanceTimersByTimeAsync(90_000);
+      controller.stop();
+      expect(controller.phase).toBe('ending');
+      const [fade, chime] = engine.endSession.mock.calls[0];
+      expect(fade).toBeLessThanOrEqual(OPEN_ENDED_STOP_FADE_MAX_SEC);
+      expect(chime).toBe(true);
+      await vi.advanceTimersByTimeAsync((OPEN_ENDED_STOP_FADE_MAX_SEC + 1) * 1000);
+      expect(controller.phase).toBe('finished');
+      expect(results).toEqual([true]);
+    });
+
+    it('stop() while paused still completes rather than counting as an early stop', async () => {
+      const results: boolean[] = [];
+      controller.onComplete = (r) => results.push(r.completed);
+      await controller.start(config({ durationSec: 0, openEnded: true }));
+      await vi.advanceTimersByTimeAsync(30_000);
+      await controller.pause();
+      controller.stop();
+      expect(controller.phase).toBe('finished');
+      expect(results).toEqual([true]);
+    });
+
+    it('keeps firing checkpoints — there is no end guard to run into', async () => {
+      const seen: number[] = [];
+      controller.onCheckpoint = (info) => seen.push(info.index);
+      await controller.start(
+        config({ durationSec: 0, openEnded: true, checkpointSec: 60, endGuardSec: 300 }),
+      );
+      await vi.advanceTimersByTimeAsync(5 * 60_000 + 500);
+      expect(seen).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('ignores extend()', async () => {
+      await controller.start(config({ durationSec: 0, openEnded: true }));
+      await controller.extend(900);
+      expect(controller.getSnapshot().remainingSec).toBe(0);
+    });
+
+    it('holds the arc at its plateau instead of easing down', async () => {
+      await controller.start(config({ durationSec: 0, openEnded: true }));
+      await vi.advanceTimersByTimeAsync(40 * 60_000);
+      const arc = resolveArc('focus', { durationSec: 0 });
+      const last = engine.setArcModulation.mock.calls.at(-1)![0];
+      expect(last).toEqual(evaluateArc(arc, ARC_PLATEAU_T));
+    });
   });
 });
