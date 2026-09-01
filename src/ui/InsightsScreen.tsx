@@ -87,6 +87,49 @@ export function InsightsScreen(props: {
               </div>
             </div>
 
+            {insight.flywheel && (
+              <div className="insight-bars insight-flywheel">
+                <p className="insight-label">Is personalization working?</p>
+                {(
+                  [
+                    ['Personalized', insight.flywheel.personalized],
+                    ['Your defaults', insight.flywheel.control],
+                  ] as const
+                ).map(([label, group]) => (
+                  <div key={label} className="insight-bar-row">
+                    <span className="insight-bar-name">{label}</span>
+                    <span className="insight-bar-track">
+                      <span
+                        className="insight-bar-fill"
+                        style={{ width: `${Math.round(group.mean * 100)}%` }}
+                      />
+                    </span>
+                    <span className="insight-meta">
+                      {Math.round(group.mean * 100)}%
+                      <span className="insight-ci"> ±{Math.round(group.ci * 100)}</span>
+                      {' · '}
+                      {group.n}
+                    </span>
+                  </div>
+                ))}
+                <p className="hint">
+                  {insight.flywheel.lift >= 0.05 &&
+                    `Personalized sessions score ${Math.round(
+                      insight.flywheel.lift * 100,
+                    )} points above your defaults.`}
+                  {insight.flywheel.lift > -0.05 &&
+                    insight.flywheel.lift < 0.05 &&
+                    'Personalized and default sessions score about the same so far.'}
+                  {insight.flywheel.lift <= -0.05 &&
+                    'Your defaults are currently ahead — the app keeps learning.'}
+                  {insight.flywheel.heldOutCount > 0 &&
+                    ` Includes ${insight.flywheel.heldOutCount} held-out default ${
+                      insight.flywheel.heldOutCount === 1 ? 'session' : 'sessions'
+                    } for a fair comparison.`}
+                </p>
+              </div>
+            )}
+
             {bars.length > 0 && (
               <div className="insight-bars">
                 <p className="insight-label">Most effective</p>

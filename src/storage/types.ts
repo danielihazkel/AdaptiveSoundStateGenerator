@@ -150,7 +150,13 @@ export interface SessionRecord {
   /** Bandit candidate recipe that produced the served profile (absent for presets). */
   servedArmId?: string;
   /** How the starting profile was chosen. Absent on pre-Phase-2 records. */
-  servedBy?: 'prior' | 'bandit' | 'locked' | 'preset';
+  /**
+   * 'baseline' = a held-out serve of the pure state default *after* cold
+   * start (1 in HOLDOUT_EVERY explore sessions): the unbiased measuring
+   * stick the "is personalization working?" comparison needs — early
+   * 'prior' sessions alone are confounded with the user settling in.
+   */
+  servedBy?: 'prior' | 'bandit' | 'locked' | 'preset' | 'baseline';
   /**
    * Sleep-onset wind-down (Phase 9): elapsed seconds at which the heart
    * rate said "asleep" and the session faded out early as completed.

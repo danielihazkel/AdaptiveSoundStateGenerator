@@ -18,6 +18,8 @@ import { CANDIDATE_SET_VERSION, PRIOR_ARM_ID } from './candidates';
 import {
   chooseProfile,
   ensurePersonalizationVersion,
+  HOLDOUT_EVERY,
+  HOLDOUT_SLOT,
   resolveOutcome,
   resolvePendingOutcomes,
 } from './personalizer';
@@ -89,6 +91,38 @@ describe('chooseProfile', () => {
 
     // Other states are untouched by focus data — still cold.
     expect(chooseProfile('sleep', 0.5, 'explore').servedBy).toBe('prior');
+  });
+
+  it('holds out the baseline on schedule after cold start (explore only)', () => {
+    const resolveOne = () => {
+      const session = makeSession({
+        feedback: { rating: 4, ratedAt: new Date().toISOString() },
+      });
+      appendSession(session);
+      resolveOutcome(session.id);
+    };
+    for (let i = 0; i < COLD_START_SESSIONS; i++) resolveOne();
+
+    // Walk eligible counts from COLD_START upward; the HOLDOUT_SLOT-th
+    // post-cold-start session (and every HOLDOUT_EVERY after) is a baseline.
+    const servedAt: Record<number, string> = {};
+    for (let past = 0; past < 2 * HOLDOUT_EVERY; past++) {
+      const served = chooseProfile('focus', 0.5, 'explore');
+      servedAt[past] = served.servedBy;
+      if (served.servedBy === 'baseline') {
+        // A held-out serve is the untouched state default on the prior arm.
+        expect(served.armId).toBe(PRIOR_ARM_ID);
+        expect(served.profile).toEqual(STATES.focus.buildProfile(0.5));
+        // Locked mode never holds out, even in the slot.
+        expect(chooseProfile('focus', 0.5, 'locked').servedBy).toBe('locked');
+      }
+      resolveOne();
+    }
+    for (let past = 0; past < 2 * HOLDOUT_EVERY; past++) {
+      expect(servedAt[past], `slot ${past}`).toBe(
+        past % HOLDOUT_EVERY === HOLDOUT_SLOT ? 'baseline' : 'bandit',
+      );
+    }
   });
 });
 

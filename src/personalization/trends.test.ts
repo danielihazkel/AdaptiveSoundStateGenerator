@@ -5,6 +5,8 @@ import { scoreSession } from './reward';
 import {
   bestFoundAfter,
   completionRate,
+  MIN_LIFT_GROUP_SESSIONS,
+  personalizationLift,
   ratingTrend,
   TREND_WINDOW,
   trendDirection,
@@ -103,5 +105,61 @@ describe('bestFoundAfter', () => {
     expect(bestFoundAfter(records, 'prior')).toBe(1);
     expect(bestFoundAfter(records, 'noise-alt')).toBeNull();
     expect(bestFoundAfter(records, null)).toBeNull();
+  });
+});
+
+describe('personalizationLift', () => {
+  const control = (rating: Rating, servedBy: 'prior' | 'baseline' = 'prior') =>
+    rated(rating, { servedBy, servedArmId: 'prior' });
+  const personalized = (rating: Rating) =>
+    rated(rating, { servedBy: 'bandit', servedArmId: 'noise-up' });
+
+  it('is null until both groups have enough sessions', () => {
+    expect(personalizationLift([])).toBeNull();
+    const records = [control(3), control(3), personalized(4), personalized(4), personalized(4)];
+    expect(records.filter((r) => r.servedBy === 'prior')).toHaveLength(2);
+    expect(personalizationLift(records)).toBeNull(); // control below the minimum
+  });
+
+  it('contrasts default vs personalized scores and counts held-out serves', () => {
+    const records = [
+      control(3),
+      control(3, 'baseline'),
+      control(2, 'baseline'),
+      personalized(5),
+      personalized(4),
+      personalized(5),
+    ];
+    const lift = personalizationLift(records)!;
+    expect(lift.control.n).toBe(3);
+    expect(lift.personalized.n).toBe(3);
+    expect(lift.heldOutCount).toBe(2);
+    expect(lift.personalized.mean).toBeGreaterThan(lift.control.mean);
+    expect(lift.lift).toBeCloseTo(lift.personalized.mean - lift.control.mean, 12);
+    expect(lift.control.ci).toBeGreaterThan(0);
+    expect(MIN_LIFT_GROUP_SESSIONS).toBe(3);
+  });
+
+  it('excludes presets, replays, customized and recovered sessions', () => {
+    const noise = [
+      rated(1, { servedBy: 'preset', servedArmId: undefined, presetId: 'p1' }),
+      rated(1, { servedArmId: undefined, servedBy: undefined }),
+      rated(1, { customized: true }),
+      rated(1, { recovered: true }),
+    ];
+    const records = [
+      ...noise,
+      control(4),
+      control(4),
+      control(4),
+      personalized(4),
+      personalized(4),
+      personalized(4),
+    ];
+    const lift = personalizationLift(records)!;
+    expect(lift.control.n).toBe(3);
+    expect(lift.personalized.n).toBe(3);
+    // Identical ratings on both sides: no lift either way.
+    expect(Math.abs(lift.lift)).toBeLessThan(1e-12);
   });
 });

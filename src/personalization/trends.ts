@@ -33,6 +33,92 @@ function usable(records: readonly SessionRecord[]): SessionRecord[] {
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 }
 
+// --- Is personalization working? (PRD §18) ----------------------------------
+
+/** Each group needs this many sessions before the comparison is shown. */
+export const MIN_LIFT_GROUP_SESSIONS = 3;
+/** ±1.96 standard errors (≈95 %). */
+const LIFT_CI_Z = 1.96;
+/** |lift| below this reads as "about the same". */
+export const LIFT_MEANINGFUL = 0.05;
+
+export interface LiftGroup {
+  /** Weighted mean session score, 0..1. */
+  mean: number;
+  /** Session count (unweighted, what the user sees). */
+  n: number;
+  /** ± half-width of the ≈95 % interval around `mean`. */
+  ci: number;
+}
+
+export interface PersonalizationLift {
+  /** Sessions that played the untouched state default ('prior' + 'baseline'). */
+  control: LiftGroup;
+  /** Sessions the bandit shaped ('bandit' + 'locked'). */
+  personalized: LiftGroup;
+  /** personalized.mean − control.mean, on the 0..1 score scale. */
+  lift: number;
+  /** How many control sessions were held-out baselines (vs cold start). */
+  heldOutCount: number;
+}
+
+function liftGroup(records: readonly SessionRecord[]): LiftGroup {
+  let sumW = 0;
+  let sumWV = 0;
+  let sumW2 = 0;
+  const scores: Array<{ v: number; w: number }> = [];
+  for (const record of records) {
+    const { value, weight } = scoreSession(record);
+    scores.push({ v: value, w: weight });
+    sumW += weight;
+    sumWV += value * weight;
+    sumW2 += weight * weight;
+  }
+  const mean = sumW > 0 ? sumWV / sumW : 0;
+  const varW =
+    sumW > 0 ? scores.reduce((acc, s) => acc + s.w * (s.v - mean) ** 2, 0) / sumW : 0;
+  // Effective sample size under unequal weights (Kish).
+  const nEff = sumW2 > 0 ? (sumW * sumW) / sumW2 : 0;
+  return {
+    mean,
+    n: records.length,
+    ci: nEff > 0 ? (LIFT_CI_Z * Math.sqrt(varW)) / Math.sqrt(nEff) : 0,
+  };
+}
+
+/**
+ * The flywheel proof: default-sound sessions (cold-start 'prior' plus the
+ * held-out 'baseline' serves) against personalized ones ('bandit'/'locked'),
+ * scored identically. Presets, programs, replays and customized sessions are
+ * out — their sound wasn't what the personalizer served. Null until both
+ * groups have MIN_LIFT_GROUP_SESSIONS.
+ */
+export function personalizationLift(
+  records: readonly SessionRecord[],
+): PersonalizationLift | null {
+  const eligible = usable(records).filter((r) => r.servedArmId && !r.customized);
+  const control = eligible.filter(
+    (r) => r.servedBy === 'prior' || r.servedBy === 'baseline',
+  );
+  const personalized = eligible.filter(
+    (r) => r.servedBy === 'bandit' || r.servedBy === 'locked',
+  );
+  if (
+    control.length < MIN_LIFT_GROUP_SESSIONS ||
+    personalized.length < MIN_LIFT_GROUP_SESSIONS
+  ) {
+    return null;
+  }
+  const controlGroup = liftGroup(control);
+  const personalizedGroup = liftGroup(personalized);
+  return {
+    control: controlGroup,
+    personalized: personalizedGroup,
+    lift: personalizedGroup.mean - controlGroup.mean,
+    heldOutCount: control.filter((r) => r.servedBy === 'baseline').length,
+  };
+}
+
 /** Chronological quality scores, every session (rated or not), plus a smoothed line. */
 export function ratingTrend(records: readonly SessionRecord[]): TrendPoint[] {
   const ordered = usable(records);

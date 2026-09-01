@@ -8,8 +8,10 @@ import { scoreSession } from './reward';
 import {
   bestFoundAfter,
   completionRate,
+  personalizationLift,
   ratingTrend,
   trendDirection,
+  type PersonalizationLift,
   type TrendDirection,
   type TrendPoint,
 } from './trends';
@@ -109,6 +111,11 @@ export interface StateInsights {
    * MIN_HRV_SESSIONS. Positive = HRV rose while listening.
    */
   hrvDeltaPct: { meanPct: number; n: number } | null;
+  /**
+   * The flywheel proof (PRD §18): default-sound sessions vs personalized
+   * ones, scored identically; null until both groups have enough sessions.
+   */
+  flywheel: PersonalizationLift | null;
 }
 
 interface Scored {
@@ -286,6 +293,7 @@ function computeStateInsights(
     bestArm,
     arms,
     hrvDeltaPct,
+    flywheel: personalizationLift(records),
     bestByTime,
     componentEffectiveness,
     preferredBeatRange,

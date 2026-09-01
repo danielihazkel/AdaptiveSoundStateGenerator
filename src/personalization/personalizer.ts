@@ -39,13 +39,32 @@ import { makeSourceArmResolver } from './sourceArm';
 export interface ServedProfile {
   profile: SoundProfile;
   armId: string;
-  servedBy: 'prior' | 'bandit' | 'locked';
+  servedBy: 'prior' | 'bandit' | 'locked' | 'baseline';
+}
+
+/**
+ * Held-out baseline (PRD §18): after cold start, every HOLDOUT_EVERY-th
+ * explore session serves the pure state default, tagged 'baseline'. That
+ * gives the "is personalization working?" comparison a control group spread
+ * across the whole history — the early 'prior' sessions alone are
+ * confounded with the user settling into the app. The session still trains
+ * the bandit (the default *is* the prior arm). Locked mode never holds out:
+ * "lock what works" is a promise not to experiment.
+ */
+export const HOLDOUT_EVERY = 8;
+/** Which post-cold-start slot is held out (0-based): the 4th, then every 8th. */
+export const HOLDOUT_SLOT = 3;
+
+function isHoldoutSlot(eligibleSessions: number): boolean {
+  const past = eligibleSessions - COLD_START_SESSIONS;
+  return past >= 0 && past % HOLDOUT_EVERY === HOLDOUT_SLOT;
 }
 
 /**
  * Decides the starting profile for a non-preset session (PRD §9):
  * cold start ⇒ the state default (still tracked, so the baseline arm
- * accumulates stats); locked ⇒ best known arm; otherwise Thompson sample.
+ * accumulates stats); locked ⇒ best known arm; held-out slot ⇒ the state
+ * default again, tagged 'baseline'; otherwise Thompson sample.
  */
 export function chooseProfile(
   mental: MentalState,
@@ -56,14 +75,18 @@ export function chooseProfile(
   ctx?: ServeContext,
 ): ServedProfile {
   const state = loadPersonalization(CANDIDATE_SET_VERSION);
+  const eligible = eligibleSessionCount(state, mental);
   let armId: string;
   let servedBy: ServedProfile['servedBy'];
-  if (eligibleSessionCount(state, mental) < COLD_START_SESSIONS) {
+  if (eligible < COLD_START_SESSIONS) {
     armId = PRIOR_ARM_ID;
     servedBy = 'prior';
   } else if (mode === 'locked') {
     armId = bestArm(state, mental, ctx);
     servedBy = 'locked';
+  } else if (isHoldoutSlot(eligible)) {
+    armId = PRIOR_ARM_ID;
+    servedBy = 'baseline';
   } else {
     armId = sampleArm(state, mental, rng, ctx);
     servedBy = 'bandit';
