@@ -38,6 +38,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 18,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.7,
       "tone": {
         "frequency": 200,
@@ -79,6 +83,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.105,
         "mode": "simple",
         "rate": 14,
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.7,
       "tone": {
@@ -122,6 +130,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.084,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.7,
       "tone": {
@@ -168,6 +180,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 12,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.8,
       "tone": {
         "frequency": 180,
@@ -209,6 +225,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.055,
         "mode": "simple",
         "rate": 8,
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.8,
       "tone": {
@@ -252,6 +272,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.044000000000000004,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.8,
       "tone": {
@@ -298,6 +322,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 8,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.5,
       "tone": {
         "frequency": 140,
@@ -339,6 +367,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.035,
         "mode": "simple",
         "rate": 4,
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.5,
       "tone": {
@@ -382,6 +414,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.028000000000000004,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.5,
       "tone": {
@@ -428,6 +464,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 26,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.9,
       "tone": {
         "frequency": 240,
@@ -471,6 +511,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.25,
         "mode": "pattern",
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.9,
       "tone": {
         "frequency": 220,
@@ -513,6 +557,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.2,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.9,
       "tone": {
@@ -559,6 +607,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 10,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.7,
       "tone": {
         "frequency": 160,
@@ -600,6 +652,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.08499999999999999,
         "mode": "simple",
         "rate": 6,
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.7,
       "tone": {
@@ -643,6 +699,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.06799999999999999,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.7,
       "tone": {
@@ -689,6 +749,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 11,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.85,
       "tone": {
         "frequency": 150,
@@ -730,6 +794,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.13,
         "mode": "simple",
         "rate": 7,
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.85,
       "tone": {
@@ -773,6 +841,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.10400000000000001,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.85,
       "tone": {
@@ -819,6 +891,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 33,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.6,
       "tone": {
         "frequency": 240,
@@ -860,6 +936,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.07500000000000001,
         "mode": "simple",
         "rate": 16,
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.6,
       "tone": {
@@ -903,6 +983,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.06000000000000001,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.6,
       "tone": {
@@ -949,6 +1033,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 13,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.8,
       "tone": {
         "frequency": 200,
@@ -990,6 +1078,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.3,
         "mode": "simple",
         "rate": 0.125,
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.8,
       "tone": {
@@ -1033,6 +1125,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.24,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.8,
       "tone": {
@@ -1079,6 +1175,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "mode": "simple",
         "rate": 11.5,
       },
+      "space": {
+        "level": 0,
+        "size": 0.5,
+      },
       "stereoWidth": 0.9,
       "tone": {
         "frequency": 220,
@@ -1120,6 +1220,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "depth": 0.08,
         "mode": "simple",
         "rate": 7.5,
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.9,
       "tone": {
@@ -1163,6 +1267,10 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "complexity": 0.4,
         "depth": 0.064,
         "mode": "pattern",
+      },
+      "space": {
+        "level": 0,
+        "size": 0.5,
       },
       "stereoWidth": 0.9,
       "tone": {

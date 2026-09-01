@@ -37,6 +37,9 @@ describe('randomizeProfile', () => {
       expect(p.harmony.rootHz).toBeGreaterThanOrEqual(60);
       expect(p.harmony.rootHz).toBeLessThanOrEqual(300);
       expect(p.bass).toBeLessThanOrEqual(0.6);
+      expect(p.space.level).toBeLessThanOrEqual(0.35);
+      expect(p.space.size).toBeGreaterThanOrEqual(0.2);
+      expect(p.space.size).toBeLessThanOrEqual(0.9);
       expect(p.lowpassHz).toBeGreaterThanOrEqual(2000);
       expect(p.lowpassHz).toBeLessThanOrEqual(LOWPASS_OPEN_HZ);
       // Only synth ambience — a draw must not depend on shipped assets.

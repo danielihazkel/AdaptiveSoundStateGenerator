@@ -101,6 +101,14 @@ export interface SoundProfile {
   };
   /** Low-shelf boost at 150 Hz: 0 → 0 dB (legacy identical) .. 1 → +6 dB. */
   bass: number; // 0..1
+  /**
+   * Reverb send ("space", Phase 9): `level` is the wet mix (0 = legacy
+   * identical — no reverb at all), `size` maps to the room's decay time.
+   */
+  space: {
+    level: number; // 0..1
+    size: number; // 0..1 → RT60 0.6..3 s (see reverb.ts)
+  };
   stereoWidth: number; // 0..1: 0 = mono-ish, 1 = full width (binaural exempt)
   /** Master lowpass cutoff in Hz — PRD §8 "high_frequencies: reduced" for sleep. */
   lowpassHz: number;
@@ -120,6 +128,7 @@ export const defaultProfile: SoundProfile = {
   ambience2: { enabled: false, type: 'ocean', level: 0.1 },
   harmony: { enabled: false, level: 0.25, richness: 0.5, movement: 0.3, rootHz: 110 },
   bass: 0,
+  space: { level: 0, size: 0.5 },
   stereoWidth: 0.7,
   lowpassHz: LOWPASS_OPEN_HZ,
 };
@@ -171,6 +180,7 @@ export function normalizeProfile(raw: unknown): SoundProfile {
   const ambience = (p.ambience ?? {}) as Record<string, unknown>;
   const ambience2 = (p.ambience2 ?? {}) as Record<string, unknown>;
   const harmony = (p.harmony ?? {}) as Record<string, unknown>;
+  const space = (p.space ?? {}) as Record<string, unknown>;
   return {
     masterVolume: num(p.masterVolume, d.masterVolume, 0, 1),
     tone: {
@@ -224,6 +234,12 @@ export function normalizeProfile(raw: unknown): SoundProfile {
       rootHz: num(harmony.rootHz, d.harmony.rootHz, 30, 1000),
     },
     bass: num(p.bass, d.bass, 0, 1),
+    // Profiles saved before space existed come back without it and must
+    // sound identical: the wet level defaults to 0.
+    space: {
+      level: num(space.level, d.space.level, 0, 1),
+      size: num(space.size, d.space.size, 0, 1),
+    },
     stereoWidth: num(p.stereoWidth, d.stereoWidth, 0, 1),
     lowpassHz: num(p.lowpassHz, d.lowpassHz, 100, LOWPASS_OPEN_HZ),
   };

@@ -138,6 +138,8 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   };
   // ramp(this.bassShelf.gain, BASS_MAX_DB * Math.min(1, p.bass * bassScale))
   out.bassDb = BASS_MAX_DB * Math.min(1, p.bass * bassScale);
+  // Phase 9: this.reverb.setParams(level, size)
+  out.space = { level: p.space.level, size: p.space.size };
   // this.width.setWidth(p.stereoWidth)
   out.stereoWidth = p.stereoWidth;
   // ramp(this.lowpass.frequency, lowpassHz)

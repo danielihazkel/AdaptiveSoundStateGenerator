@@ -9,10 +9,12 @@ describe('normalizeProfile', () => {
       unknown
     >;
     delete legacy.ambience;
+    delete legacy.space;
     delete (legacy.tone as Record<string, unknown>).warmth;
 
     const normalized = normalizeProfile(legacy);
     expect(normalized.ambience).toEqual(defaultProfile.ambience);
+    expect(normalized.space).toEqual(defaultProfile.space); // wet 0 = legacy identical
     expect(normalized.tone.warmth).toBe(defaultProfile.tone.warmth);
     // Untouched fields survive verbatim.
     expect(normalized.binaural).toEqual(STATES.relax.buildProfile(0.5).binaural);
@@ -33,9 +35,11 @@ describe('normalizeProfile', () => {
       tone: { enabled: true, frequency: -100, level: Number.NaN, warmth: 3 },
       noise: { enabled: true, type: 'purple', level: 0.4 },
       ambience: { enabled: 'yes', type: 'lava', level: -2 },
+      space: { level: 9, size: -3 },
       lowpassHz: 1e9,
     };
     const p = normalizeProfile(garbage);
+    expect(p.space).toEqual({ level: 1, size: 0 });
     expect(p.masterVolume).toBe(1);
     expect(p.tone.frequency).toBe(20);
     expect(p.tone.level).toBe(defaultProfile.tone.level); // NaN → default

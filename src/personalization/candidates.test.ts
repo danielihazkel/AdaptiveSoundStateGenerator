@@ -29,6 +29,7 @@ function expectedArmCount(state: MentalState): number {
   if (ref.tone.enabled || ref.harmony.enabled) n += 1; // warmth-up
   if (ref.ambience.enabled) n += 1; // ambience-alt
   else n -= 1; // ambience-off would be a no-op
+  if (ref.tone.enabled || ref.harmony.enabled || ref.binaural.enabled) n += 1; // space-on (v4)
   return n;
 }
 
@@ -37,7 +38,7 @@ describe('candidate sets', () => {
     for (const { id: state } of STATE_LIST) {
       const specs = candidatesFor(state);
       expect(specs).toHaveLength(expectedArmCount(state));
-      expect(specs.length).toBeLessThanOrEqual(15);
+      expect(specs.length).toBeLessThanOrEqual(16);
       expect(specs[0].id).toBe(PRIOR_ARM_ID);
       expect(new Set(specs.map((s) => s.id)).size).toBe(specs.length);
       for (const spec of specs) expect(spec.label.length).toBeGreaterThan(0);
@@ -71,6 +72,21 @@ describe('candidate sets', () => {
     expect(ids('focus')).toContain('ambience-alt');
     expect(ids('focus')).toContain('ambience-off');
     for (const { id: state } of STATE_LIST) expect(ids(state)).toContain('bass-up');
+  });
+
+  it('v4 space-on needs tonal content and sets a modest wet room', () => {
+    for (const { id: state } of STATE_LIST) {
+      const ref = STATES[state].buildProfile(0.5);
+      const ids = candidatesFor(state).map((s) => s.id);
+      const expected = ref.tone.enabled || ref.harmony.enabled || ref.binaural.enabled;
+      expect(ids.includes('space-on'), state).toBe(expected);
+      if (!expected) continue;
+      const withSpace = buildCandidateProfile(state, 0.5, 'space-on');
+      expect(withSpace.space.level).toBe(0.25);
+      expect(withSpace.space.size).toBe(0.5);
+      // The prior itself stays dry (a prior retune is a separate decision).
+      expect(ref.space.level).toBe(0);
+    }
   });
 
   it('every arm changes something audible at mid intensity', () => {

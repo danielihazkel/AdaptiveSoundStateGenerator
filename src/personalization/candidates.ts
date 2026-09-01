@@ -41,7 +41,11 @@ import {
 // ensurePersonalizationVersion) rather than reset. If a recipe's math ever
 // has to change, retire its id and introduce a new one (e.g. `beat-down-2`)
 // so a rebuild cannot resurrect stale statistics under the old name.
-export const CANDIDATE_SET_VERSION = 3;
+// v4 (additive): the Phase 9 reverb joins the menu as `space-on` — a modest
+// wet room on the pulsed mix, gated on the state having tonal content for
+// the reverb to act on. State priors keep space.level = 0 (a prior retune is
+// a separate decision; the arm supplies the contrast).
+export const CANDIDATE_SET_VERSION = 4;
 
 export interface CandidateSpec {
   /** Stable across releases — persisted in SessionRecord.servedArmId. */
@@ -117,7 +121,7 @@ function shiftCarrier(deltaHz: number) {
 }
 
 /**
- * Arm menu per state: the identity prior plus 12–14 perturbations. Kept
+ * Arm menu per state: the identity prior plus 13–15 perturbations. Kept
  * deliberately small: Thompson sampling needs a handful of pulls per arm to
  * differentiate, and the data rate is roughly one session a day — so the v3
  * arms are gated on being *audible* against the state's prior (a warmth arm
@@ -265,6 +269,20 @@ export function candidatesFor(state: MentalState): CandidateSpec[] {
       apply: (prior) => {
         const next = cloneProfile(prior);
         next.tone.warmth = Math.min(1, prior.tone.warmth + 0.25);
+        return next;
+      },
+    });
+  }
+  // --- v4: Phase 9 space -----------------------------------------------------
+  // The reverb convolves the pulsed tonal mix, so it needs a tone, a pad, or
+  // a binaural pair to act on (noise through a room barely reads).
+  if (reference.tone.enabled || reference.harmony.enabled || reference.binaural.enabled) {
+    specs.push({
+      id: 'space-on',
+      label: 'A sense of space',
+      apply: (prior) => {
+        const next = cloneProfile(prior);
+        next.space = { level: 0.25, size: 0.5 };
         return next;
       },
     });

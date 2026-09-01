@@ -53,6 +53,10 @@ const DEFAULT_MASTER_VOLUME = 0.5;
  * normalizeProfile) so profile fingerprints never differ by field presence.
  * Fresh object per call — profiles are mutated downstream.
  */
+function noSpace(): SoundProfile['space'] {
+  return { level: 0, size: 0.5 };
+}
+
 function simpleRhythm(): SoundProfile['rhythm'] {
   return { mode: 'simple', bpm: 80, complexity: 0 };
 }
@@ -97,6 +101,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         ambience2: disabledAmbience2(),
         harmony: disabledHarmony(),
         bass: 0,
+        space: noSpace(),
         stereoWidth: 0.7,
         lowpassHz: LOWPASS_OPEN_HZ,
       };
@@ -131,6 +136,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
           rootHz: 110,
         },
         bass: 0.1,
+        space: noSpace(),
         stereoWidth: 0.8,
         lowpassHz: LOWPASS_OPEN_HZ,
       };
@@ -160,6 +166,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         ambience2: disabledAmbience2(),
         harmony: disabledHarmony(),
         bass: lerp(0.1, 0.2, t), // body under the lowpass without raising it
+        space: noSpace(),
         stereoWidth: 0.5,
         lowpassHz: 2000, // PRD §8: high_frequencies reduced
       };
@@ -192,6 +199,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         ambience2: disabledAmbience2(),
         harmony: disabledHarmony(),
         bass: lerp(0.1, 0.25, t),
+        space: noSpace(),
         stereoWidth: 0.9,
         lowpassHz: LOWPASS_OPEN_HZ,
       };
@@ -225,6 +233,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
           rootHz: 105, // octave under the 210 Hz drone
         },
         bass: 0.1,
+        space: noSpace(),
         stereoWidth: 0.7,
         lowpassHz: LOWPASS_OPEN_HZ,
       };
@@ -252,6 +261,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         ambience2: disabledAmbience2(),
         harmony: { enabled: true, level: 0.1, richness: 0.35, movement: 0.3, rootHz: 98 },
         bass: 0,
+        space: noSpace(),
         stereoWidth: 0.85,
         lowpassHz: 6000, // warm softened highs — between sleep's 2000 and open
       };
@@ -288,6 +298,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         ambience2: disabledAmbience2(),
         harmony: disabledHarmony(),
         bass: 0,
+        space: noSpace(),
         stereoWidth: 0.6,
         lowpassHz: LOWPASS_OPEN_HZ,
       };
@@ -325,6 +336,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
           rootHz: 110,
         },
         bass: 0.15,
+        space: noSpace(),
         stereoWidth: 0.8,
         lowpassHz: 8000,
       };
@@ -360,6 +372,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
           rootHz: 146.8, // D3
         },
         bass: 0,
+        space: noSpace(),
         stereoWidth: 0.9,
         lowpassHz: LOWPASS_OPEN_HZ,
       };

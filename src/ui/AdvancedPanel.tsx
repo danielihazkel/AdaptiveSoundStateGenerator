@@ -80,6 +80,26 @@ export const AdvancedPanel = memo(function AdvancedPanel(props: {
           display={pct(p.bass)}
           onChange={(v) => edit((d) => (d.bass = v))}
         />
+        <Slider
+          label="Space"
+          min={0}
+          max={1}
+          step={0.01}
+          value={p.space.level}
+          display={pct(p.space.level)}
+          onChange={(v) => edit((d) => (d.space.level = v))}
+        />
+        {p.space.level > 0 && (
+          <Slider
+            label="Room size"
+            min={0}
+            max={1}
+            step={0.01}
+            value={p.space.size}
+            display={pct(p.space.size)}
+            onChange={(v) => edit((d) => (d.space.size = v))}
+          />
+        )}
       </section>
 
       <section className="panel">

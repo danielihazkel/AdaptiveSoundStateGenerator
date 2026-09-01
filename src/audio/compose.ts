@@ -54,6 +54,8 @@ export interface EffectiveParams {
   };
   /** Low-shelf gain in dB (0..BASS_MAX_DB). */
   bassDb: number;
+  /** Reverb send: wet mix and room size (see reverb.ts). */
+  space: { level: number; size: number };
   stereoWidth: number;
   lowpassHz: number;
 }
@@ -178,6 +180,9 @@ export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
       level: p.harmony.enabled ? p.harmony.level * arcGain * harmonyScale * HARMONY_TRIM : 0,
     },
     bassDb: BASS_MAX_DB * Math.min(1, p.bass * bassScale),
+    // The wet path taps the already-scaled mix, so arc/program gains reach
+    // the reverb through its input — the mix ratio itself stays constant.
+    space: { level: p.space.level, size: p.space.size },
     stereoWidth: p.stereoWidth,
     lowpassHz,
   };

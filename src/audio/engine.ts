@@ -12,6 +12,7 @@ import { ToneLayer } from './layers/toneLayer';
 import { loadNoiseWorklet } from './noise-processor';
 import { PulseModulator, type PulseHandover } from './pulseModulator';
 import { fadeTo, ramp } from './ramp';
+import { ReverbUnit } from './reverb';
 import { StereoWidthNode } from './stereoWidth';
 import { cloneProfile, type NoiseType, type RhythmMode, type SoundProfile } from './types';
 
@@ -89,6 +90,8 @@ export class AudioEngine {
     private readonly ambience: AmbienceLayer,
     private readonly ambience2: AmbienceLayer,
     private readonly harmony: HarmonyLayer,
+    private readonly preMaster: GainNode,
+    private readonly reverb: ReverbUnit,
     private profile: SoundProfile,
   ) {
     // Offline contexts flip suspended/running at every render checkpoint —
@@ -169,12 +172,19 @@ export class AudioEngine {
     lowpass.connect(bassShelf);
     const master = new GainNode(ctx, { gain: 0 });
     master.connect(lowpass);
+    // Pulsed mix (tone/noise/binaural/harmony) lands here, pre-master: the
+    // reverb send taps it so the wet signal rides master fades, lowpass,
+    // bass shelf, limiter and mono gate — while ambience (already diffuse)
+    // and the chime stay dry.
+    const preMaster = new GainNode(ctx);
+    preMaster.connect(master);
+    const reverb = new ReverbUnit(ctx, preMaster, master);
 
     // Layer bus.
     const mixBus = new GainNode(ctx);
     const pulse = new PulseModulator(
       ctx,
-      master,
+      preMaster,
       p.isochronic.rate,
       p.isochronic.enabled ? p.isochronic.depth : 0,
       offline,
@@ -199,7 +209,7 @@ export class AudioEngine {
 
     const engine = new AudioEngine(
       ctx, offline, master, lowpass, bassShelf, limiter, monoGate, width, pulse, tone,
-      binaural, noise, ambience, ambience2, harmony, p,
+      binaural, noise, ambience, ambience2, harmony, preMaster, reverb, p,
     );
     engine.applyAll();
     return engine;
@@ -603,6 +613,18 @@ export class AudioEngine {
     });
   }
 
+  setSpaceLevel(level: number): void {
+    this.patchProfile((p) => {
+      p.space.level = level;
+    });
+  }
+
+  setSpaceSize(size: number): void {
+    this.patchProfile((p) => {
+      p.space.size = size;
+    });
+  }
+
   setStereoWidth(w: number): void {
     this.patchProfile((p) => {
       p.stereoWidth = w;
@@ -629,6 +651,8 @@ export class AudioEngine {
     this.harmony.dispose();
     this.width.dispose();
     this.pulse.dispose();
+    this.reverb.dispose();
+    this.preMaster.disconnect();
     this.master.disconnect();
     this.lowpass.disconnect();
     this.bassShelf.disconnect();
@@ -688,6 +712,7 @@ export class AudioEngine {
     this.harmony.setSoftness(e.harmony.softness, timeConstant);
     this.harmony.setLevel(e.harmony.level, timeConstant);
     ramp(this.ctx, this.bassShelf.gain, e.bassDb, timeConstant);
+    this.reverb.setParams(e.space.level, e.space.size, timeConstant);
     this.width.setWidth(e.stereoWidth, timeConstant);
     ramp(this.ctx, this.lowpass.frequency, e.lowpassHz, timeConstant);
   }

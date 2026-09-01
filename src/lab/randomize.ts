@@ -46,6 +46,10 @@ export function randomizeProfile(
 
   draft.bass = between(0, 0.6);
 
+  // A room half the time, and never drenched.
+  draft.space.level = rand() < 0.5 ? 0 : between(0.05, 0.35);
+  draft.space.size = between(0.2, 0.9);
+
   // Only synth ambience — a random draw must never depend on shipped assets.
   draft.ambience.enabled = rand() < 0.6;
   draft.ambience.type = pick(['rain', 'ocean', 'wind', 'space'] as const);
