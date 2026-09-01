@@ -13,17 +13,29 @@ import {
 
 /**
  * Bluetooth SIG Heart Rate Measurement format: flags byte at offset 0,
- * bit 0 = HR value is uint16 little-endian (else uint8 at offset 1).
+ * bit 0 = HR value is uint16 little-endian (else uint8 at offset 1),
+ * bit 3 = a uint16 energy-expended field follows the HR value,
+ * bit 4 = the remaining bytes are RR intervals, uint16 LE in 1/1024 s.
  * Pure so it is unit-testable without any browser API.
  */
-export function parseHeartRateMeasurement(view: DataView): number | null {
+export function parseHeartRateMeasurement(
+  view: DataView,
+): { bpm: number; rrIntervalsMs: number[] } | null {
   if (view.byteLength < 2) return null;
   const flags = view.getUint8(0);
   const is16Bit = (flags & 0x01) !== 0;
   if (is16Bit && view.byteLength < 3) return null;
   const bpm = is16Bit ? view.getUint16(1, true) : view.getUint8(1);
   if (bpm <= 0 || bpm > 250) return null; // implausible readings are dropped
-  return bpm;
+  let offset = is16Bit ? 3 : 2;
+  if ((flags & 0x08) !== 0) offset += 2; // skip energy expended
+  const rrIntervalsMs: number[] = [];
+  if ((flags & 0x10) !== 0) {
+    for (; offset + 2 <= view.byteLength; offset += 2) {
+      rrIntervalsMs.push((view.getUint16(offset, true) * 1000) / 1024);
+    }
+  }
+  return { bpm, rrIntervalsMs };
 }
 
 // Minimal structural types — the DOM lib has no Web Bluetooth definitions and
@@ -84,9 +96,15 @@ export class WebBluetoothHeartRateSource implements BiometricSource {
       characteristic.addEventListener('characteristicvaluechanged', (event) => {
         const value = (event.target as { value?: DataView } | null)?.value;
         if (!value) return;
-        const bpm = parseHeartRateMeasurement(value);
-        if (bpm === null) return;
-        const sample: BiometricSample = { heartRateBpm: bpm, timestamp: Date.now() };
+        const parsed = parseHeartRateMeasurement(value);
+        if (parsed === null) return;
+        const sample: BiometricSample = {
+          heartRateBpm: parsed.bpm,
+          timestamp: Date.now(),
+          ...(parsed.rrIntervalsMs.length > 0
+            ? { rrIntervalsMs: parsed.rrIntervalsMs }
+            : {}),
+        };
         for (const listener of this.listeners) listener(sample);
       });
       await characteristic.startNotifications();

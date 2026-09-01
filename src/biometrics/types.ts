@@ -9,6 +9,12 @@ export interface BiometricSample {
   heartRateBpm: number;
   /** ms epoch */
   timestamp: number;
+  /**
+   * Beat-to-beat (RR) intervals in ms, when the sensor reports them (most
+   * chest straps do) — the raw material for HRV. In memory only, like every
+   * sample; never persisted.
+   */
+  rrIntervalsMs?: number[];
 }
 
 export type BiometricStatus =

@@ -23,17 +23,26 @@ export function useBiometrics() {
   const usedRef = useRef(false);
   const [status, setStatus] = useState<BiometricStatus>('disconnected');
 
-  /** Dev-only simulated sensor: open the app with ?simhr (rising trend). */
-  const simulated = useMemo(
-    () => new URLSearchParams(window.location.search).has('simhr'),
-    [],
-  );
+  /**
+   * Dev-only simulated sensor: open the app with ?simhr (rising trend) or
+   * ?simhr=sleep (falling, settling — exercises the sleep-onset detector).
+   */
+  const simulatedMode = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('simhr')) return null;
+    return params.get('simhr') === 'sleep' ? ('sleep' as const) : ('rising' as const);
+  }, []);
+  const simulated = simulatedMode !== null;
   const possible = simulated || isWebBluetoothAvailable();
 
   const connect = async () => {
     if (!sourceRef.current) {
       const source: BiometricSource = simulated
-        ? new SimulatedHeartRateSource({ driftPerMin: 2 })
+        ? new SimulatedHeartRateSource(
+            simulatedMode === 'sleep'
+              ? { baselineBpm: 64, driftPerMin: -0.8, noiseBpm: 1, hrvMs: 55 }
+              : { driftPerMin: 2 },
+          )
         : new WebBluetoothHeartRateSource();
       source.onStatusChange = setStatus;
       sourceRef.current = source;

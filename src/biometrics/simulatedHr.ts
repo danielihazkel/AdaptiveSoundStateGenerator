@@ -20,6 +20,8 @@ export class SimulatedHeartRateSource implements BiometricSource {
       /** BPM added per minute of runtime (positive = rising trend). */
       driftPerMin?: number;
       noiseBpm?: number;
+      /** RR-interval jitter (± ms) around 60000/bpm — simulated HRV. */
+      hrvMs?: number;
       rng?: () => number;
       intervalMs?: number;
     } = {},
@@ -35,6 +37,7 @@ export class SimulatedHeartRateSource implements BiometricSource {
       baselineBpm = 62,
       driftPerMin = 0,
       noiseBpm = 2,
+      hrvMs = 40,
       rng = Math.random,
       intervalMs = 1000,
     } = this.opts;
@@ -46,6 +49,8 @@ export class SimulatedHeartRateSource implements BiometricSource {
       const sample: BiometricSample = {
         heartRateBpm: Math.round(bpm),
         timestamp: Date.now(),
+        // One beat interval per tick, jittered — enough for the HRV path.
+        rrIntervalsMs: [Math.max(300, 60000 / bpm + hrvMs * (rng() * 2 - 1))],
       };
       for (const listener of this.listeners) listener(sample);
     }, intervalMs);
