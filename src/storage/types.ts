@@ -30,6 +30,12 @@ export interface Settings {
   breathingPattern?: BreathingPatternId;
   /** Sleep sessions: rise gently over the last `riseMinutes` and end with a chime. */
   wakeUp?: { enabled: boolean; riseMinutes: number };
+  /**
+   * Phase 9 (opt-in, needs a heart-rate sensor): fade a sleep session out as
+   * completed once sleep onset is detected. Absent = off — a session must
+   * never end early without the user having asked for it.
+   */
+  sleepOnsetFade?: boolean;
   /** Color theme; absent = follow the OS. */
   theme?: Theme;
   /** ISO timestamp the first-run tour was finished or skipped; absent = not yet. */
@@ -145,6 +151,11 @@ export interface SessionRecord {
   servedArmId?: string;
   /** How the starting profile was chosen. Absent on pre-Phase-2 records. */
   servedBy?: 'prior' | 'bandit' | 'locked' | 'preset';
+  /**
+   * Sleep-onset wind-down (Phase 9): elapsed seconds at which the heart
+   * rate said "asleep" and the session faded out early as completed.
+   */
+  sleepOnsetSec?: number;
   /** User explicitly declined to rate — itself an implicit signal (PRD §9). */
   feedbackSkipped?: boolean;
   /** ISO timestamp of the bandit update — guards against double-counting. */
@@ -195,6 +206,8 @@ export interface InProgressSession {
   breathingPattern?: SessionRecord['breathingPattern'];
   wakeUp?: { riseSec: number };
   openEnded?: true;
+  /** Sleep onset already detected at this elapsed second (Phase 9). */
+  sleepOnsetSec?: number;
   /** Listening time at the last checkpoint. */
   elapsedSec: number;
   updatedAt: string; // ISO

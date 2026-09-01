@@ -517,3 +517,81 @@ describe('SessionController — resume failure, extend, wake-up alarm', () => {
     });
   });
 });
+
+describe('windDown (sleep-onset fade, Phase 9)', () => {
+  let engine: ReturnType<typeof stubEngine>;
+  let controller: SessionController;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'Date'] });
+    engine = stubEngine();
+    controller = new SessionController(engine as unknown as AudioEngine);
+  });
+
+  afterEach(() => {
+    controller.dispose();
+    vi.useRealTimers();
+  });
+
+  it('ends a running sleep session as completed with the sleep fade, no chime', async () => {
+    const results: Array<{ completed: boolean; woundDownAtSec?: number }> = [];
+    controller.onComplete = (r) =>
+      results.push({ completed: r.completed, woundDownAtSec: r.woundDownAtSec });
+    await controller.start(
+      config({ state: 'sleep', durationSec: 60 * 60, profile: STATES.sleep.buildProfile(0.5) }),
+    );
+    await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+    expect(controller.windDown()).toBe(true);
+    expect(controller.getSnapshot().windingDown).toBe(true);
+    expect(controller.getSnapshot().phase).toBe('ending');
+    // endSession got sleep's long fade and no chime.
+    const [fadeSeconds, chime] = engine.endSession.mock.calls.at(-1)!;
+    expect(fadeSeconds).toBeCloseTo(STATES.sleep.end.fadeSeconds, 0);
+    expect(chime).toBe(false);
+    await vi.advanceTimersByTimeAsync((STATES.sleep.end.fadeSeconds + 1) * 1000);
+    expect(results).toEqual([{ completed: true, woundDownAtSec: 15 * 60 }]);
+  });
+
+  it('is refused for programs, wake-up, open-ended, near the end, and when not running', async () => {
+    await controller.start(
+      config({ state: 'sleep', durationSec: 60 * 60, profile: STATES.sleep.buildProfile(0.5), wakeUp: { riseSec: 300 } }),
+    );
+    await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+    expect(controller.windDown()).toBe(false);
+    controller.stop();
+
+    await controller.start(config({ program: defaultProgram('sleep', 0.5), durationSec: 60 * 60 }));
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    expect(controller.windDown()).toBe(false);
+    controller.stop();
+
+    await controller.start(config({ openEnded: true }));
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    expect(controller.windDown()).toBe(false);
+    controller.stop();
+
+    // Near the end: the fade already owns the finish.
+    await controller.start(config({ state: 'sleep', durationSec: 90, profile: STATES.sleep.buildProfile(0.5) }));
+    await vi.advanceTimersByTimeAsync(45 * 1000);
+    expect(controller.windDown()).toBe(false);
+
+    // Paused sessions are refused too.
+    await vi.advanceTimersByTimeAsync(1000);
+    await controller.pause();
+    expect(controller.windDown()).toBe(false);
+  });
+
+  it('the +extend escape hatch cancels a wind-down fade', async () => {
+    const results: boolean[] = [];
+    controller.onComplete = (r) => results.push(r.completed);
+    await controller.start(
+      config({ state: 'sleep', durationSec: 60 * 60, profile: STATES.sleep.buildProfile(0.5) }),
+    );
+    await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+    expect(controller.windDown()).toBe(true);
+    expect(controller.getSnapshot().phase).toBe('ending');
+    await controller.extend(15 * 60);
+    expect(controller.getSnapshot().phase).toBe('running');
+    expect(results).toEqual([]);
+  });
+});

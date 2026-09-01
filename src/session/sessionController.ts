@@ -67,6 +67,8 @@ export interface SessionResult {
   startedAt: string; // ISO timestamp
   actualDurationSec: number;
   completed: boolean;
+  /** Elapsed seconds at which windDown() fired (sleep onset), if it did. */
+  woundDownAtSec?: number;
 }
 
 export interface SessionSnapshot {
@@ -78,6 +80,8 @@ export interface SessionSnapshot {
   openEnded?: boolean;
   /** The last resume() could not restart audio (context refused to resume). */
   resumeFailed?: boolean;
+  /** windDown() fired — the session is fading out because the user fell asleep. */
+  windingDown?: boolean;
 }
 
 const TICK_MS = 500;
@@ -118,6 +122,8 @@ export class SessionController {
   /** Program phase last seen by tick(), for boundary chimes. */
   private segmentIndex = 0;
   private startedAt = '';
+  /** Elapsed seconds at which windDown() pinned the end, else null. */
+  private woundDownAtSec: number | null = null;
   private readonly clock = new ElapsedClock();
   private interval: ReturnType<typeof setInterval> | undefined;
   private alarmTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -151,6 +157,7 @@ export class SessionController {
   async start(config: SessionConfig): Promise<void> {
     this.config = config;
     this.resumeFailed = false;
+    this.woundDownAtSec = null;
     this.startedAt = new Date().toISOString();
     this.clock.start();
     this.nextCheckpointSec = config.checkpointSec ?? Infinity;
@@ -276,6 +283,28 @@ export class SessionController {
   }
 
   /**
+   * Sleep-onset wind-down (Phase 9): end the session *as completed* with the
+   * state's normal end fade, starting now — the sleep-onset watcher calls
+   * this when the heart rate says the user is asleep. Reuses the open-ended
+   * stop mechanism: pin the duration to "now + fade" and let tick() run the
+   * ordinary ending → finished path (no chime for sleep). Refused (false)
+   * for programs, wake-up and open-ended sessions, outside 'running', or
+   * when the planned end is already inside the fade.
+   */
+  windDown(): boolean {
+    const config = this.config;
+    if (!config || this.snapshot.phase !== 'running') return false;
+    if (config.program || config.openEnded || config.wakeUp) return false;
+    const fade = resolveEndFadeSeconds(config.state);
+    const elapsedSec = this.elapsedMs() / 1000;
+    if (config.durationSec - elapsedSec <= fade) return false;
+    this.woundDownAtSec = Math.round(elapsedSec);
+    config.durationSec = elapsedSec + fade;
+    this.tick();
+    return true;
+  }
+
+  /**
    * The only mid-session sound-change entry point (adaptation loop). The
    * phase guard structurally protects the end/pause fades: applying a profile
    * during 'ending'/'paused' would cancel their in-flight master-gain ramps.
@@ -394,6 +423,7 @@ export class SessionController {
       startedAt: this.startedAt,
       actualDurationSec: Math.round(this.clock.elapsedMs() / 1000),
       completed,
+      ...(this.woundDownAtSec !== null ? { woundDownAtSec: this.woundDownAtSec } : {}),
     });
   }
 
@@ -412,6 +442,7 @@ export class SessionController {
       remainingSec: openEnded ? 0 : Math.max((this.config?.durationSec ?? 0) - elapsedSec, 0),
       ...(openEnded ? { openEnded: true } : {}),
       ...(this.resumeFailed ? { resumeFailed: true } : {}),
+      ...(this.woundDownAtSec !== null ? { windingDown: true } : {}),
     };
     for (const listener of this.listeners) listener();
   }

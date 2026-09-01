@@ -504,6 +504,8 @@ export function App() {
           }
           onConnect={() => void biometrics.connect()}
           onDisconnect={biometrics.disconnect}
+          sleepOnsetFade={settings.sleepOnsetFade === true}
+          onSleepOnsetFadeChange={(on) => updateSettings({ sleepOnsetFade: on })}
         />
       )}
 

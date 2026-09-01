@@ -65,7 +65,8 @@ export function SessionScreen(props: {
         <p className="hint session-phase" aria-live="polite">
           {phase === 'paused' && 'Paused'}
           {phase === 'interrupted' && 'Interrupted'}
-          {phase === 'ending' && 'Winding down…'}
+          {phase === 'ending' &&
+            (props.snapshot.windingDown ? 'Asleep — fading out 🌙' : 'Winding down…')}
           {phase === 'running' && (openEnded ? 'Playing · until you stop' : 'Playing')}
           {phase === 'alarm' && 'Time to wake up'}
         </p>

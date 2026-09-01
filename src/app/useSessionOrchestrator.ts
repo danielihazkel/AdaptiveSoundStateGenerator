@@ -29,6 +29,7 @@ import {
   type Settings,
 } from '../storage/types';
 import { OTHER_TAB_SESSION_MESSAGE, START_ERROR_MESSAGE } from '../ui/SafetyNotices';
+import { watchSleepOnset, type SleepOnsetWatch } from './sleepOnsetWatcher';
 import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
 import type { Coach } from './useCoach';
@@ -88,6 +89,12 @@ export function useSessionOrchestrator(deps: {
   /** Checkpoint of the running session (minus elapsed), rewritten as it plays. */
   const checkpointRef = useRef<Omit<InProgressSession, 'elapsedSec' | 'updatedAt'> | null>(null);
   const unsubscribeCheckpointRef = useRef<(() => void) | null>(null);
+  /** Sleep-onset watch of the running session (Phase 9), if armed. */
+  const sleepOnsetWatchRef = useRef<SleepOnsetWatch | null>(null);
+  const stopSleepOnsetWatch = () => {
+    sleepOnsetWatchRef.current?.stop();
+    sleepOnsetWatchRef.current = null;
+  };
   /** Cross-tab "a session is playing" lock held for the life of the session. */
   const sessionLockRef = useRef<LockRelease | null>(null);
   const releaseSessionLock = () => {
@@ -131,21 +138,30 @@ export function useSessionOrchestrator(deps: {
   };
 
   const handleComplete = (result: SessionResult) => {
+    // Read the checkpoint before stopCheckpointing() nulls it — it remembers
+    // how the session was configured (the controller mutates its config:
+    // Stop clears `openEnded`, windDown pins `durationSec`).
+    const checkpoint = checkpointRef.current;
+    stopSleepOnsetWatch();
     stopCheckpointing();
     releaseSessionLock();
     const engine = engineRef.current;
     const profile = engine?.getProfile() ?? result.config.profile;
     const served = servedRef.current;
     const meta = adaptation.getMeta();
-    // The controller clears `openEnded` when Stop turns into the end fade;
-    // the checkpoint remembers how the session was configured.
-    const openEnded = checkpointRef.current?.openEnded === true;
+    const openEnded = checkpoint?.openEnded === true;
     const record: SessionRecord = {
       id: newId(),
       startedAt: result.startedAt,
       state: result.config.state,
       intensity: result.config.intensity,
-      plannedDurationSec: openEnded ? result.actualDurationSec : result.config.durationSec,
+      // A wound-down session's config.durationSec was pinned to "onset +
+      // fade" — the checkpoint holds what was actually planned.
+      plannedDurationSec: openEnded
+        ? result.actualDurationSec
+        : result.woundDownAtSec !== undefined
+          ? (checkpoint?.plannedDurationSec ?? result.config.durationSec)
+          : result.config.durationSec,
       actualDurationSec: result.actualDurationSec,
       completed: result.completed,
       customized: customizedRef.current,
@@ -169,6 +185,7 @@ export function useSessionOrchestrator(deps: {
           : undefined,
       wakeUp: result.config.wakeUp,
       openEnded: openEnded || undefined,
+      sleepOnsetSec: result.woundDownAtSec,
     };
     appendSession(record);
     deps.onSessionStored();
@@ -197,6 +214,7 @@ export function useSessionOrchestrator(deps: {
   // Release the audio graph and timers if the app root ever unmounts.
   useEffect(
     () => () => {
+      sleepOnsetWatchRef.current?.stop();
       unsubscribeCheckpointRef.current?.();
       sessionLockRef.current?.();
       controllerRef.current?.dispose();
@@ -401,11 +419,36 @@ export function useSessionOrchestrator(deps: {
         openEnded: openEnded || undefined,
       };
       startCheckpointing(controller);
+      // Sleep-onset fade (Phase 9): opt-in, plain sleep sessions only — a
+      // program owns its shape, a wake-up must ring, and open-ended sessions
+      // already end on Stop. Works for presets/replays too (unlike the
+      // adaptation loop). Without a connected sensor the detector simply
+      // never has fresh samples.
+      stopSleepOnsetWatch();
+      if (
+        sessionState === 'sleep' &&
+        settings.sleepOnsetFade === true &&
+        !wakeUp &&
+        !program &&
+        !openEnded
+      ) {
+        sleepOnsetWatchRef.current = watchSleepOnset(
+          controller,
+          biometrics.getSamples,
+          (elapsedSec) => {
+            // Remember the onset in the crash checkpoint too.
+            if (checkpointRef.current) {
+              checkpointRef.current = { ...checkpointRef.current, sleepOnsetSec: elapsedSec };
+            }
+          },
+        );
+      }
       deps.onSessionStarted();
     } catch (err) {
       // AudioContext blocked, worklet failed to load, no output device… The
       // controller may be mid-start; stop it so the next Begin starts clean.
       console.error('Session failed to start', err);
+      stopSleepOnsetWatch();
       stopCheckpointing();
       releaseSessionLock();
       try {

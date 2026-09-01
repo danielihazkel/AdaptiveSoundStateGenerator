@@ -57,6 +57,13 @@ export const INTERVAL_SESSION_WEIGHT = 0.8;
  * tap (PRD §9) — a small nudge below an unrated session, at implicit weight.
  */
 export const SKIPPED_RATING_PENALTY = 0.05;
+
+/**
+ * Falling asleep to a sleep session is the outcome the state exists for: the
+ * early fade must not read as an early stop (fraction forced to 1) and earns
+ * a small positive nudge on top (Phase 9).
+ */
+export const SLEEP_ONSET_ADJUST = 0.1;
 /**
  * Replaying a session or a preset saved from one is a positive label for the
  * arm behind the sound (PRD §15): the *choice* counts REPLAY_CHOICE_VALUE,
@@ -97,11 +104,16 @@ export function computeReward(record: SessionRecord): RewardResult | null {
  * aggregations (PRD §10), which cover every session including presets.
  */
 export function scoreSession(record: SessionRecord): RewardResult {
-  const fraction = record.openEnded
-    ? Math.min(record.actualDurationSec / OPEN_ENDED_TARGET_SEC, 1)
-    : record.plannedDurationSec > 0
-      ? Math.min(record.actualDurationSec / record.plannedDurationSec, 1)
-      : 0;
+  // A detected sleep onset ended the session early *on purpose* — that is
+  // full completion, not an early stop.
+  const fraction =
+    record.sleepOnsetSec !== undefined
+      ? 1
+      : record.openEnded
+        ? Math.min(record.actualDurationSec / OPEN_ENDED_TARGET_SEC, 1)
+        : record.plannedDurationSec > 0
+          ? Math.min(record.actualDurationSec / record.plannedDurationSec, 1)
+          : 0;
   const implicit = IMPLICIT_BASE + IMPLICIT_SPAN * fraction;
 
   let value: number;
@@ -118,6 +130,8 @@ export function scoreSession(record: SessionRecord): RewardResult {
     weight = IMPLICIT_ONLY_WEIGHT;
     if (record.feedbackSkipped) value -= SKIPPED_RATING_PENALTY;
   }
+
+  if (record.sleepOnsetSec !== undefined) value += SLEEP_ONSET_ADJUST;
 
   value += Math.max(
     VOLUME_PENALTY_FLOOR,

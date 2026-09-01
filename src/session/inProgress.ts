@@ -38,6 +38,7 @@ export function recoverSession(checkpoint: InProgressSession): SessionRecord | n
     breathingPattern: checkpoint.breathingPattern,
     wakeUp: checkpoint.wakeUp,
     openEnded: checkpoint.openEnded,
+    sleepOnsetSec: checkpoint.sleepOnsetSec,
     feedbackSkipped: true,
     recovered: true,
   };

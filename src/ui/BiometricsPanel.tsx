@@ -20,6 +20,9 @@ export function BiometricsPanel(props: {
   onConsent: (consented: boolean) => void;
   onConnect: () => void;
   onDisconnect: () => void;
+  /** Phase 9: fade sleep sessions out once the heart rate says "asleep". */
+  sleepOnsetFade: boolean;
+  onSleepOnsetFadeChange: (on: boolean) => void;
 }) {
   return (
     <section className="setup-section biometrics-panel">
@@ -54,6 +57,16 @@ export function BiometricsPanel(props: {
         )}
         <span className="hint">{STATUS_LABEL[props.status]}</span>
       </div>
+      {props.consented && (
+        <label className="mono-toggle">
+          <input
+            type="checkbox"
+            checked={props.sleepOnsetFade}
+            onChange={(e) => props.onSleepOnsetFadeChange(e.target.checked)}
+          />
+          Fade out once I'm asleep (sleep sessions with the sensor connected)
+        </label>
+      )}
     </section>
   );
 }

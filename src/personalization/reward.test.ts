@@ -361,3 +361,40 @@ describe('PRD §9 extras: distraction and use-again', () => {
     expect(scoreSession(makeRecord())).toEqual(scoreSession(makeRecord()));
   });
 });
+
+describe('sleep-onset wind-down (Phase 9)', () => {
+  it('counts as full completion plus a small bonus, never an early stop', () => {
+    // 15 of 60 planned minutes — normally a heavy completion penalty.
+    const woundDown = computeReward(
+      makeRecord({
+        state: 'sleep',
+        plannedDurationSec: 3600,
+        actualDurationSec: 15 * 60 + 60,
+        completed: true,
+        sleepOnsetSec: 15 * 60,
+        feedbackSkipped: true,
+      }),
+    )!;
+    const stoppedEarly = computeReward(
+      makeRecord({
+        state: 'sleep',
+        plannedDurationSec: 3600,
+        actualDurationSec: 15 * 60 + 60,
+        completed: false,
+        feedbackSkipped: true,
+      }),
+    )!;
+    const ranFully = computeReward(
+      makeRecord({
+        state: 'sleep',
+        plannedDurationSec: 3600,
+        actualDurationSec: 3600,
+        completed: true,
+        feedbackSkipped: true,
+      }),
+    )!;
+    expect(woundDown.value).toBeGreaterThan(stoppedEarly.value);
+    expect(woundDown.value).toBeGreaterThan(ranFully.value); // the bonus
+    expect(woundDown.weight).toBe(stoppedEarly.weight);
+  });
+});
