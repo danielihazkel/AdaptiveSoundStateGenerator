@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_PULSE_RATE_HZ, STATE_LIST, STATES, type MentalState } from '../audio/states';
-import { MAX_MASTER_VOLUME } from '../ui/AdvancedPanel';
+import { MAX_MASTER_VOLUME } from '../audio/mixPolicy';
 import {
   buildCandidateProfile,
   candidatesFor,

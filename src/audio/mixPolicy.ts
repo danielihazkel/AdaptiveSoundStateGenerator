@@ -18,6 +18,11 @@ export const ALARM_REPEAT_SECONDS = 4;
  */
 export const TYPE_FADE_SECONDS = 0.1;
 
+/** UI-side master-volume cap — part of the PRD §13 ceiling (see the trims below). */
+export const MAX_MASTER_VOLUME = 0.85;
+/** One ↑/↓ keypress on the session screen. */
+export const VOLUME_KEY_STEP = 0.05;
+
 /**
  * Per-layer trim so equal slider values sound roughly equally loud (a sine at
  * 0.5 is far louder than pink noise at 0.5). Together with the master limiter

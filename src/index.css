@@ -774,6 +774,15 @@ input[type="checkbox"] {
   justify-content: center;
 }
 
+.session-volume {
+  max-width: 22rem;
+  margin: 1rem auto 0;
+}
+
+.session-volume .control {
+  grid-template-columns: 4rem 1fr 3rem;
+}
+
 .stop-button {
   font-size: 1rem;
   padding: 0.65rem 1.6rem;

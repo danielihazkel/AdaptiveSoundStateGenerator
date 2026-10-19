@@ -7,6 +7,7 @@ import {
   type RhythmMode,
   type SoundProfile,
 } from '../audio/types';
+import { MAX_MASTER_VOLUME } from '../audio/mixPolicy';
 import { Slider } from './Slider';
 
 const AMBIENCE_LABELS: Record<AmbienceType, string> = {
@@ -18,9 +19,6 @@ const AMBIENCE_LABELS: Record<AmbienceType, string> = {
   fireplace: 'Fireplace',
   cafe: 'Café',
 };
-
-/** UI-side loudness cap — part of the PRD §13 ceiling (see engine trims). */
-export const MAX_MASTER_VOLUME = 0.85;
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 

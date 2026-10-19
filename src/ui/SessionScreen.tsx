@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import type { CheckpointResponse } from '../adaptation/types';
 import { pulseDerivedPattern, type BreathPattern } from '../audio/breathing';
 import type { StateDefinition } from '../audio/states';
-import type { SoundProfile } from '../audio/types';
+import { MAX_MASTER_VOLUME } from '../audio/mixPolicy';
+import { cloneProfile, type SoundProfile } from '../audio/types';
 import { evaluateProgram, segmentAt } from '../programs/evaluator';
 import type { Program } from '../programs/types';
 import type { SessionSnapshot } from '../session/sessionController';
@@ -12,6 +13,7 @@ import { pacerRateFor } from './breathing';
 import { formatClock } from './format';
 import { MicroPrompt } from './MicroPrompt';
 import { PresetSaveRow } from './PresetSaveRow';
+import { Slider } from './Slider';
 
 export function SessionScreen(props: {
   stateDef: StateDefinition;
@@ -48,6 +50,13 @@ export function SessionScreen(props: {
     }),
     [props.program, elapsedSec],
   );
+  // Same path as the advanced panel's slider: a volume-only change is an
+  // implicit signal, never a customization (useSessionOrchestrator).
+  const setVolume = (v: number) => {
+    const next = cloneProfile(props.profile);
+    next.masterVolume = Math.min(MAX_MASTER_VOLUME, Math.max(0, v));
+    props.onProfileChange(next);
+  };
   const pacerRate = pacerRateFor(props.profile);
   const breathPattern =
     props.breathing ?? (pacerRate !== null ? pulseDerivedPattern(pacerRate) : null);
@@ -149,6 +158,20 @@ export function SessionScreen(props: {
           </button>
         )}
       </div>
+
+      {phase !== 'finished' && phase !== 'stoppedEarly' && (
+        <div className="session-volume">
+          <Slider
+            label="Volume"
+            min={0}
+            max={MAX_MASTER_VOLUME}
+            step={0.01}
+            value={props.profile.masterVolume}
+            display={`${Math.round(props.profile.masterVolume * 100)}%`}
+            onChange={setVolume}
+          />
+        </div>
+      )}
 
       <button
         type="button"
