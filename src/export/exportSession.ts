@@ -1,4 +1,4 @@
-import { mixOverlap } from './crossfade';
+import { ChunkSeamer } from './chunkSeamer';
 import { EncodeStream } from './encodeMp3';
 import { downloadBlob } from '../platform/download';
 import { exportFilename } from './filename';
@@ -49,25 +49,14 @@ export async function exportSessionAudio(
     signal,
     options,
   );
-  // The previous chunk's final CHUNK_CROSSFADE_SEC, held back for the seam.
-  let tail: { left: Float32Array; right: Float32Array } | null = null;
+  const seamer = new ChunkSeamer(crossN, EXPORT_SAMPLE_RATE);
 
   try {
     await renderSessionChunks(
       sel,
       (buffer, chunk) => {
-        const left = buffer.getChannelData(0);
-        const right = buffer.getChannelData(1);
-        // Discard the settle part of the lead; the remainder is the overlap
-        // region that gets crossfaded with the previous chunk's tail.
-        const skip = chunk.leadSec > 0 ? Math.round(chunk.leadSec * EXPORT_SAMPLE_RATE) - crossN : 0;
-        if (tail) {
-          mixOverlap(tail.left, left.subarray(skip, skip + crossN));
-          mixOverlap(tail.right, right.subarray(skip, skip + crossN));
-        }
-        const end = chunk.last ? left.length : left.length - crossN;
-        tail = chunk.last ? null : { left: left.slice(end), right: right.slice(end) };
-        stream.push(buffer, skip, end, chunk.last);
+        const { start, end } = seamer.seam(buffer, chunk);
+        stream.push(buffer, start, end, chunk.last);
       },
       (fraction) => onProgress({ phase: 'rendering', fraction }),
       signal,

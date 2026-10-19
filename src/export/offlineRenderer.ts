@@ -81,11 +81,12 @@ export async function renderSessionChunks(
   onChunk: (buffer: AudioBuffer, chunk: RenderChunk) => void,
   onProgress: (fraction01: number) => void,
   signal?: AbortSignal,
+  opts: { chunkSec?: number } = {},
 ): Promise<void> {
   signal?.throwIfAborted();
   const plan = buildRenderPlan(sel);
   let handover: ChunkHandover | null = null;
-  for (const chunk of splitRenderPlan(plan)) {
+  for (const chunk of splitRenderPlan(plan, opts.chunkSec)) {
     const buffer = await renderChunk(sel, plan, chunk, handover, onProgress, signal);
     handover = buffer.handover;
     onChunk(buffer.audio, chunk);

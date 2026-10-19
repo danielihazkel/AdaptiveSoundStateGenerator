@@ -11,6 +11,11 @@ import './index.css';
 // instead of vanishing into the console.
 installGlobalErrorHandlers();
 
+// Audio QA hooks for the Playwright specs — dev server only, never bundled.
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('qa')) {
+  void import('./dev/qaHooks');
+}
+
 // Installable / offline app shell. A new build waits (registerType 'prompt')
 // until the user taps Update in the toast; the reload then runs only while
 // nothing would be lost — never mid-session or mid-export (see reloadGate).

@@ -148,11 +148,14 @@ export interface RenderChunk {
  * plan that fits in one chunk yields exactly one chunk with no lead —
  * byte-identical to a monolithic render. Later chunks overlap the previous
  * one by CHUNK_LEAD_SEC so the encoder can crossfade across the seam.
+ * `chunkSec` exists for audio QA, which needs seams without rendering
+ * 15 minutes per chunk; it must leave room for the lead and the crossfade.
  */
-export function splitRenderPlan(plan: RenderPlan): RenderChunk[] {
+export function splitRenderPlan(plan: RenderPlan, chunkSec = EXPORT_CHUNK_SECONDS): RenderChunk[] {
+  if (chunkSec < MIN_LAST_CHUNK_SEC) throw new RangeError(`chunkSec must be ≥ ${MIN_LAST_CHUNK_SEC}`);
   const total = plan.renderSeconds;
-  let count = Math.max(1, Math.ceil(total / EXPORT_CHUNK_SECONDS));
-  if (count > 1 && total - (count - 1) * EXPORT_CHUNK_SECONDS < MIN_LAST_CHUNK_SEC) {
+  let count = Math.max(1, Math.ceil(total / chunkSec));
+  if (count > 1 && total - (count - 1) * chunkSec < MIN_LAST_CHUNK_SEC) {
     count -= 1;
   }
   const endFade = plan.events.find((e) => e.kind === 'endFade');
@@ -162,8 +165,8 @@ export function splitRenderPlan(plan: RenderPlan): RenderChunk[] {
   const chunks: RenderChunk[] = [];
   for (let k = 0; k < count; k++) {
     const last = k === count - 1;
-    const startSec = k * EXPORT_CHUNK_SECONDS;
-    const endSec = last ? total : (k + 1) * EXPORT_CHUNK_SECONDS;
+    const startSec = k * chunkSec;
+    const endSec = last ? total : (k + 1) * chunkSec;
     const leadSec = k === 0 ? 0 : CHUNK_LEAD_SEC;
     const originSec = startSec - leadSec;
     const events = plan.events

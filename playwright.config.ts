@@ -25,7 +25,7 @@ export default defineConfig({
       testMatch: /smoke\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:4173',
+        baseURL: 'http://localhost:4317',
         launchOptions: { args: autoplay },
       },
     },
@@ -35,22 +35,25 @@ export default defineConfig({
       timeout: 300_000,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:5174',
+        baseURL: 'http://localhost:5317',
         launchOptions: { args: autoplay },
       },
     },
   ],
+  // Never reuse a server already on the port: it may be a different app
+  // (that happened once — the specs silently ran against another project).
+  // strictPort makes a busy port fail loudly instead.
   webServer: [
     {
-      command: 'npm run build && npx vite preview --port 4173 --strictPort',
-      url: 'http://localhost:4173',
-      reuseExistingServer: !process.env.CI,
+      command: 'npm run build && npx vite preview --port 4317 --strictPort',
+      url: 'http://localhost:4317',
+      reuseExistingServer: false,
       timeout: 180_000,
     },
     {
-      command: 'npx vite --port 5174 --strictPort',
-      url: 'http://localhost:5174',
-      reuseExistingServer: !process.env.CI,
+      command: 'npx vite --port 5317 --strictPort',
+      url: 'http://localhost:5317',
+      reuseExistingServer: false,
       timeout: 120_000,
     },
   ],

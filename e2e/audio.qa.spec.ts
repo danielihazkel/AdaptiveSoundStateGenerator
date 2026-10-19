@@ -1,0 +1,99 @@
+import { expect, test, type Page } from '@playwright/test';
+import type { QaHooks } from '../src/dev/qaHooks';
+import type { TransitionReport } from '../src/audio/signalMetrics';
+
+/**
+ * Automated "verify by ear" (TODO.md) in a real browser: renders go through
+ * the actual engine on OfflineAudioContexts (src/dev/qaHooks.ts), and only
+ * the metrics come back. Same yardstick as the Node worklet tests
+ * (src/audio/typeSwitch.test.ts); the dip floor is lower here because full
+ * mixes carry the states' slow isochronic pulses (clean sleep/meditation
+ * renders measure ~0.4).
+ */
+declare global {
+  interface Window {
+    __qa: QaHooks;
+  }
+}
+
+const CLICK_LIMIT = 2;
+const DIP_LIMIT = 0.25;
+const SWELL_LIMIT = 1.3;
+const STATES = [
+  'focus',
+  'relax',
+  'sleep',
+  'energy',
+  'meditation',
+  'arousal',
+  'flow',
+  'calm',
+  'creative',
+] as const;
+
+function expectClean(r: TransitionReport, label: string) {
+  expect(r.clickRatio, `${label} click`).toBeLessThan(CLICK_LIMIT);
+  expect(r.dipRatio, `${label} dip`).toBeGreaterThan(DIP_LIMIT);
+  expect(r.swellRatio, `${label} swell`).toBeLessThan(SWELL_LIMIT);
+}
+
+async function openQa(page: Page) {
+  page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+  await page.goto('/?qa');
+  await page.waitForFunction(() => window.__qa !== undefined, undefined, { timeout: 30_000 });
+}
+
+test.beforeEach(async ({ page }) => openQa(page));
+
+for (const state of STATES) {
+  test(`${state}: steady session and adaptation glides are click-free`, async ({ page }) => {
+    const reports = await page.evaluate(async (s) => {
+      const qa = window.__qa;
+      await qa.render({ state: s, durationSec: 90 });
+      const steady = qa.transition([5, 15], [15, 30], [30, 40]);
+      const glides: Record<string, TransitionReport> = {};
+      for (const to of ['noise-alt', 'beat-down']) {
+        await qa.renderGlide({ state: s, from: 'prior', to, seconds: 20, switchAt: 8 });
+        glides[to] = qa.transition([2, 7.9], [7.9, 14], [14, 19.5]);
+      }
+      return { steady, glides };
+    }, state);
+    // A whole (90 s, so arc-compressed) session moves its own level on
+    // purpose — calm also breathes at 7–10 s — so only clicks are judged
+    // there; the glides keep the full check.
+    expect(reports.steady.clickRatio, `${state} steady click`).toBeLessThan(CLICK_LIMIT);
+    for (const [to, r] of Object.entries(reports.glides)) expectClean(r, `${state} glide→${to}`);
+  });
+}
+
+test('export chunk seams are continuous', async ({ page }) => {
+  // Sleep: brown noise and long, slow sounds — where a seam is most exposed.
+  const seams = await page.evaluate(async () => {
+    const qa = window.__qa;
+    await qa.render({ state: 'sleep', durationSec: 200, chunkSec: 60 });
+    return [qa.transition([50, 59], [59, 61], [61, 70]), qa.transition([110, 119], [119, 121], [121, 130])];
+  });
+  seams.forEach((r, i) => expectClean(r, `seam ${i + 1}`));
+});
+
+test('the default program crosses its 3:00 phase boundary click-free', async ({ page }) => {
+  const r = await page.evaluate(async () => {
+    const qa = window.__qa;
+    await qa.render({ state: 'focus', durationSec: 240, program: 'default' });
+    return qa.transition([150, 165], [165, 195], [195, 220]);
+  });
+  expectClean(r, 'program boundary');
+});
+
+test('turning the room (space) up keeps the loudness', async ({ page }) => {
+  const [dry, wet] = await page.evaluate(async () => {
+    const qa = window.__qa;
+    const out: number[] = [];
+    for (const level of [0, 1]) {
+      await qa.render({ state: 'meditation', durationSec: 40, space: { level, size: 0.6 } });
+      out.push(qa.lufs([5, 30]));
+    }
+    return out;
+  });
+  expect(Math.abs(wet - dry)).toBeLessThan(1);
+});
