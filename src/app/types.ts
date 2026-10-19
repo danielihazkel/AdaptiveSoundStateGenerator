@@ -6,4 +6,5 @@ export type Screen =
   | 'history'
   | 'programEditor'
   | 'lab'
-  | 'settings';
+  | 'settings'
+  | 'routineEditor';

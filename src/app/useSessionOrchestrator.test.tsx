@@ -251,6 +251,78 @@ describe('useSessionOrchestrator', () => {
     expect(loadSessions()[0]).toMatchObject({ volumeAdjustments: 2, customized: false });
   });
 
+  it('plays a routine leg by leg: one record each, no fade between, one rating screen', async () => {
+    const { result, callbacks, adaptation } = setup();
+    const routine = {
+      id: 'r1',
+      name: 'Kick-off',
+      createdAt: '2026-10-19T08:00:00.000Z',
+      legs: [
+        { state: 'energy' as const, intensity: 0.5, minutes: 1 },
+        { state: 'focus' as const, intensity: 0.6, minutes: 1 },
+      ],
+    };
+    await act(async () => {
+      await result.current.beginRoutine(routine);
+    });
+    expect(callbacks.onSessionStarted).toHaveBeenCalledTimes(1);
+    expect(result.current.routineLeg).toEqual({ id: 'r1', name: 'Kick-off', leg: 0, legs: 2 });
+    expect(loadInProgress()).toMatchObject({ state: 'energy', routine: { leg: 0 } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    // Leg one is recorded, leg two is playing — with no end fade in between.
+    let sessions = loadSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({ state: 'energy', completed: true, routine: { id: 'r1', leg: 0, legs: 2 } });
+    expect(engine.endSession).not.toHaveBeenCalled();
+    expect(engine.start).toHaveBeenCalledTimes(1);
+    expect(callbacks.onFinished).not.toHaveBeenCalled();
+    expect(result.current.routineLeg?.leg).toBe(1);
+    expect(adaptation.beginSession).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'focus' }));
+    expect(loadInProgress()).toMatchObject({ state: 'focus', routine: { leg: 1 } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(65_000);
+    });
+    sessions = loadSessions();
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0]).toMatchObject({ state: 'focus', routine: { leg: 1, legs: 2 } });
+    expect(callbacks.onFinished).toHaveBeenCalledTimes(1);
+    expect(callbacks.onFinished).toHaveBeenCalledWith('feedback');
+    expect(result.current.routineLeg).toBeNull();
+    expect(result.current.getLastSession()?.routineLegs).toEqual([
+      { recordId: sessions[1].id, state: 'energy' },
+    ]);
+  });
+
+  it('stopping mid-routine ends the routine at that leg', async () => {
+    const { result, callbacks } = setup();
+    const routine = {
+      id: 'r2',
+      name: 'Two',
+      createdAt: '2026-10-19T08:00:00.000Z',
+      legs: [
+        { state: 'focus' as const, intensity: 0.5, minutes: 1 },
+        { state: 'relax' as const, intensity: 0.5, minutes: 1 },
+      ],
+    };
+    await act(async () => {
+      await result.current.beginRoutine(routine);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+      result.current.stop();
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(loadSessions()).toHaveLength(1);
+    expect(loadSessions()[0]).toMatchObject({ completed: false, routine: { leg: 0 } });
+    expect(callbacks.onFinished).toHaveBeenCalledWith('feedback');
+    expect(result.current.routineLeg).toBeNull();
+    expect(result.current.getLastSession()?.routineLegs).toBeUndefined();
+  });
+
   it('surfaces an engine start failure instead of rejecting', async () => {
     createEngine = async () => {
       throw new Error('AudioContext blocked');

@@ -16,6 +16,7 @@ const HASHES: Readonly<Partial<Record<Screen, string>>> = {
   lab: '#lab',
   programEditor: '#program',
   settings: '#settings',
+  routineEditor: '#routine',
 };
 
 /** Screens that get their own history entry. */

@@ -6,6 +6,7 @@ import { MAX_MASTER_VOLUME, VOLUME_KEY_STEP } from '../audio/mixPolicy';
 import { cloneProfile, type SoundProfile } from '../audio/types';
 import { evaluateProgram, segmentAt } from '../programs/evaluator';
 import type { Program } from '../programs/types';
+import type { RoutineRef } from '../routines/types';
 import type { SessionSnapshot } from '../session/sessionController';
 import { AdvancedPanel } from './AdvancedPanel';
 import { BreathingPacer } from './BreathingPacer';
@@ -45,6 +46,7 @@ export function SessionScreen(props: {
   nightstand?: boolean;
   /** Visualizer source (AudioEngine.attachAnalyser); absent = no visualizer. */
   getAnalyser?: () => AnalyserNode | null;
+  routine?: RoutineRef;
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { phase, remainingSec, elapsedSec, resumeFailed, openEnded } = props.snapshot;
@@ -104,6 +106,7 @@ export function SessionScreen(props: {
         <span className="session-state">
           {props.stateDef.emoji} {props.stateDef.label}
           {props.program && ` · ${props.program.name}`}
+          {props.routine && ` · ${props.routine.name} ${props.routine.leg + 1}/${props.routine.legs}`}
         </span>
         <div className="session-clock" aria-label={openEnded ? 'Time elapsed' : 'Time remaining'}>
           {formatClock(openEnded ? elapsedSec : remainingSec)}

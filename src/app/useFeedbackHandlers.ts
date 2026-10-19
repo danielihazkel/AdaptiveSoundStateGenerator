@@ -21,12 +21,27 @@ export function useFeedbackHandlers(deps: {
     deps.bumpData();
   };
 
+  /**
+   * A routine's earlier legs (Phase 14): rated ones get their rating; the
+   * rest settle on their implicit signals right away — never as "skipped",
+   * since only the final leg's rating was ever asked for outright.
+   */
+  const settleEarlierLegs = (legRatings: Record<string, Rating> = {}) => {
+    for (const leg of deps.getLastSession()?.routineLegs ?? []) {
+      const rating = legRatings[leg.recordId];
+      if (rating !== undefined) attachFeedback(leg.recordId, { rating });
+      resolveOutcome(leg.recordId);
+    }
+  };
+
   return {
-    rate: (input: FeedbackInput) => {
+    rate: (input: FeedbackInput, legRatings?: Record<string, Rating>) => {
+      settleEarlierLegs(legRatings);
       settle(deps.getLastSession()?.recordId, (id) => attachFeedback(id, input));
       deps.onDone();
     },
     skip: () => {
+      settleEarlierLegs();
       settle(deps.getLastSession()?.recordId, markFeedbackSkipped);
       deps.onDone();
     },

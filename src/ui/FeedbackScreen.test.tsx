@@ -75,6 +75,18 @@ describe('FeedbackScreen', () => {
     expect(props.onRate).toHaveBeenCalledWith({ rating: 3, moodAfter: 5 });
   });
 
+  it('a routine rates each earlier leg optionally, then the last leg submits', async () => {
+    const user = userEvent.setup();
+    const props = renderScreen({
+      stateLabel: 'Focus',
+      earlierLegs: [{ recordId: 'leg-0', label: '⚡ energy' }],
+    });
+    expect(screen.getByText('How was the ⚡ energy part?')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '⚡ energy: 2 of 5' }));
+    await user.click(screen.getByRole('button', { name: '5' }));
+    expect(props.onRate).toHaveBeenCalledWith({ rating: 5 }, { 'leg-0': 2 });
+  });
+
   it('has no mood question without a mood state', () => {
     renderScreen();
     expect(screen.queryByText('How do you feel now?')).toBeNull();

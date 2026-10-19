@@ -45,6 +45,7 @@ describe('router', () => {
       'programEditor',
       'lab',
       'settings',
+      'routineEditor',
     ];
     for (const screen of all) {
       const navigable = NAVIGABLE.has(screen);

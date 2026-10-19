@@ -22,7 +22,7 @@ const USE_AGAIN: readonly boolean[] = [true, false];
 export function FeedbackScreen(props: {
   stateLabel: string;
   completed: boolean;
-  onRate: (input: FeedbackInput) => void;
+  onRate: (input: FeedbackInput, legRatings?: Record<string, Rating>) => void;
   onSkip: () => void;
   onSavePreset: (name: string) => void;
   /**
@@ -31,7 +31,10 @@ export function FeedbackScreen(props: {
    * where "drowsy" after waking up points the wrong way.
    */
   moodState?: MentalState;
+  /** A routine's earlier legs, each with an optional rating of its own (Phase 14). */
+  earlierLegs?: Array<{ recordId: string; label: string }>;
 }) {
+  const [legRatings, setLegRatings] = useState<Record<string, Rating>>({});
   const [moodAfter, setMoodAfter] = useState<MoodLevel | undefined>(undefined);
   const [distraction, setDistraction] = useState<Distraction | null>(null);
   const [useAgain, setUseAgain] = useState<boolean | null>(null);
@@ -49,12 +52,14 @@ export function FeedbackScreen(props: {
   });
 
   const submit = (rating: Rating) => {
-    props.onRate({
+    const input: FeedbackInput = {
       rating,
       ...(distraction !== null ? { distraction } : {}),
       ...(useAgain !== null ? { useAgain } : {}),
       ...(moodAfter !== undefined ? { moodAfter } : {}),
-    });
+    };
+    if (props.earlierLegs) props.onRate(input, legRatings);
+    else props.onRate(input);
   };
 
   return (
@@ -108,7 +113,38 @@ export function FeedbackScreen(props: {
         </div>
       </div>
 
-      <p className="setup-question">How effective was this?</p>
+      {props.earlierLegs?.map((leg) => (
+        <div className="feedback-extra" key={leg.recordId}>
+          <span className="setup-question" id={`leg-${leg.recordId}`}>
+            How was the {leg.label} part?
+          </span>
+          <div className="preset-strip" role="group" aria-labelledby={`leg-${leg.recordId}`}>
+            {RATINGS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                className={`chip${legRatings[leg.recordId] === r ? ' selected' : ''}`}
+                aria-pressed={legRatings[leg.recordId] === r}
+                aria-label={`${leg.label}: ${r} of 5`}
+                onClick={() =>
+                  setLegRatings((prev) => {
+                    const next = { ...prev };
+                    if (next[leg.recordId] === r) delete next[leg.recordId];
+                    else next[leg.recordId] = r;
+                    return next;
+                  })
+                }
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <p className="setup-question">
+        {props.earlierLegs ? `And the ${props.stateLabel.toLowerCase()} part — how effective was it?` : 'How effective was this?'}
+      </p>
       <div className="rating-row">
         <span className="rating-anchor">😫</span>
         {RATINGS.map((r) => (

@@ -5,6 +5,7 @@ import type { SoundProfile } from '../audio/types';
 import { stateArtwork } from '../platform/artwork';
 import { useSessionPlatform } from '../platform/useSessionPlatform';
 import type { Program } from '../programs/types';
+import type { RoutineRef } from '../routines/types';
 import { MAX_END_AT_MINUTES } from '../session/durationLimits';
 import { EXTEND_SEC, type SessionController } from '../session/sessionController';
 import { useSession } from '../session/useSession';
@@ -27,6 +28,8 @@ export function SessionView(props: {
   };
   nightstand?: boolean;
   getAnalyser?: () => AnalyserNode | null;
+  /** The routine this session is a leg of (Phase 14). */
+  routine?: RoutineRef;
 }) {
   const snapshot = useSession(props.controller);
   const stateDef = STATES[props.mentalState];
@@ -38,7 +41,11 @@ export function SessionView(props: {
     title: snapshot.openEnded
       ? `${stateDef.label} · until you stop`
       : `${stateDef.label} · ${Math.round(durationSec / 60)} min`,
-    subtitle: props.program ? `Resonance · ${props.program.name}` : undefined,
+    subtitle: props.program
+      ? `Resonance · ${props.program.name}`
+      : props.routine
+        ? `Resonance · ${props.routine.name} ${props.routine.leg + 1}/${props.routine.legs}`
+        : undefined,
     // Cached per state, so the array identity is stable across ticks.
     artwork: stateArtwork(props.mentalState),
     durationSec,
@@ -61,6 +68,7 @@ export function SessionView(props: {
       microPrompt={props.microPrompt}
       nightstand={props.nightstand}
       getAnalyser={props.getAnalyser}
+      routine={props.routine}
     />
   );
 }

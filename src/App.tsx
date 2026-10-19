@@ -11,14 +11,18 @@ import { STATES } from './audio/states';
 import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
 import type { Program } from './programs/types';
+import type { Routine } from './routines/types';
+import { RoutinesPanel } from './ui/RoutinesPanel';
 import {
   deletePreset,
   deleteProgram,
+  deleteRoutine,
   movePresetInList,
   newId,
   renamePreset,
   savePreset,
   saveProgram,
+  saveRoutine,
   setPresetFavorite,
 } from './storage/storage';
 import type { SharePayload } from './share/shareLink';
@@ -73,6 +77,9 @@ const ProgramEditor = lazy(() =>
 const SettingsScreen = lazy(() =>
   import('./ui/SettingsScreen').then((m) => ({ default: m.SettingsScreen })),
 );
+const RoutineEditor = lazy(() =>
+  import('./ui/RoutineEditor').then((m) => ({ default: m.RoutineEditor })),
+);
 
 const SCREEN_LOADING = (
   <p className="hint" role="status">
@@ -107,11 +114,11 @@ function applyTheme(theme: Theme): void {
     ?.setAttribute('content', THEME_COLOR[resolved]);
 }
 
-/** `?lab` opens the lab directly; otherwise the hash names the screen. The editor needs a draft, so it can't be a landing screen. */
+/** `?lab` opens the lab directly; otherwise the hash names the screen. The editors need a draft, so they can't be landing screens. */
 function initialScreen(): Screen {
   if (new URLSearchParams(window.location.search).has('lab')) return 'lab';
   const fromHash = screenForHash(window.location.hash);
-  return fromHash && fromHash !== 'programEditor' ? fromHash : 'setup';
+  return fromHash && fromHash !== 'programEditor' && fromHash !== 'routineEditor' ? fromHash : 'setup';
 }
 
 /**
@@ -129,6 +136,13 @@ export function App() {
     editingProgramRef.current = program;
     setEditingProgram(program);
   };
+  /** Draft under edit in the routine editor (same synchronous-mirror pattern). */
+  const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
+  const editingRoutineRef = useRef<Routine | null>(null);
+  const setRoutineDraft = (routine: Routine | null) => {
+    editingRoutineRef.current = routine;
+    setEditingRoutine(routine);
+  };
   // The orchestrator and the adaptation loop reference each other; the loop
   // reaches the orchestrator through a ref that is synced after each commit
   // (never written during render), and only ever dereferences it at call
@@ -141,8 +155,10 @@ export function App() {
     transition: (from, to) => {
       if (from === 'lab') sessionRef.current?.releaseLab();
       if (from === 'programEditor') setDraft(null);
+      if (from === 'routineEditor') setRoutineDraft(null);
       if (to === 'lab' && !sessionRef.current?.prepareLab()) return false;
       if (to === 'programEditor' && !editingProgramRef.current) return false;
+      if (to === 'routineEditor' && !editingRoutineRef.current) return false;
       return true;
     },
   });
@@ -271,6 +287,11 @@ export function App() {
     // and start directly from the record inside this same tap gesture.
     selection.replayFrom(data.lastSession);
     void session.begin({ replayOf: data.lastSession });
+  };
+
+  const openRoutineEditor = (routine: Routine) => {
+    setRoutineDraft(routine);
+    navigate('routineEditor');
   };
 
   const openEditor = (program: Program) => {
@@ -511,6 +532,30 @@ export function App() {
         />
       )}
 
+      {screen === 'setup' && (
+        <RoutinesPanel
+          routines={data.routines}
+          starting={session.starting}
+          onStart={(routine) => void session.beginRoutine(routine)}
+          onEdit={openRoutineEditor}
+          onNew={() =>
+            openRoutineEditor({
+              id: newId(),
+              name: 'My routine',
+              createdAt: new Date().toISOString(),
+              legs: [
+                { state: selection.mentalState, intensity: selection.intensity, minutes: 25 },
+                { state: 'relax', intensity: 0.4, minutes: 5 },
+              ],
+            })
+          }
+          onDelete={(id) => {
+            deleteRoutine(id);
+            data.refreshRoutines();
+          }}
+        />
+      )}
+
       {screen === 'setup' && biometrics.possible && settings.biometricsConsentAt && (
         <p className="hint heart-rate-status">
           ❤ Heart-rate sensor:{' '}
@@ -581,6 +626,18 @@ export function App() {
         />
       )}
 
+      {screen === 'routineEditor' && editingRoutine && (
+        <RoutineEditor
+          routine={editingRoutine}
+          onSave={(routine) => {
+            saveRoutine(routine);
+            data.refreshRoutines();
+            navigate('setup');
+          }}
+          onCancel={() => navigate('setup')}
+        />
+      )}
+
       {screen === 'programEditor' && editingProgram && (
         <ProgramEditor
           program={editingProgram}
@@ -622,6 +679,7 @@ export function App() {
         <SessionView
           controller={controller}
           mentalState={sessionState}
+          routine={session.routineLeg ?? undefined}
           nightstand={nightstandFor(sessionState, settings.nightstand)}
           getAnalyser={settings.visualizer === false ? undefined : getAnalyser}
           program={session.getSessionProgram() ?? undefined}
@@ -650,6 +708,10 @@ export function App() {
               ? lastSession.state
               : undefined
           }
+          earlierLegs={lastSession.routineLegs?.map((leg) => ({
+            recordId: leg.recordId,
+            label: `${STATES[leg.state].emoji} ${STATES[leg.state].label.toLowerCase()}`,
+          }))}
           onRate={feedback.rate}
           onSkip={feedback.skip}
           onSavePreset={(name) => session.storePreset(name, lastSession)}

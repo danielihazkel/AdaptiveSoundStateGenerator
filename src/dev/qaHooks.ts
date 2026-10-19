@@ -8,6 +8,7 @@ import { ChunkSeamer } from '../export/chunkSeamer';
 import { renderSessionChunks } from '../export/offlineRenderer';
 import { CHUNK_CROSSFADE_SEC, EXPORT_SAMPLE_RATE } from '../export/renderTimeline';
 import { buildCandidateProfile, candidatesFor, PRIOR_ARM_ID } from '../personalization/candidates';
+import { PROGRAM_TYPE_FADE_SEC } from '../programs/evaluator';
 import { defaultProgram } from '../programs/types';
 
 /**
@@ -80,15 +81,19 @@ async function renderGlide(spec: {
   intensity?: number;
   from: string;
   to: string;
+  /** A routine hand-off: glide into another state's sound, types dissolving slowly. */
+  toState?: MentalState;
   seconds: number;
   switchAt: number;
 }): Promise<{ seconds: number }> {
   const a = profileFor({ state: spec.state, intensity: spec.intensity, armId: spec.from });
-  const b = profileFor({ state: spec.state, intensity: spec.intensity, armId: spec.to });
+  const b = profileFor({ state: spec.toState ?? spec.state, intensity: spec.intensity, armId: spec.to });
   b.masterVolume = a.masterVolume; // a switch keeps the user's volume
   last = await renderSteady(a, spec.seconds, (engine, ctx) =>
     ctx.suspend(spec.switchAt).then(() => {
-      engine.applyProfile(b, ADAPT_RAMP_TIME_CONSTANT);
+      engine.applyProfile(b, ADAPT_RAMP_TIME_CONSTANT, {
+        typeFadeSec: spec.toState ? PROGRAM_TYPE_FADE_SEC : undefined,
+      });
       engine.schedulePulsesUntil(spec.seconds);
       void ctx.resume();
     }),

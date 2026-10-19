@@ -66,6 +66,28 @@ for (const state of STATES) {
   });
 }
 
+test('routine hand-offs glide between states click-free', async ({ page }) => {
+  const reports = await page.evaluate(async () => {
+    const qa = window.__qa;
+    const out: Record<string, TransitionReport> = {};
+    for (const [from, to] of [
+      ['energy', 'focus'],
+      ['focus', 'relax'],
+      ['relax', 'sleep'],
+    ] as const) {
+      await qa.renderGlide({ state: from, toState: to, from: 'prior', to: 'prior', seconds: 26, switchAt: 8 });
+      out[`${from}→${to}`] = qa.transition([2, 7.9], [7.9, 18], [18, 25.5]);
+    }
+    return out;
+  });
+  for (const [label, r] of Object.entries(reports)) {
+    // Different states are different loudnesses and textures by design, so
+    // only clicks and dropouts are judged across a hand-off.
+    expect(r.clickRatio, `${label} click`).toBeLessThan(CLICK_LIMIT);
+    expect(r.dipRatio, `${label} dip`).toBeGreaterThan(DIP_LIMIT);
+  }
+});
+
 test('export chunk seams are continuous', async ({ page }) => {
   // Sleep: brown noise and long, slow sounds — where a seam is most exposed.
   const seams = await page.evaluate(async () => {

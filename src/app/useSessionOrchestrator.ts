@@ -3,7 +3,7 @@ import { useStableCallback } from './useStableCallback';
 import { ADAPT_INTERVAL_SEC, END_GUARD_SEC } from '../adaptation/adaptation';
 import { BREATH_PATTERNS, type BreathPattern } from '../audio/breathing';
 import { AudioEngine } from '../audio/engine';
-import type { MentalState } from '../audio/states';
+import { STATES, type MentalState } from '../audio/states';
 import { cloneProfile, normalizeProfile, type SoundProfile } from '../audio/types';
 import { timeBucketOf, type ServeContext } from '../personalization/context';
 import { chooseProfile, type ServedProfile } from '../personalization/personalizer';
@@ -13,7 +13,12 @@ import { programMinDurationSec, type Program } from '../programs/types';
 import { IDENTITY_MODULATION } from '../session/evolution';
 import { CHECKPOINT_EVERY_SEC } from '../session/inProgress';
 import { breathingFor, wakeUpFor } from '../session/sessionOptions';
-import { SessionController, type SessionResult } from '../session/sessionController';
+import {
+  SessionController,
+  type SessionConfig,
+  type SessionResult,
+} from '../session/sessionController';
+import type { Routine, RoutineRef } from '../routines/types';
 import {
   appendSession,
   clearInProgress,
@@ -45,6 +50,8 @@ export interface FinishedSession {
   profile: SoundProfile;
   completed: boolean;
   moodBefore?: MoodLevel;
+  /** A routine's earlier legs (the final leg is this record) — rated on the same screen. */
+  routineLegs?: Array<{ recordId: string; state: MentalState }>;
 }
 
 /** Everything except the master volume — separates "tweaked the sound"
@@ -114,6 +121,14 @@ export function useSessionOrchestrator(deps: {
     sessionLockRef.current = null;
   };
 
+  /** The routine being played, if any, and its finished legs so far. */
+  const routineRef = useRef<{
+    routine: Routine;
+    leg: number;
+    records: Array<{ recordId: string; state: MentalState }>;
+  } | null>(null);
+  /** Which leg is playing — React state so the session screen follows hand-offs. */
+  const [routineLeg, setRoutineLeg] = useState<RoutineRef | null>(null);
   const [liveProfile, setLiveProfile] = useState<SoundProfile | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -156,7 +171,10 @@ export function useSessionOrchestrator(deps: {
     const checkpoint = checkpointRef.current;
     stopSleepOnsetWatch();
     stopCheckpointing();
-    releaseSessionLock();
+    const routine = routineRef.current;
+    const handOff = result.handOff === true && routine !== null;
+    // A routine keeps the cross-tab lock from its first leg to its last.
+    if (!handOff) releaseSessionLock();
     const engine = engineRef.current;
     const profile = engine?.getProfile() ?? result.config.profile;
     const served = servedRef.current;
@@ -201,9 +219,19 @@ export function useSessionOrchestrator(deps: {
       openEnded: openEnded || undefined,
       sleepOnsetSec: result.woundDownAtSec,
       moodBefore: checkpoint?.moodBefore,
+      routine: checkpoint?.routine,
     };
     appendSession(record);
     deps.onSessionStored();
+    if (handOff) {
+      // The sound is still playing: carry straight on into the next leg.
+      routine.records.push({ recordId: record.id, state: record.state });
+      void startLeg(routine.leg + 1, 'continue');
+      return;
+    }
+    const routineLegs = routine?.records;
+    routineRef.current = null;
+    setRoutineLeg(null);
     sessionProgramRef.current = null;
     sessionBreathingRef.current = null;
     sessionIntervalsRef.current = null;
@@ -214,6 +242,7 @@ export function useSessionOrchestrator(deps: {
       profile,
       completed: record.completed,
       moodBefore: record.moodBefore,
+      routineLegs: routineLegs && routineLegs.length > 0 ? routineLegs : undefined,
     };
     // A completed sleep session gets no rating prompt — the user is asleep
     // (PRD §9; the next-morning prompt asks instead) — unless it woke them
@@ -442,30 +471,144 @@ export function useSessionOrchestrator(deps: {
       // already end on Stop. Works for presets/replays too (unlike the
       // adaptation loop). Without a connected sensor the detector simply
       // never has fresh samples.
-      stopSleepOnsetWatch();
-      if (
-        sessionState === 'sleep' &&
-        settings.sleepOnsetFade === true &&
-        !wakeUp &&
-        !program &&
-        !openEnded
-      ) {
-        sleepOnsetWatchRef.current = watchSleepOnset(
-          controller,
-          biometrics.getSamples,
-          (elapsedSec) => {
-            // Remember the onset in the crash checkpoint too.
-            if (checkpointRef.current) {
-              checkpointRef.current = { ...checkpointRef.current, sleepOnsetSec: elapsedSec };
-            }
-          },
-        );
-      }
+      armSleepOnsetWatch(controller, sessionState === 'sleep' && !wakeUp && !program && !openEnded);
       deps.onSessionStarted();
     } catch (err) {
       // AudioContext blocked, worklet failed to load, no output device… The
       // controller may be mid-start; stop it so the next Begin starts clean.
       console.error('Session failed to start', err);
+      stopSleepOnsetWatch();
+      stopCheckpointing();
+      releaseSessionLock();
+      try {
+        controllerRef.current?.stop();
+      } catch {
+        // already idle
+      }
+      setStartError(START_ERROR_MESSAGE);
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  /** Opt-in sleep-onset fade (Phase 9) for a session that is eligible for it. */
+  const armSleepOnsetWatch = (controller: SessionController, eligible: boolean) => {
+    stopSleepOnsetWatch();
+    if (!eligible || settings.sleepOnsetFade !== true) return;
+    // Without a connected sensor the detector simply never has fresh samples.
+    sleepOnsetWatchRef.current = watchSleepOnset(controller, biometrics.getSamples, (elapsedSec) => {
+      // Remember the onset in the crash checkpoint too.
+      if (checkpointRef.current) {
+        checkpointRef.current = { ...checkpointRef.current, sleepOnsetSec: elapsedSec };
+      }
+    });
+  };
+
+  /**
+   * Play one leg of the running routine (Phase 14). Each leg is a normal
+   * served session — the bandit picks its sound, adaptation and crash
+   * checkpoints run per leg, and it gets its own record — and every leg but
+   * the last hands over without a fade ('continue' rides the controller's
+   * continueWith, synchronously, inside the previous leg's completion).
+   */
+  const startLeg = (index: number, mode: 'start' | 'continue'): Promise<void> | void => {
+    const current = routineRef.current;
+    const controller = controllerRef.current;
+    if (!current || !controller) return;
+    const { routine } = current;
+    const leg = routine.legs[index];
+    const last = index === routine.legs.length - 1;
+    current.leg = index;
+    const served = chooseProfile(leg.state, leg.intensity, modeFor(settings, leg.state), Math.random, {
+      bucket: timeBucketOf(new Date()),
+      mono: settings.monoMode,
+    });
+    const profile = cloneProfile(served.profile);
+    // The listener's volume carries over from leg to leg.
+    const playing = engineRef.current?.getProfile();
+    if (mode === 'continue' && playing) profile.masterVolume = playing.masterVolume;
+    servedRef.current = served;
+    sessionProgramRef.current = null;
+    sessionIntervalsRef.current = null;
+    const breathingId = breathingFor(leg.state, settings.breathingPattern);
+    const breathing = breathingId ? BREATH_PATTERNS[breathingId] : undefined;
+    sessionBreathingRef.current = breathing ?? null;
+    customizedRef.current = false;
+    volumeAdjustmentsRef.current = 0;
+    lastVolumeChangeRef.current = Number.NEGATIVE_INFINITY;
+    adaptation.beginSession({
+      state: leg.state,
+      intensity: leg.intensity,
+      mode: modeFor(settings, leg.state),
+      coachUsed: false,
+      servedArmId: served.armId,
+    });
+    biometrics.resetForSession();
+    const durationSec = leg.minutes * 60;
+    // Only the last leg can end in a wake-up rise.
+    const wakeUp = last ? (wakeUpFor(leg.state, settings.wakeUp, durationSec) ?? undefined) : undefined;
+    const config: SessionConfig = {
+      state: leg.state,
+      intensity: leg.intensity,
+      durationSec,
+      profile,
+      chimeEnabled: settings.chimeEnabled,
+      breathing,
+      wakeUp,
+      checkpointSec: settings.adaptationEnabled !== false ? ADAPT_INTERVAL_SEC : undefined,
+      endGuardSec: END_GUARD_SEC,
+      handOff: !last,
+    };
+    const ref: RoutineRef = { id: routine.id, name: routine.name, leg: index, legs: routine.legs.length };
+    setLiveProfile(profile);
+    setRoutineLeg(ref);
+    const afterStart = () => {
+      checkpointRef.current = {
+        startedAt: new Date().toISOString(),
+        state: leg.state,
+        intensity: leg.intensity,
+        plannedDurationSec: durationSec,
+        profile: cloneProfile(profile),
+        monoMode: engineRef.current?.isMonoMode ?? false,
+        servedArmId: served.armId,
+        servedBy: served.servedBy,
+        breathingPattern: breathing && breathing.id !== 'pulse' ? breathing.id : undefined,
+        wakeUp,
+        routine: ref,
+      };
+      startCheckpointing(controller);
+      armSleepOnsetWatch(controller, last && leg.state === 'sleep' && !wakeUp);
+    };
+    if (mode === 'start') return controller.start(config).then(afterStart);
+    controller.continueWith(config);
+    afterStart();
+  };
+
+  /** Start a routine from its first leg (Phase 14). Same gesture rules as begin(). */
+  const beginRoutine = async (routine: Routine) => {
+    if (starting) return;
+    playSilentKeepAlive();
+    setStarting(true);
+    setStartError(null);
+    try {
+      const first = routine.legs[0];
+      const [, releaseLock] = await Promise.all([
+        ensureEngine(STATES[first.state].buildProfile(first.intensity)),
+        acquireSessionLock(),
+      ]);
+      if (!releaseLock) {
+        setStartError(OTHER_TAB_SESSION_MESSAGE);
+        return;
+      }
+      sessionLockRef.current = releaseLock;
+      coach.reset();
+      routineRef.current = { routine, leg: 0, records: [] };
+      await startLeg(0, 'start');
+      deps.onSessionStarted();
+    } catch (err) {
+      console.error('Routine failed to start', err);
+      routineRef.current = null;
+      setRoutineLeg(null);
       stopSleepOnsetWatch();
       stopCheckpointing();
       releaseSessionLock();
@@ -552,6 +695,8 @@ export function useSessionOrchestrator(deps: {
     starting,
     startError,
     begin,
+    beginRoutine,
+    routineLeg,
     stop: () => controllerRef.current?.stop(),
     handleProfileChange,
     storePreset,

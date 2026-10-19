@@ -145,3 +145,38 @@ test('the session visualizer draws from the live output, and Settings can turn i
   await expect(page.getByRole('button', { name: /Pause/ })).toBeVisible();
   await expect(canvas).toHaveCount(0);
 });
+
+test('a routine flows from leg to leg without stopping, then rates each part', async ({ page }) => {
+  await page.clock.install();
+  await firstVisit(page);
+  await page.getByRole('button', { name: '+ New routine' }).click();
+  await expect(page).toHaveURL(/#routine$/);
+  await page.getByRole('textbox').fill('Quick test');
+  await page.getByLabel('Part 1 state').selectOption('energy');
+  await page.getByLabel('Part 1 minutes').fill('1');
+  await page.getByLabel('Part 2 state').selectOption('focus');
+  await page.getByLabel('Part 2 minutes').fill('1');
+  await page.getByRole('button', { name: 'Save routine' }).click();
+
+  await page.getByRole('button', { name: 'Quick test', exact: true }).click();
+  await page.getByRole('button', { name: '► Start Quick test' }).click();
+  await expect(page.locator('.session-state')).toContainText('Quick test 1/2');
+  await expect(page.locator('.session-state')).toContainText('Energy');
+
+  await page.clock.fastForward(62_000);
+  // Still in the session — the second leg took over without a stop.
+  await expect(page.locator('.session-state')).toContainText('Quick test 2/2');
+  await expect(page.locator('.session-state')).toContainText('Focus');
+  await expect(page.getByRole('button', { name: /Pause/ })).toBeVisible();
+
+  await page.clock.fastForward(65_000);
+  await expect(page.getByText('How was the ⚡ energy part?')).toBeVisible();
+  await page.getByRole('button', { name: '⚡ energy: 4 of 5' }).click();
+  await page.getByRole('button', { name: '5', exact: true }).click();
+
+  await page.getByRole('button', { name: /Session history/ }).click();
+  const history = page.locator('.history');
+  await expect(history).toContainText('2total');
+  await expect(history).toContainText(/Focus · .*★★★★★/);
+  await expect(history).toContainText(/Energy · .*★★★★(?!★)/);
+});
