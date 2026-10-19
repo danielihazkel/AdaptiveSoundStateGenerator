@@ -61,8 +61,21 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         navigateFallback: 'index.html',
-        // Optional ambience recordings can be large; never precache them.
+        // Optional ambience recordings can be large; never precache them…
         globIgnores: ['**/ambience/**'],
+        // …but keep the ones actually played, so they still play offline
+        // (ambienceAssets.ts falls back to this cache when its probe fails).
+        runtimeCaching: [
+          {
+            urlPattern: /\/ambience\/[^/]+\.(?:mp3|ogg)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ambience-recordings',
+              expiration: { maxEntries: 20 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
         // Chunked exports never touch the network; nothing else to cache.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },

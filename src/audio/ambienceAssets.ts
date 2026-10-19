@@ -24,9 +24,27 @@ function assetUrl(type: SampleAmbienceType, ext: string): string {
 async function probeUrl(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, { method: 'HEAD' });
-    if (!res.ok) return false;
-    const contentType = res.headers.get('content-type') ?? '';
-    return contentType.startsWith('audio/');
+    if (res.ok) return isAudio(res);
+  } catch {
+    // Offline (or the host refuses HEAD) — the cache may still have it.
+  }
+  return cachedAudio(url);
+}
+
+function isAudio(res: { headers: { get(name: string): string | null } }): boolean {
+  return (res.headers.get('content-type') ?? '').startsWith('audio/');
+}
+
+/**
+ * Offline fallback: the service worker caches recordings when they are
+ * loaded (vite.config.ts runtimeCaching), but a HEAD request is never
+ * cached and fails offline — so look in the Cache API for the GET itself.
+ */
+async function cachedAudio(url: string): Promise<boolean> {
+  try {
+    if (typeof caches === 'undefined') return false;
+    const hit = await caches.match(url);
+    return hit !== undefined && hit.ok && isAudio(hit);
   } catch {
     return false;
   }

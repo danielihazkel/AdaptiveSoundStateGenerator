@@ -69,6 +69,29 @@ describe('probeSampleAssets', () => {
     expect(await probeSampleAssets()).toEqual(new Set(['forest']));
   });
 
+  it('offline: falls back to a recording the service worker cached', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('offline');
+      }),
+    );
+    vi.stubGlobal('caches', {
+      match: vi.fn(async (url: string) =>
+        url.endsWith('fireplace.ogg') ? response('audio/ogg') : undefined,
+      ),
+    });
+    const { probeSampleAssets } = await import('./ambienceAssets');
+    expect(await probeSampleAssets()).toEqual(new Set(['fireplace']));
+  });
+
+  it('offline: a cached non-audio response is still not an asset', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response('text/html', false)));
+    vi.stubGlobal('caches', { match: vi.fn(async () => response('text/html')) });
+    const { probeSampleAssets } = await import('./ambienceAssets');
+    expect(await probeSampleAssets()).toEqual(new Set());
+  });
+
   it('treats network errors as "asset absent"', async () => {
     vi.stubGlobal(
       'fetch',
