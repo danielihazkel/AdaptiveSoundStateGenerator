@@ -52,6 +52,14 @@ function soundFingerprint(profile: SoundProfile): string {
 }
 
 /**
+ * Volume changes closer together than this belong to one gesture. A slider
+ * drag fires onChange for every step it crosses (and a held arrow key
+ * repeats), so counting events would turn one adjustment into a dozen
+ * "tweaks" — maxing the reward penalty and tripping the implicit arm switch.
+ */
+export const VOLUME_GESTURE_GAP_MS = 1500;
+
+/**
  * Owns the shared AudioEngine + SessionController and the lifecycle of one
  * session: resolving what to play (program > preset > replay > personalized),
  * starting, tracking the user's live edits, and turning the result into a
@@ -77,6 +85,8 @@ export function useSessionOrchestrator(deps: {
   const controllerRef = useRef<SessionController | null>(null);
   const customizedRef = useRef(false);
   const volumeAdjustmentsRef = useRef(0);
+  /** Date.now() of the last volume change (gesture coalescing). */
+  const lastVolumeChangeRef = useRef(Number.NEGATIVE_INFINITY);
   const lastSessionRef = useRef<FinishedSession | null>(null);
   /** What the personalizer served for the running session (null for presets). */
   const servedRef = useRef<ServedProfile | null>(null);
@@ -344,6 +354,7 @@ export function useSessionOrchestrator(deps: {
       sessionLockRef.current = releaseLock;
       customizedRef.current = false;
       volumeAdjustmentsRef.current = 0;
+      lastVolumeChangeRef.current = Number.NEGATIVE_INFINITY;
 
       const sessionState = program ? program.baseState : mentalState;
       const sessionIntensity = program
@@ -470,8 +481,12 @@ export function useSessionOrchestrator(deps: {
     const prev = liveProfile;
     if (prev) {
       if (next.masterVolume !== prev.masterVolume) {
-        volumeAdjustmentsRef.current += 1;
-        adaptation.noteVolumeTweak();
+        const now = Date.now();
+        if (now - lastVolumeChangeRef.current > VOLUME_GESTURE_GAP_MS) {
+          volumeAdjustmentsRef.current += 1;
+          adaptation.noteVolumeTweak();
+        }
+        lastVolumeChangeRef.current = now;
       }
       if (soundFingerprint(next) !== soundFingerprint(prev)) {
         customizedRef.current = true;

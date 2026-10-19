@@ -225,6 +225,32 @@ describe('useSessionOrchestrator', () => {
     expect(loadSessions()[0]).toMatchObject({ volumeAdjustments: 1, customized: true });
   });
 
+  it('counts one volume tweak per gesture, not per slider input event', async () => {
+    const { result, adaptation } = setup();
+    await act(async () => {
+      await result.current.begin();
+    });
+    // A slider drag fires onChange for every step it passes through.
+    const drag = (from: number, steps: number) => {
+      for (let i = 1; i <= steps; i++) {
+        const next = cloneProfile(result.current.liveProfile!);
+        next.masterVolume = from + i * 0.01;
+        act(() => result.current.handleProfileChange(next));
+        act(() => vi.advanceTimersByTime(30));
+      }
+    };
+    drag(0.5, 10);
+    expect(adaptation.noteVolumeTweak).toHaveBeenCalledTimes(1);
+    act(() => vi.advanceTimersByTime(2_000));
+    drag(0.6, 5);
+    expect(adaptation.noteVolumeTweak).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(65_000);
+    });
+    expect(loadSessions()[0]).toMatchObject({ volumeAdjustments: 2, customized: false });
+  });
+
   it('surfaces an engine start failure instead of rejecting', async () => {
     createEngine = async () => {
       throw new Error('AudioContext blocked');
