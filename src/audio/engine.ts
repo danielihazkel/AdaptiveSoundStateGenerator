@@ -216,9 +216,13 @@ export class AudioEngine {
    * changes. Pass a larger timeConstant (ADAPT_RAMP_TIME_CONSTANT) for a slow
    * mid-session glide instead of the default quick morph.
    */
-  applyProfile(profile: SoundProfile, timeConstant?: number): void {
+  applyProfile(
+    profile: SoundProfile,
+    timeConstant?: number,
+    opts: { typeFadeSec?: number } = {},
+  ): void {
     this.profile = cloneProfile(profile);
-    this.applyAll(timeConstant);
+    this.applyAll(timeConstant, opts.typeFadeSec);
     if (this.playing) {
       ramp(this.ctx, this.master.gain, this.profile.masterVolume, timeConstant);
     }
@@ -652,7 +656,7 @@ export class AudioEngine {
    * the node graph. Everything ramps, so re-applying unchanged values is free
    * and click-free.
    */
-  private applyAll(timeConstant?: number): void {
+  private applyAll(timeConstant?: number, typeFadeSec?: number): void {
     this.applyEffective(
       composeEffectiveParams({
         profile: this.profile,
@@ -660,6 +664,7 @@ export class AudioEngine {
         program: this.programModulation,
         breath: this.breath,
         monoMode: this.monoMode,
+        typeFadeSec,
       }),
       timeConstant,
     );

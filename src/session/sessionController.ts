@@ -1,5 +1,6 @@
 import type { AudioEngine } from '../audio/engine';
-import { EVOLUTION_TIME_CONSTANT } from '../audio/ramp';
+import { ADAPT_RAMP_TIME_CONSTANT, EVOLUTION_TIME_CONSTANT } from '../audio/ramp';
+import { PROGRAM_TYPE_FADE_SEC } from '../programs/evaluator';
 import type { BreathPattern } from '../audio/breathing';
 import type { MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
@@ -53,6 +54,13 @@ export interface SessionConfig {
    * Plain sessions only — never with a program, a wake-up, or an "End at".
    */
   openEnded?: boolean;
+  /**
+   * Routine leg that hands over to the next one (Phase 14): when its time is
+   * up it emits a completed result *without* the end fade, and the caller
+   * continues straight into the next leg with continueWith(). The last leg
+   * of a routine never sets this — it ends like any session.
+   */
+  handOff?: boolean;
 }
 
 export interface CheckpointInfo {
@@ -73,6 +81,8 @@ export interface SessionResult {
   pauseCount?: number;
   /** Total wall-clock seconds spent in user-initiated pauses. */
   pausedSec?: number;
+  /** The leg ran out and is handing over (SessionConfig.handOff): the sound is still playing. */
+  handOff?: true;
 }
 
 export interface SessionSnapshot {
@@ -326,6 +336,41 @@ export class SessionController {
   }
 
   /**
+   * Routine hand-off (Phase 14): carry on into the next leg without stopping.
+   * The leg clock, counters and checkpoints restart for `next`; the sound
+   * glides onto its profile over the adaptation time constant, noise-colour
+   * and ambience-type changes dissolve over the program fade, and the arc or
+   * program picks up at its t=0. No fade-out, no engine restart, no gap.
+   * Only from the moment a handOff leg ended (still 'running').
+   */
+  continueWith(next: SessionConfig): void {
+    if (!this.config || this.snapshot.phase !== 'running') return;
+    this.config = next;
+    this.woundDownAtSec = null;
+    this.pauseCount = 0;
+    this.pausedMs = 0;
+    this.pausedAt = null;
+    this.startedAt = new Date().toISOString();
+    this.clock.start();
+    this.nextCheckpointSec = next.checkpointSec ?? Infinity;
+    this.checkpointIndex = 0;
+    this.segmentIndex = 0;
+    this.engine.applyProfile(next.profile, ADAPT_RAMP_TIME_CONSTANT, {
+      typeFadeSec: PROGRAM_TYPE_FADE_SEC,
+    });
+    // Clear first so a breathing leg's cycle starts with the leg's clock.
+    this.engine.setBreathPattern(null);
+    if (!next.program && next.breathing) this.engine.setBreathPattern(next.breathing);
+    if (next.program) {
+      this.engine.setProgramModulation(evaluateProgram(next.program, 0), ADAPT_RAMP_TIME_CONSTANT);
+    } else {
+      this.engine.setProgramModulation(null);
+      this.engine.setArcModulation(evaluateArc(this.arc(next), 0), ADAPT_RAMP_TIME_CONSTANT);
+    }
+    this.publish();
+  }
+
+  /**
    * The only mid-session sound-change entry point (adaptation loop). The
    * phase guard structurally protects the end/pause fades: applying a profile
    * during 'ending'/'paused' would cancel their in-flight master-gain ramps.
@@ -358,7 +403,20 @@ export class SessionController {
     const wakeUp = !config.program && config.wakeUp !== undefined;
     const fadeSeconds = resolveEndFadeSeconds(config.state, wakeUp);
 
-    if (phase === 'running' && remainingMs <= fadeSeconds * 1000) {
+    if (config.handOff && phase === 'running' && remainingMs <= 0) {
+      // The sound keeps playing: the caller continues into the next leg.
+      this.emitResult(true, true);
+      if (this.config === config) {
+        // Nobody continued (shouldn't happen): the result is already out,
+        // so just fade out quietly rather than play on unattended.
+        clearInterval(this.interval);
+        this.clock.pause();
+        this.engine.endSession(Math.min(fadeSeconds, OPEN_ENDED_STOP_FADE_MAX_SEC), false);
+        this.setPhase('finished');
+      }
+      return;
+    }
+    if (phase === 'running' && !config.handOff && remainingMs <= fadeSeconds * 1000) {
       const chime = resolveEndChime(config.state, config.program, config.chimeEnabled, wakeUp);
       this.engine.endSession(Math.max(remainingMs / 1000, 0.1), chime);
       this.setPhase('ending');
@@ -437,10 +495,11 @@ export class SessionController {
     return this.clock.elapsedMs();
   }
 
-  private emitResult(completed: boolean): void {
+  private emitResult(completed: boolean, handOff = false): void {
     if (!this.config) return;
     this.settlePause();
     this.onComplete?.({
+      ...(handOff ? { handOff: true as const } : {}),
       config: this.config,
       startedAt: this.startedAt,
       actualDurationSec: Math.round(this.clock.elapsedMs() / 1000),

@@ -10,8 +10,11 @@ import {
   OPEN_ENDED_STOP_FADE_MAX_SEC,
   SessionController,
   type SessionConfig,
+  type SessionResult,
 } from './sessionController';
 import { evaluateArc, resolveArc } from './evolution';
+import { ADAPT_RAMP_TIME_CONSTANT } from '../audio/ramp';
+import { PROGRAM_TYPE_FADE_SEC } from '../programs/evaluator';
 
 function stubEngine() {
   const contextListeners = new Set<(state: AudioContextState) => void>();
@@ -641,5 +644,86 @@ describe('pause tracking (PRD §9 implicit signal)', () => {
     await vi.advanceTimersByTimeAsync(40_000);
     expect(results).toHaveLength(1);
     expect(results[0].pauseCount).toBeUndefined();
+  });
+});
+
+describe('routine hand-off (Phase 14)', () => {
+  let engine: ReturnType<typeof stubEngine>;
+  let controller: SessionController;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'Date'] });
+    engine = stubEngine();
+    controller = new SessionController(engine as unknown as AudioEngine);
+  });
+
+  afterEach(() => {
+    controller.dispose();
+    vi.useRealTimers();
+  });
+
+  it('a handOff leg ends without the end fade, and continueWith carries straight on', async () => {
+    const results: SessionResult[] = [];
+    const relax = config({ state: 'relax', durationSec: 120, profile: STATES.relax.buildProfile(0.4) });
+    controller.onComplete = (r) => {
+      results.push(r);
+      if (r.handOff) controller.continueWith(relax);
+    };
+    await controller.start(config({ durationSec: 60, handOff: true }));
+    await vi.advanceTimersByTimeAsync(61_000);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ completed: true, handOff: true, actualDurationSec: 60 });
+    expect(results[0].config.state).toBe('focus');
+    // No fade-out, no engine restart: the sound glides into the next leg.
+    expect(engine.endSession).not.toHaveBeenCalled();
+    expect(engine.start).toHaveBeenCalledTimes(1);
+    expect(engine.applyProfile).toHaveBeenLastCalledWith(relax.profile, ADAPT_RAMP_TIME_CONSTANT, {
+      typeFadeSec: PROGRAM_TYPE_FADE_SEC,
+    });
+    expect(controller.phase).toBe('running');
+    // The new leg's clock started at the hand-off (~1 s ago).
+    expect(controller.getSnapshot().elapsedSec).toBeLessThanOrEqual(1);
+    expect(controller.getSnapshot().remainingSec).toBeGreaterThanOrEqual(119);
+
+    // The last leg ends like any session.
+    await vi.advanceTimersByTimeAsync(121_000);
+    expect(results).toHaveLength(2);
+    expect(results[1]).toMatchObject({ completed: true, actualDurationSec: 120 });
+    expect(results[1].handOff).toBeUndefined();
+    expect(results[1].config.state).toBe('relax');
+    expect(engine.endSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('a leg that hands off resets the per-leg counters', async () => {
+    const results: SessionResult[] = [];
+    controller.onComplete = (r) => {
+      results.push(r);
+      if (r.handOff) controller.continueWith(config({ durationSec: 60 }));
+    };
+    await controller.start(config({ durationSec: 60, handOff: true }));
+    await controller.pause();
+    await controller.resume();
+    await vi.advanceTimersByTimeAsync(61_000);
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(results[0].pauseCount).toBe(1);
+    expect(results[1].pauseCount).toBeUndefined();
+  });
+
+  it('fades out on its own if nobody continues — never plays on unattended', async () => {
+    const results: SessionResult[] = [];
+    controller.onComplete = (r) => results.push(r);
+    await controller.start(config({ durationSec: 60, handOff: true }));
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(results).toHaveLength(1);
+    expect(engine.endSession).toHaveBeenCalledTimes(1);
+    expect(controller.phase).toBe('finished');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(results).toHaveLength(1); // the leg's result is never emitted twice
+  });
+
+  it('continueWith is ignored unless a leg is running', () => {
+    controller.continueWith(config());
+    expect(engine.applyProfile).not.toHaveBeenCalled();
   });
 });

@@ -30,6 +30,12 @@ export interface ComposeInput {
   program: ProgramModulation | null;
   breath: BreathPattern | null;
   monoMode: boolean;
+  /**
+   * Noise-colour / ambience-type dissolve for this one application, outside
+   * programs (which carry their own) — a routine hand-off asks for the long
+   * program fade. Absent = TYPE_FADE_SECONDS.
+   */
+  typeFadeSec?: number;
 }
 
 export type PulseParams =
@@ -85,7 +91,7 @@ export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
   const noiseType = pm?.noiseType ?? p.noise.type;
   const ambienceType = pm?.ambienceType ?? p.ambience.type;
   const richness = pm?.harmonyRichness ?? p.harmony.richness;
-  const typeFadeSec = pm ? pm.typeFadeSec : TYPE_FADE_SECONDS;
+  const typeFadeSec = pm ? pm.typeFadeSec : (input.typeFadeSec ?? TYPE_FADE_SECONDS);
   const trackingBeat =
     p.isochronic.rate === Math.min(p.binaural.beat, MAX_PULSE_RATE_HZ);
   const arcGain = pm ? pm.intensity : mod.intensity;

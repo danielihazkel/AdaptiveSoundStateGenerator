@@ -41,7 +41,8 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   const noiseType = pm && pm.noiseType !== null ? pm.noiseType : p.noise.type;
   const ambienceType = pm && pm.ambienceType !== null ? pm.ambienceType : p.ambience.type;
   const richness = pm && pm.harmonyRichness !== null ? pm.harmonyRichness : p.harmony.richness;
-  const fadeSec = pm ? pm.typeFadeSec : TYPE_FADE_SECONDS;
+  // Phase 14: a one-off override outside programs (routine hand-offs).
+  const fadeSec = pm ? pm.typeFadeSec : (input.typeFadeSec ?? TYPE_FADE_SECONDS);
   const trackingBeat =
     p.isochronic.rate === Math.min(p.binaural.beat, MAX_PULSE_RATE_HZ);
   const arcGain = pm ? pm.intensity : mod.intensity;
@@ -286,6 +287,16 @@ describe('composeEffectiveParams', () => {
       cases += 1;
     }
     expect(cases).toBeGreaterThan(5000);
+  });
+
+  it('honours a one-off type fade outside programs, never inside one', () => {
+    const profile = STATES.focus.buildProfile(0.5);
+    const base = { profile, arc: IDENTITY_MODULATION, breath: null, monoMode: false };
+    expect(composeEffectiveParams({ ...base, program: null }).noise.fadeSec).toBe(TYPE_FADE_SECONDS);
+    expect(composeEffectiveParams({ ...base, program: null, typeFadeSec: 8 }).noise.fadeSec).toBe(8);
+    expect(composeEffectiveParams({ ...base, program: PROGRAM, typeFadeSec: 3 }).ambience.fadeSec).toBe(
+      PROGRAM.typeFadeSec,
+    );
   });
 
   it('does not mutate its inputs', () => {
