@@ -293,6 +293,7 @@ export function App() {
       selectProgram: selection.selectProgram,
       selectState: selection.selectState,
       selectPreset: selection.selectPreset,
+      refreshRoutines: data.refreshRoutines,
     });
 
   const lastSession = session.getLastSession();

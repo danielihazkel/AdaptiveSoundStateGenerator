@@ -1,6 +1,7 @@
 import { STATES, type MentalState } from '../audio/states';
 import { normalizeProfile, type SoundProfile } from '../audio/types';
 import { normalizeProgram, type Program } from '../programs/types';
+import { normalizeRoutine, type Routine } from '../routines/types';
 
 /**
  * Shareable links (no backend): a program or a saved sound is serialized
@@ -19,7 +20,8 @@ export interface SharedPreset {
 
 export type SharePayload =
   | { v: 1; kind: 'program'; program: Program }
-  | { v: 1; kind: 'preset'; preset: SharedPreset };
+  | { v: 1; kind: 'preset'; preset: SharedPreset }
+  | { v: 1; kind: 'routine'; routine: Routine };
 
 export const SHARE_HASH_KEY = 'share';
 /** Comfortably inside every modern browser's URL limit. */
@@ -146,7 +148,7 @@ export function validateSharePayload(raw: unknown): ShareValidation {
   if (typeof raw !== 'object' || raw === null) {
     return { ok: false, error: 'This link does not contain a Resonance program or sound.' };
   }
-  const p = raw as Partial<SharePayload> & { program?: unknown; preset?: unknown };
+  const p = raw as Partial<SharePayload> & { program?: unknown; preset?: unknown; routine?: unknown };
   if (p.v !== 1) {
     return { ok: false, error: 'This link was made by a newer version of Resonance.' };
   }
@@ -185,6 +187,14 @@ export function validateSharePayload(raw: unknown): ShareValidation {
           profile: normalizeProfile(preset.profile),
         },
       },
+    };
+  }
+  if (p.kind === 'routine') {
+    const routine = normalizeRoutine(p.routine);
+    if (!routine) return { ok: false, error: 'This link does not contain a valid routine.' };
+    return {
+      ok: true,
+      payload: { v: 1, kind: 'routine', routine: { ...routine, name: cleanName(routine.name, 'Shared routine') } },
     };
   }
   return { ok: false, error: 'This link does not contain a Resonance program or sound.' };

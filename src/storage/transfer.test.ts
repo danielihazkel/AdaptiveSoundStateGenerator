@@ -3,6 +3,7 @@ import { STATES } from '../audio/states';
 import { DECAY, rebuildFromSessions } from '../personalization/bandit';
 import { CANDIDATE_SET_VERSION, PRIOR_ARM_ID } from '../personalization/candidates';
 import { defaultProgram } from '../programs/types';
+import { ROUTINE_TEMPLATES, routineFromTemplate } from '../routines/templates';
 import {
   appendSession,
   loadPersonalization,
@@ -13,6 +14,8 @@ import {
   newId,
   savePreset,
   saveProgram,
+  saveRoutine,
+  loadRoutines,
   saveSettings,
 } from './storage';
 import { buildExportBundle, importBundle, validateBundle } from './transfer';
@@ -112,7 +115,7 @@ describe('export → import round-trip', () => {
     // Fresh device.
     globalThis.localStorage = fakeLocalStorage();
     const summary = importBundle(bundle);
-    expect(summary).toEqual({ sessionsAdded: 2, presetsAdded: 1, programsAdded: 0 });
+    expect(summary).toEqual({ sessionsAdded: 2, presetsAdded: 1, programsAdded: 0, routinesAdded: 0 });
     expect(loadSessions()).toHaveLength(2);
     expect(loadPresets()).toHaveLength(1);
 
@@ -141,15 +144,32 @@ describe('export → import round-trip', () => {
     expect(loadPrograms()).toEqual([program]);
   });
 
+  it('restores routines on a fresh device; damaged ones are skipped', () => {
+    const routine = routineFromTemplate(ROUTINE_TEMPLATES[1]);
+    saveRoutine({ ...routine, id: 'r-mine' });
+    const bundle = buildExportBundle();
+    expect(bundle.routines).toHaveLength(1);
+
+    globalThis.localStorage = fakeLocalStorage();
+    const withJunk = {
+      ...bundle,
+      routines: [...bundle.routines!, { id: 'r-bad', name: 'x', createdAt: '', legs: [] }],
+    };
+    expect(validateBundle(withJunk).ok).toBe(true);
+    expect(importBundle(withJunk).routinesAdded).toBe(1);
+    expect(loadRoutines().map((r) => r.id)).toEqual(['r-mine']);
+    expect(importBundle(withJunk).routinesAdded).toBe(0); // idempotent
+  });
+
   it('re-importing the same bundle is a no-op', () => {
     appendSession(makeSession());
     savePreset(makePreset());
     const bundle = buildExportBundle();
 
     const first = importBundle(bundle);
-    expect(first).toEqual({ sessionsAdded: 0, presetsAdded: 0, programsAdded: 0 });
+    expect(first).toEqual({ sessionsAdded: 0, presetsAdded: 0, programsAdded: 0, routinesAdded: 0 });
     const again = importBundle(bundle);
-    expect(again).toEqual({ sessionsAdded: 0, presetsAdded: 0, programsAdded: 0 });
+    expect(again).toEqual({ sessionsAdded: 0, presetsAdded: 0, programsAdded: 0, routinesAdded: 0 });
     expect(loadSessions()).toHaveLength(1);
     expect(loadPresets()).toHaveLength(1);
     expect(loadPersonalization(CANDIDATE_SET_VERSION).arms.focus![PRIOR_ARM_ID].n).toBe(1);

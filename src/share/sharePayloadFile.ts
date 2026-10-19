@@ -14,11 +14,16 @@ export const SHARE_FILE_SUFFIX = '.resonance.json';
 export function isSharePayloadFile(raw: unknown): boolean {
   if (typeof raw !== 'object' || raw === null) return false;
   const p = raw as { v?: unknown; kind?: unknown };
-  return p.v === 1 && (p.kind === 'program' || p.kind === 'preset');
+  return p.v === 1 && (p.kind === 'program' || p.kind === 'preset' || p.kind === 'routine');
 }
 
 export function sharePayloadFilename(payload: SharePayload): string {
-  const name = payload.kind === 'program' ? payload.program.name : payload.preset.name;
+  const name =
+    payload.kind === 'program'
+      ? payload.program.name
+      : payload.kind === 'routine'
+        ? payload.routine.name
+        : payload.preset.name;
   const slug =
     name
       .toLowerCase()
@@ -29,7 +34,11 @@ export function sharePayloadFilename(payload: SharePayload): string {
 
 /** What a share file's confirmation should say it contains. */
 export function describeSharePayload(payload: SharePayload): string {
-  return payload.kind === 'program'
-    ? `the program “${payload.program.name}” (${payload.program.segments.length} phases)`
-    : `the saved sound “${payload.preset.name}” for ${payload.preset.state}`;
+  if (payload.kind === 'program') {
+    return `the program “${payload.program.name}” (${payload.program.segments.length} phases)`;
+  }
+  if (payload.kind === 'routine') {
+    return `the routine “${payload.routine.name}” (${payload.routine.legs.length} parts)`;
+  }
+  return `the saved sound “${payload.preset.name}” for ${payload.preset.state}`;
 }

@@ -17,6 +17,7 @@ import {
   loadPersonalization,
   loadPresets,
   loadPrograms,
+  loadRoutines,
   loadSessions,
   initSessionStore,
   loadSettings,
@@ -39,6 +40,7 @@ export function useStoredData(screen: Screen) {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [presets, setPresets] = useState(() => loadPresets());
   const [programs, setPrograms] = useState(() => loadPrograms());
+  const [routines, setRoutines] = useState(() => loadRoutines());
   const [morningPrompt, setMorningPrompt] = useState<SessionRecord | null>(null);
   /** A session the app died in the middle of was just added to history. */
   const [recoveredSession, setRecoveredSession] = useState<SessionRecord | null>(null);
@@ -100,6 +102,7 @@ export function useStoredData(screen: Screen) {
         setSettings(loadSettings());
         setPresets(loadPresets());
         setPrograms(loadPrograms());
+        setRoutines(loadRoutines());
         bumpData();
       }),
     [],
@@ -162,11 +165,14 @@ export function useStoredData(screen: Screen) {
     refreshPresets: () => setPresets(loadPresets()),
     programs,
     refreshPrograms: () => setPrograms(loadPrograms()),
+    routines,
+    refreshRoutines: () => setRoutines(loadRoutines()),
     /** After a JSON import replaced things wholesale. */
     reloadAll: () => {
       setSettings(loadSettings());
       setPresets(loadPresets());
       setPrograms(loadPrograms());
+      setRoutines(loadRoutines());
       bumpData();
     },
     bumpData,

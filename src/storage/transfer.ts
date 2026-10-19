@@ -1,14 +1,17 @@
 import { rebuildFromSessions } from '../personalization/bandit';
 import { CANDIDATE_SET_VERSION } from '../personalization/candidates';
 import type { Program } from '../programs/types';
+import { normalizeRoutine, type Routine } from '../routines/types';
 import {
   loadPersonalization,
   loadPresets,
   loadPrograms,
+  loadRoutines,
   loadSessions,
   loadSettings,
   overwritePresets,
   overwritePrograms,
+  overwriteRoutines,
   overwriteSessions,
   savePersonalization,
   saveSettings,
@@ -38,6 +41,8 @@ export interface ExportBundle {
   personalization: PersonalizationState;
   /** Absent in bundles exported before programs existed. */
   programs?: Program[];
+  /** Absent in bundles exported before routines existed (Phase 14). */
+  routines?: Routine[];
 }
 
 export function buildExportBundle(): ExportBundle {
@@ -51,6 +56,7 @@ export function buildExportBundle(): ExportBundle {
     sessions: loadSessions(),
     personalization: loadPersonalization(CANDIDATE_SET_VERSION),
     programs: loadPrograms(),
+    routines: loadRoutines(),
   };
 }
 
@@ -103,6 +109,12 @@ export function validateBundle(raw: unknown): ValidationResult {
   ) {
     return { ok: false, error: 'This export file is incomplete or damaged.' };
   }
+  if (
+    bundle.routines !== undefined &&
+    (!Array.isArray(bundle.routines) || !bundle.routines.every(isRecordWithId))
+  ) {
+    return { ok: false, error: 'This export file is incomplete or damaged.' };
+  }
   return { ok: true, bundle: bundle as ExportBundle };
 }
 
@@ -110,6 +122,7 @@ export interface ImportSummary {
   presetsAdded: number;
   sessionsAdded: number;
   programsAdded: number;
+  routinesAdded: number;
 }
 
 /**
@@ -129,6 +142,13 @@ export function importBundle(bundle: ExportBundle): ImportSummary {
   const programIds = new Set(localPrograms.map((p) => p.id));
   const newPrograms = (bundle.programs ?? []).filter((p) => !programIds.has(p.id));
   overwritePrograms([...localPrograms, ...newPrograms]);
+
+  const localRoutines = loadRoutines();
+  const routineIds = new Set(localRoutines.map((r) => r.id));
+  const newRoutines = (bundle.routines ?? [])
+    .map(normalizeRoutine)
+    .filter((r): r is Routine => r !== null && !routineIds.has(r.id));
+  overwriteRoutines([...localRoutines, ...newRoutines]);
 
   const localSessions = loadSessions();
   const sessionIds = new Set(localSessions.map((s) => s.id));
@@ -154,5 +174,6 @@ export function importBundle(bundle: ExportBundle): ImportSummary {
     presetsAdded: newPresets.length,
     sessionsAdded: newSessions.length,
     programsAdded: newPrograms.length,
+    routinesAdded: newRoutines.length,
   };
 }

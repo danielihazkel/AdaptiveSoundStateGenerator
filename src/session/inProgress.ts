@@ -40,6 +40,7 @@ export function recoverSession(checkpoint: InProgressSession): SessionRecord | n
     openEnded: checkpoint.openEnded,
     sleepOnsetSec: checkpoint.sleepOnsetSec,
     moodBefore: checkpoint.moodBefore,
+    routine: checkpoint.routine,
     feedbackSkipped: true,
     recovered: true,
   };

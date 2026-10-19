@@ -1,3 +1,4 @@
+import type { RoutineRef } from '../routines/types';
 import type { BreathingPatternId } from '../audio/breathing';
 import type { MentalState } from '../audio/states';
 import type { IntervalPlan } from '../programs/intervals';
@@ -169,6 +170,8 @@ export interface SessionRecord {
   };
   /** Phase 13: how the user felt going in, on the state's mood axis (optional, one tap). */
   moodBefore?: MoodLevel;
+  /** Phase 14: this session was one leg of a routine. */
+  routine?: RoutineRef;
   /** Bandit candidate recipe that produced the served profile (absent for presets). */
   servedArmId?: string;
   /** How the starting profile was chosen. Absent on pre-Phase-2 records. */
@@ -237,6 +240,7 @@ export interface InProgressSession {
   /** Sleep onset already detected at this elapsed second (Phase 9). */
   sleepOnsetSec?: number;
   moodBefore?: MoodLevel;
+  routine?: RoutineRef;
   /** Listening time at the last checkpoint. */
   elapsedSec: number;
   updatedAt: string; // ISO

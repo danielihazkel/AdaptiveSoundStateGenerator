@@ -72,7 +72,9 @@ export function DataPanel(props: {
       setMessage(
         pending.payload.kind === 'program'
           ? 'Program imported and selected.'
-          : 'Sound imported and selected.',
+          : pending.payload.kind === 'routine'
+            ? 'Routine imported — find it under Routines.'
+            : 'Sound imported and selected.',
       );
       return;
     }
@@ -80,7 +82,7 @@ export function DataPanel(props: {
     try {
       const summary = importBundle(bundle);
       setMessage(
-        `Imported ${summary.sessionsAdded} new sessions, ${summary.presetsAdded} new presets, and ${summary.programsAdded} new programs.`,
+        `Imported ${summary.sessionsAdded} new sessions, ${summary.presetsAdded} new presets, ${summary.programsAdded} new programs${summary.routinesAdded > 0 ? `, and ${summary.routinesAdded} new routines` : ''}.`,
       );
     } catch (err) {
       console.error('Import failed', err);

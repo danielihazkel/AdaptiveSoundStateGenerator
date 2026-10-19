@@ -1,3 +1,4 @@
+import { describeRoutine } from '../routines/types';
 import { STATES } from '../audio/states';
 import type { SharePayload } from '../share/shareLink';
 import { useDialog } from './useDialog';
@@ -32,11 +33,20 @@ export function ShareImportModal(props: {
           </>
         ) : (
           <>
-            <h2 id="share-title">Someone shared a {pending.payload.kind === 'program' ? 'program' : 'sound'}</h2>
+            <h2 id="share-title">
+              Someone shared a{' '}
+              {pending.payload.kind === 'program'
+                ? 'program'
+                : pending.payload.kind === 'routine'
+                  ? 'routine'
+                  : 'sound'}
+            </h2>
             <p className="setup-question">
               {pending.payload.kind === 'program'
                 ? `Import “${pending.payload.program.name}” — ${pending.payload.program.segments.length} phases for ${STATES[pending.payload.program.baseState].label}?`
-                : `Import “${pending.payload.preset.name}” for ${STATES[pending.payload.preset.state].label}?`}
+                : pending.payload.kind === 'routine'
+                  ? `Import “${pending.payload.routine.name}” — ${describeRoutine(pending.payload.routine)} min?`
+                  : `Import “${pending.payload.preset.name}” for ${STATES[pending.payload.preset.state].label}?`}
             </p>
             <p className="hint">It is saved on this device only, alongside your own.</p>
             <div className="transport">

@@ -1,5 +1,6 @@
 import { normalizeProfile } from '../audio/types';
 import { normalizeProgram, type Program } from '../programs/types';
+import { normalizeRoutine, type Routine } from '../routines/types';
 import { normalizeSettings } from './normalizeSettings';
 import { movePreset } from './presetOrder';
 import {
@@ -26,6 +27,7 @@ const SETTINGS_KEY = 'resonance.v1.settings';
 const PRESETS_KEY = 'resonance.v1.presets';
 const SESSIONS_KEY = 'resonance.v1.sessions';
 const PROGRAMS_KEY = 'resonance.v1.programs';
+const ROUTINES_KEY = 'resonance.v1.routines';
 const PERSONALIZATION_KEY = 'resonance.v1.personalization';
 const IN_PROGRESS_KEY = 'resonance.v1.inProgress';
 
@@ -353,6 +355,33 @@ export function deleteProgram(id: string): void {
 /** Bulk replace after an import merge (transfer.ts) — not for general use. */
 export function overwritePrograms(programs: Program[]): void {
   writeList(PROGRAMS_KEY, programs);
+}
+
+// --- Routines (Phase 14) -------------------------------------------------------
+
+export function loadRoutines(): Routine[] {
+  // Normalize on read, like programs; anything no longer valid is skipped.
+  return readList<Routine>(ROUTINES_KEY)
+    .map(normalizeRoutine)
+    .filter((r): r is Routine => r !== null);
+}
+
+export function saveRoutine(routine: Routine): void {
+  const routines = loadRoutines().filter((r) => r.id !== routine.id);
+  routines.unshift(routine);
+  writeList(ROUTINES_KEY, routines);
+}
+
+export function deleteRoutine(id: string): void {
+  writeList(
+    ROUTINES_KEY,
+    loadRoutines().filter((r) => r.id !== id),
+  );
+}
+
+/** Bulk replace after an import merge (transfer.ts) — not for general use. */
+export function overwriteRoutines(routines: Routine[]): void {
+  writeList(ROUTINES_KEY, routines);
 }
 
 // --- Session records ----------------------------------------------------------

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { STATES } from '../audio/states';
 import { defaultProgram, normalizeProgram } from '../programs/types';
 import { PROGRAM_TEMPLATES } from '../programs/templates';
+import { ROUTINE_TEMPLATES, routineFromTemplate } from '../routines/templates';
 import {
   buildShareUrl,
   decodeShare,
@@ -151,5 +152,23 @@ describe('readShareHash / buildShareUrl', () => {
     await expect(
       buildShareUrl({ v: 1, kind: 'program', program }, 'https://example.test/'),
     ).rejects.toMatchObject({ reason: 'too-long' });
+  });
+});
+
+describe('routine share links (Phase 14)', () => {
+  it('round-trip through a link and re-validate on the way in', async () => {
+    const routine = routineFromTemplate(ROUTINE_TEMPLATES[0]);
+    const token = await encodeShare({ v: 1, kind: 'routine', routine });
+    const back = validateSharePayload(await decodeShare(token));
+    expect(back).toEqual({ ok: true, payload: { v: 1, kind: 'routine', routine } });
+  });
+
+  it('refuse a routine with too few valid legs', () => {
+    const result = validateSharePayload({
+      v: 1,
+      kind: 'routine',
+      routine: { name: 'x', legs: [{ state: 'focus', intensity: 0.5, minutes: 10 }] },
+    });
+    expect(result.ok).toBe(false);
   });
 });
