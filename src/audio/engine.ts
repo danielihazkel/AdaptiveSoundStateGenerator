@@ -700,5 +700,6 @@ export class AudioEngine {
     this.reverb.setParams(e.space.level, e.space.size, timeConstant);
     this.width.setWidth(e.stereoWidth, timeConstant);
     ramp(this.ctx, this.lowpass.frequency, e.lowpassHz, timeConstant);
+    ramp(this.ctx, this.chain.loudnessTrim.gain, e.loudnessTrim, timeConstant);
   }
 }

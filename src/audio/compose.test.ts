@@ -148,6 +148,8 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   out.stereoWidth = p.stereoWidth;
   // ramp(this.lowpass.frequency, lowpassHz)
   out.lowpassHz = lowpassHz;
+  // Phase 13: ramp(this.loudnessTrim.gain, dB → linear); absent = 0 dB.
+  out.loudnessTrim = 10 ** ((p.loudnessTrimDb ?? 0) / 20);
   return out;
 }
 
@@ -235,6 +237,11 @@ function edgeProfiles(): SoundProfile[] {
   nothing.ambience.enabled = false;
   nothing.harmony.enabled = false;
   out.push(nothing);
+  for (const db of [-9, -2.5, 3]) {
+    const trimmed = cloneProfile(base);
+    trimmed.loudnessTrimDb = db;
+    out.push(trimmed);
+  }
   return out;
 }
 

@@ -9,6 +9,7 @@ import {
   type NoiseType,
   type SoundProfile,
 } from '../audio/types';
+import { LOUDNESS_TABLE, LOUDNESS_TABLE_INTENSITIES } from '../audio/loudnessTable';
 
 /**
  * Bandit arms for the Phase 2 optimizer (PRD §9/§16).
@@ -314,5 +315,30 @@ export function buildCandidateProfile(
 ): SoundProfile {
   const prior = STATES[state].buildProfile(intensity);
   const spec = candidatesFor(state).find((c) => c.id === armId);
-  return spec ? spec.apply(prior) : prior;
+  if (!spec) return prior;
+  const profile = spec.apply(prior);
+  // Every arm plays at the prior's loudness (Phase 13): the bandit should
+  // learn which *sound* works, not reward whichever arm is a little louder.
+  const trim = loudnessTrimFor(state, armId, intensity);
+  if (trim !== 0) profile.loudnessTrimDb = trim;
+  return profile;
+}
+
+/**
+ * The arm's calibrated level correction in dB (src/audio/loudnessTable.ts,
+ * measured by `npm run calibrate:loudness`), interpolated on intensity.
+ * 0 for the prior and for anything the table doesn't know.
+ */
+export function loudnessTrimFor(state: MentalState, armId: string, intensity: number): number {
+  const row = LOUDNESS_TABLE[state]?.[armId];
+  if (!row || armId === PRIOR_ARM_ID) return 0;
+  const xs = LOUDNESS_TABLE_INTENSITIES;
+  const t = Math.min(1, Math.max(0, intensity));
+  for (let i = 1; i < xs.length; i++) {
+    if (t <= xs[i]) {
+      const f = (t - xs[i - 1]) / (xs[i] - xs[i - 1]);
+      return row[i - 1] + (row[i] - row[i - 1]) * f;
+    }
+  }
+  return row[row.length - 1];
 }

@@ -112,7 +112,17 @@ export interface SoundProfile {
   stereoWidth: number; // 0..1: 0 = mono-ish, 1 = full width (binaural exempt)
   /** Master lowpass cutoff in Hz — PRD §8 "high_frequencies: reduced" for sleep. */
   lowpassHz: number;
+  /**
+   * Fixed level correction in dB (Phase 13 arm loudness matching): set when
+   * the personalizer serves an arm, so every variation of a state plays at
+   * that state's default loudness and the bandit compares character, not
+   * volume. Not a user control. Absent = 0 dB (every older profile).
+   */
+  loudnessTrimDb?: number;
 }
+
+export const LOUDNESS_TRIM_MIN_DB = -9;
+export const LOUDNESS_TRIM_MAX_DB = 3;
 
 /** Effectively "no filtering" — kept finite so it can always be ramped. */
 export const LOWPASS_OPEN_HZ = 18000;
@@ -242,5 +252,9 @@ export function normalizeProfile(raw: unknown): SoundProfile {
     },
     stereoWidth: num(p.stereoWidth, d.stereoWidth, 0, 1),
     lowpassHz: num(p.lowpassHz, d.lowpassHz, 100, LOWPASS_OPEN_HZ),
+    // Optional: kept only when present, so untrimmed profiles stay byte-identical.
+    ...(typeof p.loudnessTrimDb === 'number' && Number.isFinite(p.loudnessTrimDb)
+      ? { loudnessTrimDb: num(p.loudnessTrimDb, 0, LOUDNESS_TRIM_MIN_DB, LOUDNESS_TRIM_MAX_DB) }
+      : {}),
   };
 }

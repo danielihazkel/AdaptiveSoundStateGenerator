@@ -11,7 +11,8 @@
     "icons": "pwa-assets-generator --preset minimal-2023 public/icon.svg",
     "lint": "eslint src",
     "e2e": "playwright test --project=smoke",
-    "e2e:qa": "playwright test --project=qa"
+    "e2e:qa": "playwright test --project=qa",
+    "calibrate:loudness": "node scripts/calibrate-loudness.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",

@@ -27,6 +27,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.5,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 9000,
       "noise": {
         "fadeSec": 0.1,
@@ -73,6 +74,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.5,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 18000,
       "noise": {
         "fadeSec": 0.1,
@@ -119,6 +121,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 10800,
       "noise": {
         "fadeSec": 8,
@@ -169,6 +172,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.8,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 9000,
       "noise": {
         "fadeSec": 0.1,
@@ -215,6 +219,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.8,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 18000,
       "noise": {
         "fadeSec": 0.1,
@@ -261,6 +266,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 10800,
       "noise": {
         "fadeSec": 8,
@@ -311,6 +317,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.5,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 1000,
       "noise": {
         "fadeSec": 0.1,
@@ -357,6 +364,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.5,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 2000,
       "noise": {
         "fadeSec": 0.1,
@@ -403,6 +411,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 1200,
       "noise": {
         "fadeSec": 8,
@@ -453,6 +462,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.5,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 9000,
       "noise": {
         "fadeSec": 0.1,
@@ -499,6 +509,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.5,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 18000,
       "noise": {
         "fadeSec": 0.1,
@@ -546,6 +557,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 10800,
       "noise": {
         "fadeSec": 8,
@@ -596,6 +608,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 105,
         "softness": 0.7,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 9000,
       "noise": {
         "fadeSec": 0.1,
@@ -642,6 +655,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 105,
         "softness": 0.7,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 18000,
       "noise": {
         "fadeSec": 0.1,
@@ -688,6 +702,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 105,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 10800,
       "noise": {
         "fadeSec": 8,
@@ -738,6 +753,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 98,
         "softness": 0.85,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 3000,
       "noise": {
         "fadeSec": 0.1,
@@ -784,6 +800,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 98,
         "softness": 0.85,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 6000,
       "noise": {
         "fadeSec": 0.1,
@@ -830,6 +847,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 98,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 3600,
       "noise": {
         "fadeSec": 8,
@@ -880,6 +898,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.5,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 9000,
       "noise": {
         "fadeSec": 0.1,
@@ -926,6 +945,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.5,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 18000,
       "noise": {
         "fadeSec": 0.1,
@@ -972,6 +992,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 10800,
       "noise": {
         "fadeSec": 8,
@@ -1022,6 +1043,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.8,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 4000,
       "noise": {
         "fadeSec": 0.1,
@@ -1068,6 +1090,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.8,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 8000,
       "noise": {
         "fadeSec": 0.1,
@@ -1114,6 +1137,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 110,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 4800,
       "noise": {
         "fadeSec": 8,
@@ -1164,6 +1188,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 146.8,
         "softness": 0.7,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 9000,
       "noise": {
         "fadeSec": 0.1,
@@ -1210,6 +1235,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 146.8,
         "softness": 0.7,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 18000,
       "noise": {
         "fadeSec": 0.1,
@@ -1256,6 +1282,7 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
         "rootHz": 146.8,
         "softness": 0.9,
       },
+      "loudnessTrim": 1,
       "lowpassHz": 10800,
       "noise": {
         "fadeSec": 8,

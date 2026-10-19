@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_PULSE_RATE_HZ, STATE_LIST, STATES, type MentalState } from '../audio/states';
 import { MAX_MASTER_VOLUME } from '../audio/mixPolicy';
+import { LOUDNESS_TABLE, LOUDNESS_TABLE_INTENSITIES } from '../audio/loudnessTable';
+import { LOUDNESS_TRIM_MAX_DB, LOUDNESS_TRIM_MIN_DB } from '../audio/types';
 import {
   buildCandidateProfile,
   candidatesFor,
+  loudnessTrimFor,
   PRIOR_ARM_ID,
 } from './candidates';
 
@@ -179,4 +182,40 @@ describe('safety invariants for every state × arm × intensity', () => {
       }
     }
   }
+});
+
+describe('arm loudness matching (Phase 13)', () => {
+  it('the calibration table covers every arm of every state — re-run `npm run calibrate:loudness` after changing the menu', () => {
+    for (const def of STATE_LIST) {
+      const row = LOUDNESS_TABLE[def.id];
+      expect(row, def.id).toBeDefined();
+      expect(Object.keys(row).sort(), def.id).toEqual(candidatesFor(def.id).map((c) => c.id).sort());
+      for (const trims of Object.values(row)) {
+        expect(trims).toHaveLength(LOUDNESS_TABLE_INTENSITIES.length);
+        for (const db of trims) {
+          expect(db).toBeGreaterThanOrEqual(LOUDNESS_TRIM_MIN_DB);
+          expect(db).toBeLessThanOrEqual(LOUDNESS_TRIM_MAX_DB);
+        }
+      }
+    }
+  });
+
+  it('the prior is never trimmed, so default sounds are unchanged', () => {
+    for (const def of STATE_LIST) {
+      for (const intensity of [0, 0.3, 0.5, 1]) {
+        expect(buildCandidateProfile(def.id, intensity, PRIOR_ARM_ID)).toEqual(def.buildProfile(intensity));
+      }
+    }
+  });
+
+  it('serves each arm with its interpolated trim', () => {
+    const row = LOUDNESS_TABLE.focus['binaural-soft'];
+    expect(loudnessTrimFor('focus', 'binaural-soft', 0)).toBe(row[0]);
+    expect(loudnessTrimFor('focus', 'binaural-soft', 1)).toBe(row[2]);
+    expect(loudnessTrimFor('focus', 'binaural-soft', 0.25)).toBeCloseTo((row[0] + row[1]) / 2, 12);
+    const profile = buildCandidateProfile('focus', 0.5, 'binaural-soft');
+    expect(profile.loudnessTrimDb).toBe(row[1]);
+    // Unknown arms and states fall back to no trim.
+    expect(loudnessTrimFor('focus', 'retired-arm', 0.5)).toBe(0);
+  });
 });

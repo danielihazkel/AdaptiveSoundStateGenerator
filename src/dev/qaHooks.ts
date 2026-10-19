@@ -153,7 +153,16 @@ function lufs(range: [number, number]): number {
  * first second skipped while ramps settle) — the input to the loudness
  * calibration table (npm run calibrate:loudness).
  */
-async function measureArms(opts: { seconds?: number; intensities?: number[]; states?: MentalState[] } = {}) {
+async function measureArms(
+  opts: {
+    seconds?: number;
+    intensities?: number[];
+    states?: MentalState[];
+    arms?: string[];
+    /** Measure arms as served (with their calibrated trims) instead of raw. */
+    trimmed?: boolean;
+  } = {},
+) {
   const seconds = opts.seconds ?? 6;
   const intensities = opts.intensities ?? [0, 0.5, 1];
   const states = opts.states ?? (Object.keys(STATES) as MentalState[]);
@@ -161,9 +170,13 @@ async function measureArms(opts: { seconds?: number; intensities?: number[]; sta
   for (const state of states) {
     out[state] = {};
     for (const arm of candidatesFor(state)) {
+      if (opts.arms && !opts.arms.includes(arm.id)) continue;
       out[state][arm.id] = [];
       for (const intensity of intensities) {
-        const audio = await renderSteady(profileFor({ state, intensity, armId: arm.id }), seconds);
+        // By default measure the raw recipe: the trims are what this produces.
+        const profile = profileFor({ state, intensity, armId: arm.id });
+        if (!opts.trimmed) delete profile.loudnessTrimDb;
+        const audio = await renderSteady(profile, seconds);
         const from = SR;
         out[state][arm.id].push(
           integratedLoudness([audio.left.subarray(from), audio.right.subarray(from)], SR),

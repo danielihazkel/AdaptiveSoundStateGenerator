@@ -58,6 +58,8 @@ export interface EffectiveParams {
   space: { level: number; size: number };
   stereoWidth: number;
   lowpassHz: number;
+  /** Linear gain of the fixed loudness-trim node (1 = untrimmed). */
+  loudnessTrim: number;
 }
 
 export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
@@ -186,5 +188,6 @@ export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
     space: { level: pm?.space ?? p.space.level, size: p.space.size },
     stereoWidth: p.stereoWidth,
     lowpassHz,
+    loudnessTrim: 10 ** ((p.loudnessTrimDb ?? 0) / 20),
   };
 }

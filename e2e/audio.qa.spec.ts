@@ -85,6 +85,24 @@ test('the default program crosses its 3:00 phase boundary click-free', async ({ 
   expectClean(r, 'program boundary');
 });
 
+test('served arms play at their state default loudness (calibrated trims)', async ({ page }) => {
+  // The arms with the largest raw offsets (src/audio/loudnessTable.ts).
+  const lufs = await page.evaluate(() =>
+    window.__qa.measureArms({
+      seconds: 24,
+      intensities: [0.5],
+      states: ['focus', 'sleep', 'calm'],
+      arms: ['prior', 'binaural-soft', 'noise-up', 'ambience-up', 'ambience-off', 'iso-off'],
+      trimmed: true,
+    }),
+  );
+  for (const [state, arms] of Object.entries(lufs)) {
+    for (const [arm, [value]] of Object.entries(arms)) {
+      expect(Math.abs(value - arms.prior[0]), `${state} ${arm}`).toBeLessThan(1);
+    }
+  }
+});
+
 test('turning the room (space) up keeps the loudness', async ({ page }) => {
   const [dry, wet] = await page.evaluate(async () => {
     const qa = window.__qa;
