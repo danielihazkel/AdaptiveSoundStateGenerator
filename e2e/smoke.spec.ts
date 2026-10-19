@@ -118,3 +118,30 @@ test('a downloaded MP3 carries its title and cover', async ({ page }) => {
   expect(text).toContain('image/png');
   expect(bytes.length).toBeGreaterThan(1_000_000); // and five minutes of audio follow
 });
+
+test('the session visualizer draws from the live output, and Settings can turn it off', async ({ page }) => {
+  await firstVisit(page);
+  await page.getByRole('radio', { name: /Focus/ }).click();
+  await page.getByRole('button', { name: /► Begin/ }).click();
+  const canvas = page.locator('canvas.session-visualizer');
+  await expect(canvas).toBeVisible();
+  await expect
+    .poll(() =>
+      canvas.evaluate((c: HTMLCanvasElement) => {
+        const data = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+        let painted = 0;
+        for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted++;
+        return painted;
+      }),
+    )
+    .toBeGreaterThan(1000);
+  await page.getByRole('button', { name: /Stop/ }).click();
+  await page.getByRole('button', { name: 'Skip' }).click();
+
+  await page.getByRole('button', { name: /Settings/ }).click();
+  await page.getByRole('checkbox', { name: /soft glow/ }).uncheck();
+  await page.goBack();
+  await page.getByRole('button', { name: /► Begin/ }).click();
+  await expect(page.getByRole('button', { name: /Pause/ })).toBeVisible();
+  await expect(canvas).toHaveCount(0);
+});

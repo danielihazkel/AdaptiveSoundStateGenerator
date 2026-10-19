@@ -13,6 +13,7 @@ import { pacerRateFor } from './breathing';
 import { formatClock } from './format';
 import { MicroPrompt } from './MicroPrompt';
 import { NightstandOverlay } from './NightstandOverlay';
+import { SessionVisualizer } from './SessionVisualizer';
 import { PresetSaveRow } from './PresetSaveRow';
 import { Slider } from './Slider';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
@@ -42,6 +43,8 @@ export function SessionScreen(props: {
   };
   /** Dark nightstand screen after a quiet spell (sleep, by default). */
   nightstand?: boolean;
+  /** Visualizer source (AudioEngine.attachAnalyser); absent = no visualizer. */
+  getAnalyser?: () => AnalyserNode | null;
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { phase, remainingSec, elapsedSec, resumeFailed, openEnded } = props.snapshot;
@@ -124,6 +127,12 @@ export function SessionScreen(props: {
           </p>
         )}
       </div>
+
+      {/* One moving shape at a time: the pacer wins when it is shown, and the
+          nightstand screen exists to be dark. */}
+      {props.getAnalyser && !props.nightstand && !breathPattern && live && (
+        <SessionVisualizer getAnalyser={props.getAnalyser} playing={phase === 'running'} />
+      )}
 
       {breathPattern && (phase === 'running' || phase === 'paused') && (
         <BreathingPacer

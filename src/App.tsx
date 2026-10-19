@@ -52,6 +52,7 @@ import { useStoredData } from './app/useStoredData';
 import { useQuickStart } from './app/useQuickStart';
 import { useShareImport } from './app/useShareImport';
 import { useTabGuard } from './app/useTabGuard';
+import { useStableCallback } from './app/useStableCallback';
 import { ShareImportModal } from './ui/ShareImportModal';
 import { ErrorBoundary, reloadForChunkError } from './ui/ErrorBoundary';
 import { UpdateToast } from './ui/UpdateToast';
@@ -297,6 +298,7 @@ export function App() {
   const lastSession = session.getLastSession();
   const controller = session.getController();
   const sessionState = adaptation.getMeta()?.state ?? selection.mentalState;
+  const getAnalyser = useStableCallback(() => session.getEngine()?.attachAnalyser() ?? null);
 
   return (
     <main className="app">
@@ -620,6 +622,7 @@ export function App() {
           controller={controller}
           mentalState={sessionState}
           nightstand={nightstandFor(sessionState, settings.nightstand)}
+          getAnalyser={settings.visualizer === false ? undefined : getAnalyser}
           program={session.getSessionProgram() ?? undefined}
           breathing={session.getSessionBreathing() ?? undefined}
           profile={session.liveProfile}

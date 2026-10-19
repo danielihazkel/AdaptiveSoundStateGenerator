@@ -47,6 +47,8 @@ export interface Settings {
    * a lit phone would sit on the nightstand all night). Absent = 'sleep'.
    */
   nightstand?: NightstandMode;
+  /** Soft glow that follows the sound on the session screen; absent = on. */
+  visualizer?: boolean;
 }
 
 export type NightstandMode = 'sleep' | 'always' | 'never';

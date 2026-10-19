@@ -872,6 +872,14 @@ input[type="checkbox"] {
   color: var(--text-secondary);
 }
 
+.session-visualizer {
+  display: block;
+  width: min(100%, 360px);
+  height: 200px;
+  margin: 0.5rem auto;
+  pointer-events: none;
+}
+
 .session-volume {
   max-width: 22rem;
   margin: 1rem auto 0;

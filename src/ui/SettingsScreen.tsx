@@ -82,6 +82,14 @@ export function SettingsScreen(props: {
             ))}
           </div>
         </div>
+        <label className="mono-toggle">
+          <input
+            type="checkbox"
+            checked={s.visualizer !== false}
+            onChange={(e) => props.onChange({ visualizer: e.target.checked })}
+          />
+          Show a soft glow that moves with the sound
+        </label>
         <p className="hint">
           The screen stays on during a session so the sound keeps playing; after a quiet
           spell it goes black except for a dim clock. Tap to bring the controls back.

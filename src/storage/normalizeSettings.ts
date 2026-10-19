@@ -59,6 +59,7 @@ export function normalizeSettings(raw: unknown): Settings {
     out.onboardingCompletedAt = p.onboardingCompletedAt;
   }
   if (p.export !== undefined) out.export = normalizeExportOptions(p.export);
+  if (typeof p.visualizer === 'boolean') out.visualizer = p.visualizer;
   if (NIGHTSTAND_MODES.includes(p.nightstand as NightstandMode)) {
     out.nightstand = p.nightstand as NightstandMode;
   }

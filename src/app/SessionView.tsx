@@ -26,6 +26,7 @@ export function SessionView(props: {
     onDismiss: () => void;
   };
   nightstand?: boolean;
+  getAnalyser?: () => AnalyserNode | null;
 }) {
   const snapshot = useSession(props.controller);
   const stateDef = STATES[props.mentalState];
@@ -59,6 +60,7 @@ export function SessionView(props: {
       onSavePreset={props.onSavePreset}
       microPrompt={props.microPrompt}
       nightstand={props.nightstand}
+      getAnalyser={props.getAnalyser}
     />
   );
 }

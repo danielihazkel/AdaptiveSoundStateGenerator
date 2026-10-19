@@ -25,6 +25,7 @@ describe('normalizeSettings', () => {
       onboardingCompletedAt: null,
       export: { format: 'wav' as const, kbps: 192 },
       nightstand: 'never' as const,
+      visualizer: false,
     };
     expect(normalizeSettings(full)).toEqual(full);
   });
