@@ -35,6 +35,12 @@ export function rt60ForBucket(bucket: number): number {
   );
 }
 
+/** Dry-path (and send) gain for a wet level: constant total power. */
+export function reverbDryGain(level: number): number {
+  const l = Math.min(1, Math.max(0, level));
+  return 1 / Math.sqrt(1 + l * l);
+}
+
 export class ReverbUnit {
   private readonly convolvers: [ConvolverNode, ConvolverNode];
   private readonly convGains: [GainNode, GainNode];
@@ -46,7 +52,8 @@ export class ReverbUnit {
 
   constructor(
     private readonly ctx: BaseAudioContext,
-    source: AudioNode,
+    /** Feeds both the dry path and the send; its gain is the dry/wet compensation. */
+    private readonly source: GainNode,
     destination: AudioNode,
   ) {
     this.wet = new GainNode(ctx, { gain: 0 });
@@ -61,10 +68,18 @@ export class ReverbUnit {
     }
   }
 
-  /** One ramped update per applyEffective — level is the wet mix (0..1). */
+  /**
+   * One ramped update per applyEffective — level is the wet mix (0..1).
+   * The room adds power on top of the dry signal (the IR carries roughly
+   * unit energy, and wet and dry are uncorrelated), so the shared source is
+   * scaled by 1/√(1 + level²): dry² + wet² stays constant and turning the
+   * room up never makes the mix louder. Level 0 leaves the source at unity —
+   * exactly the pre-reverb sound.
+   */
   setParams(level: number, size: number, timeConstant?: number): void {
     if (level > 0 || this.bucket !== -1) this.applyBucket(bucketForSize(size));
     ramp(this.ctx, this.wet.gain, level, timeConstant);
+    ramp(this.ctx, this.source.gain, reverbDryGain(level), timeConstant);
   }
 
   private applyBucket(bucket: number): void {

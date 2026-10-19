@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateImpulseResponse, mulberry32 } from './reverbIr';
-import { REVERB_SIZE_BUCKETS, bucketForSize, rt60ForBucket } from './reverb';
+import { REVERB_SIZE_BUCKETS, bucketForSize, reverbDryGain, rt60ForBucket } from './reverb';
 
 const SAMPLE_RATE = 44100;
 
@@ -88,5 +88,21 @@ describe('mulberry32', () => {
     }
     expect(sum / 10000).toBeGreaterThan(0.45);
     expect(sum / 10000).toBeLessThan(0.55);
+  });
+});
+
+describe('reverbDryGain', () => {
+  it('keeps dry² + wet² constant, unity at level 0', () => {
+    expect(reverbDryGain(0)).toBe(1);
+    for (const level of [0.1, 0.3, 0.5, 1]) {
+      const dry = reverbDryGain(level);
+      const wet = dry * level; // the send is scaled by the same source gain
+      expect(dry * dry + wet * wet).toBeCloseTo(1, 10);
+    }
+  });
+
+  it('clamps out-of-range levels', () => {
+    expect(reverbDryGain(-1)).toBe(1);
+    expect(reverbDryGain(5)).toBeCloseTo(reverbDryGain(1), 10);
   });
 });
