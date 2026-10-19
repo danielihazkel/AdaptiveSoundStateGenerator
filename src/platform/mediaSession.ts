@@ -13,14 +13,22 @@ export interface MediaSessionHandlers {
 const supported = (): boolean =>
   typeof navigator !== 'undefined' && 'mediaSession' in navigator;
 
-/** Title/subtitle only — safe to call again mid-session. */
-export function setMediaMetadata(meta: { title: string; subtitle?: string }): void {
+export interface MediaMeta {
+  title: string;
+  subtitle?: string;
+  /** Lock-screen / notification card art (platform/artwork.ts). */
+  artwork?: MediaImage[];
+}
+
+/** Metadata only — safe to call again mid-session. */
+export function setMediaMetadata(meta: MediaMeta): void {
   if (!supported()) return;
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: meta.title,
       artist: meta.subtitle ?? 'Resonance',
       album: 'Resonance',
+      ...(meta.artwork ? { artwork: meta.artwork } : {}),
     });
   } catch {
     /* ignore */
@@ -40,7 +48,7 @@ export function setMediaHandlers(handlers: MediaSessionHandlers): void {
 }
 
 export function setMediaSession(
-  meta: { title: string; subtitle?: string },
+  meta: MediaMeta,
   handlers: MediaSessionHandlers,
 ): void {
   setMediaMetadata(meta);

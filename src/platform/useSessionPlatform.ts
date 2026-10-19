@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { SessionController, SessionSnapshot } from '../session/sessionController';
 import {
+  type MediaMeta,
   clearMediaSession,
   setMediaHandlers,
   setMediaMetadata,
@@ -19,7 +20,7 @@ import { WakeLockHolder } from './wakeLock';
 export function useSessionPlatform(
   controller: SessionController,
   snapshot: SessionSnapshot,
-  meta: { title: string; subtitle?: string; durationSec: number },
+  meta: MediaMeta & { durationSec: number },
 ): void {
   const wakeLock = useRef<WakeLockHolder | null>(null);
   wakeLock.current ??= new WakeLockHolder();
@@ -48,8 +49,8 @@ export function useSessionPlatform(
   }, [controller]);
 
   useEffect(() => {
-    setMediaMetadata({ title: meta.title, subtitle: meta.subtitle });
-  }, [meta.title, meta.subtitle]);
+    setMediaMetadata({ title: meta.title, subtitle: meta.subtitle, artwork: meta.artwork });
+  }, [meta.title, meta.subtitle, meta.artwork]);
 
   // Phase-driven state.
   const { phase, elapsedSec } = snapshot;

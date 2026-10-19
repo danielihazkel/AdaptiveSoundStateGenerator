@@ -77,3 +77,16 @@ test('a sleep session goes nightstand-dark and a tap brings the controls back', 
   await expect(cover).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Pause/ })).toBeVisible();
 });
+
+test('a running session publishes lock-screen metadata with drawn artwork', async ({ page }) => {
+  await firstVisit(page);
+  await page.getByRole('radio', { name: /Focus/ }).click();
+  await page.getByRole('button', { name: /► Begin/ }).click();
+  await expect(page.getByRole('button', { name: /Pause/ })).toBeVisible();
+  const meta = await page.evaluate(() => {
+    const m = navigator.mediaSession.metadata;
+    return m ? { title: m.title, art: m.artwork.map((a) => ({ src: a.src.slice(0, 22), sizes: a.sizes })) } : null;
+  });
+  expect(meta?.title).toMatch(/^Focus · /);
+  expect(meta?.art).toEqual([{ src: 'data:image/png;base64,', sizes: '512x512' }]);
+});

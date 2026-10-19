@@ -2,6 +2,7 @@ import type { CheckpointResponse } from '../adaptation/types';
 import type { BreathPattern } from '../audio/breathing';
 import { STATES, type MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
+import { stateArtwork } from '../platform/artwork';
 import { useSessionPlatform } from '../platform/useSessionPlatform';
 import type { Program } from '../programs/types';
 import { MAX_END_AT_MINUTES } from '../session/durationLimits';
@@ -37,6 +38,8 @@ export function SessionView(props: {
       ? `${stateDef.label} · until you stop`
       : `${stateDef.label} · ${Math.round(durationSec / 60)} min`,
     subtitle: props.program ? `Resonance · ${props.program.name}` : undefined,
+    // Cached per state, so the array identity is stable across ticks.
+    artwork: stateArtwork(props.mentalState),
     durationSec,
   });
   return (
