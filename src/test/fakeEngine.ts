@@ -37,6 +37,7 @@ export function fakeEngine(initial?: SoundProfile) {
     },
     contextState: 'running' as AudioContextState,
     playCue: vi.fn(),
+    attachAnalyser: vi.fn((): AnalyserNode | null => null),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn(),
     pause: vi.fn().mockResolvedValue(undefined),

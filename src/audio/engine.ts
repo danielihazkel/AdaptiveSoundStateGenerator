@@ -11,6 +11,7 @@ import { NoiseLayer } from './layers/noiseLayer';
 import { ToneLayer } from './layers/toneLayer';
 import { loadNoiseWorklet } from './noise-processor';
 import { PulseModulator, type PulseHandover } from './pulseModulator';
+import { buildMasterChain, disposeMasterChain, type MasterChain } from './masterChain';
 import { fadeTo, ramp } from './ramp';
 import { ReverbUnit } from './reverb';
 import { StereoWidthNode } from './stereoWidth';
@@ -35,8 +36,9 @@ export { ALARM_REPEAT_SECONDS } from './mixPolicy';
  *
  * Graph:
  *   tone ─┬→ StereoWidthNode ─┐
- *   noise ┘                   ├→ mixBus → PulseModulator → master → lowpass → limiter → monoGate → destination
- *   binaural ─────────────────┘              ambience ──────↗ chime ────────↗
+ *   noise ┘                   ├→ mixBus → PulseModulator → preMaster → master → … → limiter → monoGate
+ *   binaural ─────────────────┘                  ambience ──────↗   chime ──↗
+ *   (the output chain after master is built in masterChain.ts)
  *
  * Binaural bypasses the width matrix on purpose: narrowing it would collapse
  * the interaural frequency difference into ordinary amplitude beating.
@@ -73,15 +75,19 @@ export class AudioEngine {
   /** Listeners for AudioContext state changes (interruption handling). */
   private readonly contextStateListeners = new Set<(state: AudioContextState) => void>();
 
+  private readonly master: GainNode;
+  private readonly lowpass: BiquadFilterNode;
+  private readonly bassShelf: BiquadFilterNode;
+  private readonly limiter: DynamicsCompressorNode;
+  private readonly monoGate: GainNode;
+  /** Visualizer tap on the final output, created on first request. */
+  private analyser: AnalyserNode | null = null;
+
   private constructor(
     private readonly ctx: BaseAudioContext,
     /** True when rendering to file on an OfflineAudioContext — see createOffline. */
     private readonly offline: boolean,
-    private readonly master: GainNode,
-    private readonly lowpass: BiquadFilterNode,
-    private readonly bassShelf: BiquadFilterNode,
-    private readonly limiter: DynamicsCompressorNode,
-    private readonly monoGate: GainNode,
+    private readonly chain: MasterChain,
     private readonly width: StereoWidthNode,
     private readonly pulse: PulseModulator,
     private readonly tone: ToneLayer,
@@ -90,10 +96,14 @@ export class AudioEngine {
     private readonly ambience: AmbienceLayer,
     private readonly ambience2: AmbienceLayer,
     private readonly harmony: HarmonyLayer,
-    private readonly preMaster: GainNode,
     private readonly reverb: ReverbUnit,
     private profile: SoundProfile,
   ) {
+    this.master = chain.master;
+    this.lowpass = chain.lowpass;
+    this.bassShelf = chain.bassShelf;
+    this.limiter = chain.limiter;
+    this.monoGate = chain.monoGate;
     // Offline contexts flip suspended/running at every render checkpoint —
     // that is driver mechanics, not an interruption, so don't surface it.
     if (!offline) {
@@ -141,43 +151,8 @@ export class AudioEngine {
     await Promise.all([loadNoiseWorklet(ctx), loadAmbienceWorklet(ctx)]);
     const p = cloneProfile(profile);
 
-    // Output chain, built back to front.
-    const monoGate = new GainNode(ctx, {
-      channelCount: 2,
-      channelCountMode: 'explicit',
-    });
-    monoGate.connect(ctx.destination);
-    // Hard limiter — safety net, not an effect (PRD §13 loudness ceiling).
-    const limiter = new DynamicsCompressorNode(ctx, {
-      threshold: -10,
-      knee: 0,
-      ratio: 20,
-      attack: 0.003,
-      release: 0.25,
-    });
-    limiter.connect(monoGate);
-    // Bass shelf sits after master (session fades scale it) and before the
-    // limiter (the boost stays under the §13 ceiling). Gain 0 dB = inert.
-    const bassShelf = new BiquadFilterNode(ctx, {
-      type: 'lowshelf',
-      frequency: 150,
-      gain: 0,
-    });
-    bassShelf.connect(limiter);
-    const lowpass = new BiquadFilterNode(ctx, {
-      type: 'lowpass',
-      frequency: p.lowpassHz,
-      Q: 0.0001,
-    });
-    lowpass.connect(bassShelf);
-    const master = new GainNode(ctx, { gain: 0 });
-    master.connect(lowpass);
-    // Pulsed mix (tone/noise/binaural/harmony) lands here, pre-master: the
-    // reverb send taps it so the wet signal rides master fades, lowpass,
-    // bass shelf, limiter and mono gate — while ambience (already diffuse)
-    // and the chime stay dry.
-    const preMaster = new GainNode(ctx);
-    preMaster.connect(master);
+    const chain = buildMasterChain(ctx, p.lowpassHz);
+    const { preMaster, master } = chain;
     const reverb = new ReverbUnit(ctx, preMaster, master);
 
     // Layer bus.
@@ -208,8 +183,8 @@ export class AudioEngine {
     const harmony = new HarmonyLayer(ctx, width.input, p.harmony.rootHz);
 
     const engine = new AudioEngine(
-      ctx, offline, master, lowpass, bassShelf, limiter, monoGate, width, pulse, tone,
-      binaural, noise, ambience, ambience2, harmony, preMaster, reverb, p,
+      ctx, offline, chain, width, pulse, tone, binaural, noise, ambience, ambience2, harmony,
+      reverb, p,
     );
     engine.applyAll();
     return engine;
@@ -470,6 +445,20 @@ export class AudioEngine {
     }, MONO_SWITCH_DIP_SECONDS * 1000 + 30);
   }
 
+  /**
+   * An AnalyserNode on the final output (post-limiter, post-mono — what the
+   * listener hears, chime included), for the session visualizer. Created on
+   * first call and reused; null offline, where nothing is listening.
+   */
+  attachAnalyser(): AnalyserNode | null {
+    if (this.offline) return null;
+    if (!this.analyser) {
+      this.analyser = new AnalyserNode(this.ctx, { fftSize: 1024, smoothingTimeConstant: 0.85 });
+      this.monoGate.connect(this.analyser);
+    }
+    return this.analyser;
+  }
+
   setMasterVolume(volume: number): void {
     this.profile.masterVolume = volume;
     if (this.playing) ramp(this.ctx, this.master.gain, volume);
@@ -652,12 +641,8 @@ export class AudioEngine {
     this.width.dispose();
     this.pulse.dispose();
     this.reverb.dispose();
-    this.preMaster.disconnect();
-    this.master.disconnect();
-    this.lowpass.disconnect();
-    this.bassShelf.disconnect();
-    this.limiter.disconnect();
-    this.monoGate.disconnect();
+    this.analyser?.disconnect();
+    disposeMasterChain(this.chain);
     void this.realtime?.close(); // OfflineAudioContext has no close()
   }
 
