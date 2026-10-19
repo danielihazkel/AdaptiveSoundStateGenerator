@@ -51,7 +51,7 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Mid-session adaptation loop: micro-prompt ("better/same/worse") + implicit signals every 10 min → arm switch/revert with a slow glide (§17) — `src/adaptation/`, `src/session/sessionController.ts` (checkpoints), `src/ui/MicroPrompt.tsx`; per-segment credit in `src/personalization/reward.ts` (`computeCredits`); sleep never prompts and never switches (biometric soften only)
 - [x] AI coach: natural-language goal → engine configuration (§11) — `src/coach/` (local rule-based parser behind a provider seam for a future LLM), `src/ui/CoachInput.tsx`; fills the setup controls so bandit attribution is untouched
 - [x] Optional wearable signals: heart rate via Web Bluetooth (Chrome/Edge, explicit consent per §14) + simulated dev source (`?simhr`) — `src/biometrics/`, `src/ui/BiometricsPanel.tsx`; HR trend feeds the adaptation loop for relax/sleep/meditation (HRV/movement deferred)
-- [ ] Verify by ear: adapted switch glides without clicks, prompts never appear during sleep/pause/wind-down, coach fills setup from the PRD example phrase, `?simhr` rising HR softens a sleep session
+- [ ] Verify by ear: ~~adapted switch glides without clicks~~ (automated: `e2e/audio.qa.spec.ts`, every state), prompts never appear during sleep/pause/wind-down, coach fills setup from the PRD example phrase, `?simhr` rising HR softens a sleep session
 
 ## Phase 4 — Timed programs + Sound lab
 
@@ -60,7 +60,7 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Engine side channel `setProgramModulation` (replaces the arc when active; never written into the profile) + session integration (program sessions skip bandit/adaptation, `SessionRecord.programId`) — `src/audio/engine.ts`, `src/session/sessionController.ts`, `src/App.tsx`
 - [x] Visual segment editor + program persistence (`resonance.v1.programs`) + export/import + setup-screen program picker + in-session phase readout — `src/ui/ProgramEditor.tsx`, `src/storage/`, `src/ui/SetupScreen.tsx`, `src/ui/SessionScreen.tsx`
 - [x] Sound lab (`?lab` or "Sound lab →" link): instant play, all parameters live, state/preset starting points, program timeline scrub + play-from-here, randomize + bandit-arm audition — `src/ui/lab/`, `src/lab/randomize.ts`
-- [ ] Verify by ear: pattern mode at complexity 0 ≈ old steady pulse; BPM/complexity sweeps click-free; default 5-phase program crossfades audibly at 3/8/15/25 min; lab scrub through a program follows the phases
+- [ ] Verify by ear: pattern mode at complexity 0 ≈ old steady pulse; BPM/complexity sweeps click-free; default 5-phase program crossfades audibly at 3/8/15/25 min (click-free at 3:00 automated: `e2e/audio.qa.spec.ts`); lab scrub through a program follows the phases
 
 ## Phase 5 — Contexts + harmonic pad
 
@@ -115,7 +115,7 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Algorithmic reverb ("space"): `SoundProfile.space {level,size}` (default inert), synthesized deterministic IR (`src/audio/reverbIr.ts`, RT60 0.6–3 s ≤ the export chunk lead), pre-master send with A/B convolver size crossfade (`src/audio/reverb.ts`), Space/Room sliders, lab randomizer bounds, `space-on` bandit arm (CANDIDATE_SET_VERSION 4, additive)
 - [x] HRV (RMSSD) from BLE RR intervals (`parseHeartRateMeasurement` reads flag bits 3/4; simulated source emits jittered RR; `?simhr=sleep` variant) + artifact-rejected RMSSD trend (`src/biometrics/hrv.ts`) as a second adaptation signal (`isAdverseBiometric`: HR rising OR HRV falling, calm states only) + per-segment `hrvDeltaPct` + Insights "Heart-rate variability rose/fell N%" fact
 - [x] Sleep-onset detection → early wind-down: pure detector (`src/biometrics/sleepOnset.ts`: sustained + steady drop below baseline), 30 s watcher (`src/app/sleepOnsetWatcher.ts`), `SessionController.windDown()` (completed, sleep fade, no chime; `+15 min` cancels), opt-in `Settings.sleepOnsetFade` toggle in the heart-rate panel, `sleepOnsetSec` on records/checkpoints, reward full-completion + bonus, "fell asleep" history badge, "Asleep — fading out 🌙" phase copy
-- [ ] Verify by ear: program with rain→fireplace + pink→brown dissolves (no click); Space 0→1 on meditation at constant loudness; 20-min sleep-program export with space 0.3 seamless at the 15:00 chunk seam; `?simhr=sleep` fades a sleep session out after ~15 min with the toggle on
+- [ ] Verify by ear: ~~program with rain→fireplace + pink→brown dissolves (no click)~~ (automated: every noise/ambience pair at 8 s, `src/audio/typeSwitch.test.ts`); ~~Space 0→1 on meditation at constant loudness~~ (was +3 LU — fixed with constant-power dry/wet, automated); ~~export chunk seams~~ (automated with short chunks); `?simhr=sleep` fades a sleep session out after ~15 min with the toggle on
 
 ## Phase 10 — Prove the flywheel (PRD §18)
 
@@ -133,7 +133,16 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Nightstand mode: OLED-black cover with a dim clock after 20 s without a touch; the wake lock stays (audio survives) — `src/ui/NightstandOverlay.tsx`, `Settings.nightstand` (sleep | always | never, absent = sleep), `nightstandFor` in `src/session/sessionOptions.ts`
 - [x] Keyboard shortcuts: Space pause/resume, ↑/↓ volume, + extend, ? help on the session screen; Enter begins on setup — `src/ui/useKeyboardShortcuts.ts`
 - [x] Settings screen (`#settings`): adaptation, nightstand, appearance, heart-rate panel, data export/import, replay the intro tour; contextual options stay on setup — `src/ui/SettingsScreen.tsx`; field-by-field `normalizeSettings` on read and import — `src/storage/normalizeSettings.ts`
-- [ ] Verify in-browser: one volume drag → `volumeAdjustments: 1` in the record; a sleep session goes black after 20 s and a tap reveals the controls without pressing anything underneath; Space / arrows work and are ignored while typing in the coach box; every setting round-trips through `#settings`
+- [x] Verify in-browser (Playwright `e2e/smoke.spec.ts` + unit tests): one volume drag → `volumeAdjustments: 1` in the record; a sleep session goes black after 20 s and a tap reveals the controls without pressing anything underneath; Space / arrows work and are ignored while typing in the coach box; every setting round-trips through `#settings`
+
+## Phase 12 — QA infrastructure
+
+- [x] Output chain extracted (`src/audio/masterChain.ts`) with a loudness-trim node (after master, under the limiter) and `engine.attachAnalyser()` on the final output
+- [x] Node audio QA: shared worklet harness with seeded randomness + click / dip / swell metrics (`src/test/audioQa.ts`, `src/audio/signalMetrics.ts`); every noise and ambience type switch at the slider and program fades, with negative controls proving a 2σ step, a dropout and a pop are caught — `src/audio/typeSwitch.test.ts`
+- [x] BS.1770-4 LUFS meter, verified against EBU Tech 3341 cases — `src/audio/loudness.ts`
+- [x] Playwright (`playwright.config.ts`, pinned 1.63.0, dedicated ports, never reuses a running server): `npm run e2e` smoke flow against the production build; `npm run e2e:qa` real-engine audio QA via dev-only hooks (`src/dev/qaHooks.ts`, `?qa`); both in CI
+- [x] Found and fixed by the QA: reverb added power on top of the dry signal (+3 LU at space 1) — now constant-power (`reverbDryGain`, `src/audio/reverb.ts`)
+- [x] "tsc in CI" was already covered — `npm run build` type-checks all of `src` (and now `e2e`)
 
 ## Ongoing / Cross-cutting
 
@@ -141,10 +150,10 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Synthesized ambience: rain, ocean, wind, space from shaped noise (§6E) — `src/audio/ambience-processor.ts`, `src/audio/layers/ambienceLayer.ts`; post-pulse tap into `master` (pulses never chop weather); per-state §8 defaults; `ambience-up`/`ambience-off` bandit arms (CANDIDATE_SET_VERSION → 2)
 - [x] Forest, fireplace, café ambience (§6E) — synthesized in the worklet (leaves + bird motifs, flickering bed + crackles/pops, wandering murmur + clinks), always available; a recording dropped into `public/ambience/` replaces the synthesized version via the existing loader + seamless loop crossfade (`src/audio/ambienceAssets.ts`). Node-side generator test: `src/audio/ambience-processor.test.ts`
 - [x] Tone softening: detuning, harmonic stacking, low-pass filtering (§7) — `tone.warmth` (0..1) in `SoundProfile`, implemented in `src/audio/layers/toneLayer.ts` (equal-power, warmth 0 = old pure sine); Warmth slider in the advanced panel
-- [ ] Verify by ear: each synth ambience type solo + click-free switches, ambience steady under deep isochronic depth (post-pulse routing), warmth 0→1 sweep on meditation (no loudness jump), 5-min session per state to hear the compressed arc land in the end fade, drop a test `forest.mp3` in `public/ambience/` and hear it loop seamlessly
+- [ ] Verify by ear: each synth ambience type solo (~~click-free switches~~ automated: `src/audio/typeSwitch.test.ts`), ambience steady under deep isochronic depth (post-pulse routing), warmth 0→1 sweep on meditation (no loudness jump), 5-min session per state to hear the compressed arc land in the end fade, drop a test `forest.mp3` in `public/ambience/` and hear it loop seamlessly
 - [x] MP3 session export ("Download") — offline render of the selected session (profile + arc/program, adaptation excluded by design) via `OfflineAudioContext` suspend-checkpoints driving the ordinary `AudioEngine`, lamejs worker encode — `src/export/`, buttons on the setup screen, program editor and lab (`src/export/useMp3Export.ts`, `src/ui/ExportRow.tsx`)
 - [x] Long exports (up to 4 h): 15-min chunked rendering (`splitRenderPlan`) streamed into one encoder session (`Mp3Stream`), equal-power seam crossfade (`src/export/crossfade.ts`), exact rhythm-pattern handover across chunks (`PulseModulator.exportHandover/importHandover`), and oscillator phase continuity: each offline chunk's tone/binaural layers record their frequency ramps (`src/export/phaseTracker.ts`), hand over the phase at the seam, and the next chunk delays each `OscillatorNode.start()` by under one period to land on it
-- [ ] Verify by ear: chunk seams at 15:00 / 30:00 in a long sleep-program export
+- [x] Chunk seams in a long sleep export — automated: `e2e/audio.qa.spec.ts` renders sleep with 60 s chunks through the real export seamer (`ChunkSeamer`) and checks both seams
 - [x] PWA: manifest + precached app shell (`vite-plugin-pwa`, `npm run icons` regenerates icons from `public/icon.svg`); Screen Wake Lock, Media Session lock-screen transport, silent keep-alive element, `beforeunload` guard — `src/platform/`
 - [ ] Native wrapper for guaranteed background audio on iOS (§7) — the keep-alive element makes it best-effort only -- ignore for now
 - [ ] Offline support (§7) -- ignore for now
