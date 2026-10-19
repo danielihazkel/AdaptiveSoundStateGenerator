@@ -1,4 +1,11 @@
+import { stateArtworkPng } from '../platform/artwork';
 import { ChunkSeamer } from './chunkSeamer';
+import { exportTags, tagExport } from './tagExport';
+
+async function coverFor(sel: ExportSelection) {
+  const data = await stateArtworkPng(sel.state).catch(() => null);
+  return data ? { mime: 'image/png', data } : undefined;
+}
 import { EncodeStream } from './encodeMp3';
 import { downloadBlob } from '../platform/download';
 import { exportFilename } from './filename';
@@ -63,7 +70,11 @@ export async function exportSessionAudio(
     );
     rendering = false;
     onProgress({ phase: 'encoding', fraction: 0 });
-    const blob = await stream.finish();
+    const encoded = await stream.finish();
+    const blob = await tagExport(encoded, options.format, {
+      ...exportTags(sel, label),
+      cover: await coverFor(sel),
+    }).catch(() => encoded); // a tag is a nicety — never lose the file over one
 
     const minutes = Math.round(Math.min(sel.durationSec, maxSec) / 60);
     downloadBlob(blob, exportFilename(label, minutes, options.format));

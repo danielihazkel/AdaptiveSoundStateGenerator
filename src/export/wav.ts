@@ -29,3 +29,35 @@ export function wavHeader(sampleRate: number, channels: number, dataBytes: numbe
   view.setUint32(40, dataBytes, true);
   return bytes;
 }
+
+/**
+ * A RIFF `LIST`/`INFO` chunk (title, artist, …) to append after the data
+ * chunk — the WAV counterpart of an MP3's ID3 tag. Values are UTF-8,
+ * NUL-terminated and padded to an even length, as RIFF requires; the caller
+ * adds the chunk's length to the RIFF size in the header.
+ */
+export function wavInfoChunk(fields: Partial<Record<'INAM' | 'IART' | 'IPRD' | 'IGNR' | 'ICMT', string>>): Uint8Array {
+  const encoder = new TextEncoder();
+  const subchunks: Uint8Array[] = [];
+  for (const [id, value] of Object.entries(fields)) {
+    if (!value) continue;
+    const text = encoder.encode(value);
+    const size = text.length + 1; // NUL terminator
+    const chunk = new Uint8Array(8 + size + (size % 2));
+    chunk.set(encoder.encode(id), 0);
+    new DataView(chunk.buffer).setUint32(4, size, true);
+    chunk.set(text, 8);
+    subchunks.push(chunk);
+  }
+  const body = subchunks.reduce((n, c) => n + c.length, 0);
+  const out = new Uint8Array(12 + body);
+  out.set(encoder.encode('LIST'), 0);
+  new DataView(out.buffer).setUint32(4, 4 + body, true);
+  out.set(encoder.encode('INFO'), 8);
+  let at = 12;
+  for (const c of subchunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+}

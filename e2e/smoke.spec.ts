@@ -90,3 +90,31 @@ test('a running session publishes lock-screen metadata with drawn artwork', asyn
   expect(meta?.title).toMatch(/^Focus · /);
   expect(meta?.art).toEqual([{ src: 'data:image/png;base64,', sizes: '512x512' }]);
 });
+
+test('a downloaded MP3 carries its title and cover', async ({ page }) => {
+  test.setTimeout(180_000);
+  await firstVisit(page);
+  await page.getByRole('radio', { name: /Relax/ }).click();
+  await page.getByRole('radio', { name: 'Custom' }).click();
+  await page.getByLabel('Session length in minutes').fill('5');
+  await page.getByLabel('Session length in minutes').blur();
+  const download = page.waitForEvent('download', { timeout: 150_000 });
+  await page.getByRole('button', { name: /⤓ Download 5 min MP3/ }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/\.mp3$/);
+  const stream = await file.createReadStream();
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Uint8Array);
+  const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.length;
+  }
+  const head = String.fromCharCode(...bytes.subarray(0, 3));
+  expect(head).toBe('ID3');
+  const text = new TextDecoder('latin1').decode(bytes.subarray(0, 4000));
+  expect(text).toContain('APIC'); // the drawn cover made it in
+  expect(text).toContain('image/png');
+  expect(bytes.length).toBeGreaterThan(1_000_000); // and five minutes of audio follow
+});
