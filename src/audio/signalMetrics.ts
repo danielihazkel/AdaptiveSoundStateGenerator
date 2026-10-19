@@ -68,7 +68,13 @@ export interface TransitionReport {
    * stays near 1; a discontinuity stands far above.
    */
   clickRatio: number;
-  /** Quietest 10 ms window in the transition over the quieter steady bed: a dropout shows as ≪ 1. */
+  /**
+   * Quietest 10 ms window in the transition over the quietest steady window
+   * on either side: a dropout shows as ≪ 1. Measured against the steady
+   * signal's own troughs, not its median, so a deeply pulsed state (arousal's
+   * pattern pulses) isn't mistaken for a dropout — a transition-free
+   * stretch of it scores ≈ 1, while a real gap still lands near 0.
+   */
   dipRatio: number;
   /** Loudest 10 ms window over the louder steady bed: a pop shows as ≫ 1. */
   swellRatio: number;
@@ -86,7 +92,7 @@ export function analyzeTransition(
   const levels = windowRms(transition, sampleRate);
   return {
     clickRatio: maxIsolatedStep(transition) / Math.max(maxIsolatedStep(before), maxIsolatedStep(after)),
-    dipRatio: Math.min(...levels) / Math.min(median(beforeLevels), median(afterLevels)),
+    dipRatio: Math.min(...levels) / Math.min(...beforeLevels, ...afterLevels),
     swellRatio: Math.max(...levels) / Math.max(...beforeLevels, ...afterLevels),
   };
 }

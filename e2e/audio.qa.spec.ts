@@ -6,9 +6,10 @@ import type { TransitionReport } from '../src/audio/signalMetrics';
  * Automated "verify by ear" (TODO.md) in a real browser: renders go through
  * the actual engine on OfflineAudioContexts (src/dev/qaHooks.ts), and only
  * the metrics come back. Same yardstick as the Node worklet tests
- * (src/audio/typeSwitch.test.ts); the dip floor is lower here because full
- * mixes carry the states' slow isochronic pulses (clean sleep/meditation
- * renders measure ~0.4).
+ * (src/audio/typeSwitch.test.ts). The dip is measured against the steady
+ * signal's own troughs, so pulsed states score ≈ 1 on a clean stretch;
+ * the floor sits well below the lowest clean glide measured (≈ 0.7, arousal)
+ * and far above a real gap (≈ 0).
  */
 declare global {
   interface Window {
@@ -17,7 +18,7 @@ declare global {
 }
 
 const CLICK_LIMIT = 2;
-const DIP_LIMIT = 0.25;
+const DIP_LIMIT = 0.4;
 const SWELL_LIMIT = 1.3;
 const STATES = [
   'focus',

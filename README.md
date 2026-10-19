@@ -12,7 +12,7 @@ Because everything is generated algorithmically, the app ships no audio files an
 
 ## Running the app
 
-Requires [Node.js](https://nodejs.org/) 20+.
+Requires [Node.js](https://nodejs.org/) 24 (or 22.22+) — the React test environment (jsdom) needs it; the app itself runs in any modern browser.
 
 ```sh
 npm install
