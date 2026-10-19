@@ -37,6 +37,12 @@ describe('SessionScreen', () => {
     expect(next).toEqual({ ...profile, masterVolume: 0.7 });
   });
 
+  it('arrow keys step the volume from the page', () => {
+    const { onProfileChange, profile } = renderSession();
+    fireEvent.keyDown(document.body, { key: 'ArrowUp' });
+    expect(onProfileChange.mock.calls[0][0].masterVolume).toBeCloseTo(profile.masterVolume + 0.05);
+  });
+
   it('hides the volume slider once the session is over', () => {
     renderSession({ phase: 'finished' });
     expect(screen.queryByRole('slider', { name: /volume/i })).toBeNull();

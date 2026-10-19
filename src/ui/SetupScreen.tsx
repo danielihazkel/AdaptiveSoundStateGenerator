@@ -26,6 +26,7 @@ import {
   type Theme,
 } from '../storage/types';
 import { formatDuration } from './format';
+import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 import { useRadioGroup } from './useRadioGroup';
 import { ExportRow } from './ExportRow';
 import { PresetStrip } from './PresetStrip';
@@ -136,6 +137,8 @@ export function SetupScreen(props: {
     getKey: (t) => t,
   });
   const last = props.lastSession;
+  // Enter begins — only from the page itself, never from a focused control.
+  useKeyboardShortcuts({ Enter: props.starting ? undefined : props.onBegin });
 
   return (
     <>

@@ -817,6 +817,24 @@ input[type="checkbox"] {
   }
 }
 
+.shortcuts-help dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.shortcuts-help dt {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.shortcuts-help dd {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
 .session-volume {
   max-width: 22rem;
   margin: 1rem auto 0;

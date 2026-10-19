@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { CheckpointResponse } from '../adaptation/types';
 import { pulseDerivedPattern, type BreathPattern } from '../audio/breathing';
 import type { StateDefinition } from '../audio/states';
-import { MAX_MASTER_VOLUME } from '../audio/mixPolicy';
+import { MAX_MASTER_VOLUME, VOLUME_KEY_STEP } from '../audio/mixPolicy';
 import { cloneProfile, type SoundProfile } from '../audio/types';
 import { evaluateProgram, segmentAt } from '../programs/evaluator';
 import type { Program } from '../programs/types';
@@ -15,6 +15,7 @@ import { MicroPrompt } from './MicroPrompt';
 import { NightstandOverlay } from './NightstandOverlay';
 import { PresetSaveRow } from './PresetSaveRow';
 import { Slider } from './Slider';
+import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 
 export function SessionScreen(props: {
   stateDef: StateDefinition;
@@ -63,6 +64,23 @@ export function SessionScreen(props: {
   const pacerRate = pacerRateFor(props.profile);
   const breathPattern =
     props.breathing ?? (pacerRate !== null ? pulseDerivedPattern(pacerRate) : null);
+
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const over = phase === 'finished' || phase === 'stoppedEarly';
+  const nudgeVolume = (delta: number) =>
+    setVolume(Math.round((props.profile.masterVolume + delta) * 100) / 100);
+  useKeyboardShortcuts({
+    ' ':
+      phase === 'running'
+        ? props.onPause
+        : phase === 'paused' || phase === 'interrupted'
+          ? props.onResume
+          : undefined,
+    ArrowUp: over ? undefined : () => nudgeVolume(VOLUME_KEY_STEP),
+    ArrowDown: over ? undefined : () => nudgeVolume(-VOLUME_KEY_STEP),
+    '+': props.onExtend && (phase === 'running' || phase === 'ending') ? props.onExtend : undefined,
+    '?': () => setShowShortcuts((v) => !v),
+  });
 
   const live = phase === 'running' || phase === 'paused' || phase === 'ending';
   // Lift the cover whenever the session needs the user.
@@ -175,7 +193,7 @@ export function SessionScreen(props: {
         )}
       </div>
 
-      {phase !== 'finished' && phase !== 'stoppedEarly' && (
+      {!over && (
         <div className="session-volume">
           <Slider
             label="Volume"
@@ -186,6 +204,25 @@ export function SessionScreen(props: {
             display={`${Math.round(props.profile.masterVolume * 100)}%`}
             onChange={setVolume}
           />
+        </div>
+      )}
+
+      {showShortcuts && (
+        <div className="notice shortcuts-help" role="note" aria-label="Keyboard shortcuts">
+          <dl>
+            <dt>Space</dt>
+            <dd>Pause / resume</dd>
+            <dt>↑ ↓</dt>
+            <dd>Volume</dd>
+            {props.onExtend && (
+              <>
+                <dt>+</dt>
+                <dd>+15 min</dd>
+              </>
+            )}
+            <dt>?</dt>
+            <dd>Show / hide this list</dd>
+          </dl>
         </div>
       )}
 
