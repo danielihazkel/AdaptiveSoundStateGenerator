@@ -144,6 +144,14 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Found and fixed by the QA: reverb added power on top of the dry signal (+3 LU at space 1) — now constant-power (`reverbDryGain`, `src/audio/reverb.ts`)
 - [x] "tsc in CI" was already covered — `npm run build` type-checks all of `src` (and now `e2e`)
 
+## Phase 13 — Better learning signal
+
+- [x] Arm loudness matching: `npm run calibrate:loudness` measures every arm × intensity in a real browser (24 s renders, BS.1770) and writes `src/audio/loudnessTable.ts`; served arms carry `SoundProfile.loudnessTrimDb` (optional; the prior is never trimmed) on the master chain's trim node — browser QA confirms arms land within 1 LU of their default — `src/personalization/candidates.ts`, `scripts/calibrate-loudness.mjs`
+- [x] Cross-state pooled prior: a poolable recipe's relative effect in other states shifts its prior (evidence-weighted, 4 pseudo-observations of no effect, ±0.15 cap); state-dependent recipes never pool; pinned draws unchanged — `pooledPriorMean` in `src/personalization/bandit.ts`
+- [x] Mood before/after on the state's own axis (`MOOD_AXES`, `src/ui/MoodScale.tsx`): optional chips on setup and (when answered before, never after sleep) on the feedback screen; `MOOD_DELTA_WEIGHT` nudge in `scoreSession`; Insights "Mood" fact — not a context dimension yet
+- [ ] Re-run `npm run calibrate:loudness` whenever the arm menu changes (`candidates.test.ts` fails until the table covers every arm)
+- [ ] Verify by ear: in the lab, A/B a state's default against binaural-soft / ambience-up — similar loudness, different character; the mood chips show up in the History record's data export
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs
