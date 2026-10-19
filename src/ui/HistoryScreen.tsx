@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { STATES } from '../audio/states';
-import { summarizeHistory } from '../personalization/history';
+import { TIME_BUCKET_LABELS } from '../personalization/context';
+import { summarizeHistory, weeklyReflection, type WeeklyReflection } from '../personalization/history';
 import type { Program } from '../programs/types';
 import type { Preset, SessionRecord } from '../storage/types';
 import { formatDuration } from './format';
@@ -33,6 +34,7 @@ export function HistoryScreen(props: {
 }) {
   const [shown, setShown] = useState(PAGE);
   const summary = useMemo(() => summarizeHistory(props.sessions, new Date()), [props.sessions]);
+  const week = useMemo(() => weeklyReflection(props.sessions, new Date()), [props.sessions]);
   const programById = new Map(props.programs.map((p) => [p.id, p]));
   const presetById = new Map(props.presets.map((p) => [p.id, p]));
 
@@ -40,6 +42,8 @@ export function HistoryScreen(props: {
     <div className="history">
       <h2>Session history</h2>
       <p className="hint">Every session this device has played, newest first.</p>
+
+      {week && <WeekCard week={week} />}
 
       <div className="stat-tiles">
         <div className="stat-tile">
@@ -127,5 +131,62 @@ export function HistoryScreen(props: {
         ← Back
       </button>
     </div>
+  );
+}
+
+const NOISE_LABELS = { white: 'white', pink: 'pink', brown: 'brown', blue: 'blue' } as const;
+
+/** "This week" at a glance (Phase 14) — sentences, not another table. */
+function WeekCard(props: { week: WeeklyReflection }) {
+  const w = props.week;
+  const change =
+    w.minutesBefore !== null && w.minutesBefore > 0
+      ? Math.round(((w.minutes - w.minutesBefore) / w.minutesBefore) * 100)
+      : null;
+  const ratingTrend =
+    w.avgRating !== null && w.avgRatingBefore !== null
+      ? w.avgRating - w.avgRatingBefore
+      : null;
+  return (
+    <section className="week-card" aria-labelledby="week-title">
+      <h3 id="week-title">This week</h3>
+      <ul>
+        <li>
+          {w.sessions} sessions, {formatDuration(w.minutes * 60)}
+          {change !== null && change !== 0 && ` — ${Math.abs(change)}% ${change > 0 ? 'more' : 'less'} than the week before`}
+          .
+        </li>
+        <li>
+          Mostly{' '}
+          {w.topStates
+            .map(({ state, minutes }) => `${STATES[state].emoji} ${STATES[state].label.toLowerCase()} (${formatDuration(minutes * 60)})`)
+            .join(', ')}
+          .
+        </li>
+        {w.avgRating !== null && (
+          <li>
+            Rated {w.avgRating.toFixed(1)} on average
+            {ratingTrend !== null &&
+              Math.abs(ratingTrend) >= 0.1 &&
+              ` — ${ratingTrend > 0 ? 'up' : 'down'} ${Math.abs(ratingTrend).toFixed(1)} from the week before`}
+            .
+          </li>
+        )}
+        {(w.bestNoise || w.bestTime) && (
+          <li>
+            Best results
+            {w.bestNoise && ` with ${NOISE_LABELS[w.bestNoise]} noise`}
+            {w.bestTime &&
+              (w.bestTime === 'night' ? ' at night' : ` in the ${TIME_BUCKET_LABELS[w.bestTime].toLowerCase()}`)}
+            .
+          </li>
+        )}
+        {w.fellAsleep > 0 && (
+          <li>
+            🌙 Fell asleep to {w.fellAsleep} session{w.fellAsleep === 1 ? '' : 's'}.
+          </li>
+        )}
+      </ul>
+    </section>
   );
 }
