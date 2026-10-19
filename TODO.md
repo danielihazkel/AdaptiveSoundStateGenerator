@@ -126,6 +126,15 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [ ] Deliberately skipped: backgrounded-tab time as a reward signal (screen-locked listening is *expected* use); weekday/length context dimensions (too little data per cell at ~1 session/day); mood-before check-in (belongs with the settings/UX batch)
 - [ ] Verify in-browser: after ~14 explore sessions on one state the Insights card shows the flywheel panel with a held-out count; a paused-twice session scores below an unpaused twin in the variation table over time
 
+## Phase 11 — Session & night UX
+
+- [x] Volume tweaks counted per gesture, not per slider input event (a drag used to max the penalty and trip the implicit arm switch) — `VOLUME_GESTURE_GAP_MS` in `src/app/useSessionOrchestrator.ts`
+- [x] Always-visible volume slider on the session screen (same path as the advanced panel: implicit signal, never a customization) — `src/ui/SessionScreen.tsx`, `MAX_MASTER_VOLUME` → `src/audio/mixPolicy.ts`
+- [x] Nightstand mode: OLED-black cover with a dim clock after 20 s without a touch; the wake lock stays (audio survives) — `src/ui/NightstandOverlay.tsx`, `Settings.nightstand` (sleep | always | never, absent = sleep), `nightstandFor` in `src/session/sessionOptions.ts`
+- [x] Keyboard shortcuts: Space pause/resume, ↑/↓ volume, + extend, ? help on the session screen; Enter begins on setup — `src/ui/useKeyboardShortcuts.ts`
+- [x] Settings screen (`#settings`): adaptation, nightstand, appearance, heart-rate panel, data export/import, replay the intro tour; contextual options stay on setup — `src/ui/SettingsScreen.tsx`; field-by-field `normalizeSettings` on read and import — `src/storage/normalizeSettings.ts`
+- [ ] Verify in-browser: one volume drag → `volumeAdjustments: 1` in the record; a sleep session goes black after 20 s and a tap reveals the controls without pressing anything underneath; Space / arrows work and are ignored while typing in the coach box; every setting round-trips through `#settings`
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs
