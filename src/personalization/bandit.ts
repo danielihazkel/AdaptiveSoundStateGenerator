@@ -74,8 +74,70 @@ function blendedVariance(stats: ArmStats | undefined): number {
   return (PRIOR_N * SIGMA * SIGMA + n * empVar) / (PRIOR_N + n);
 }
 
-export function posteriorFor(stats: ArmStats | undefined, armId: string): Posterior {
-  const priorMean = armId === PRIOR_ARM_ID ? PRIOR_ARM_MEAN : OTHER_ARM_MEAN;
+/** The fixed prior mean of an arm, before any cross-state pooling. */
+function basePriorMean(armId: string): number {
+  return armId === PRIOR_ARM_ID ? PRIOR_ARM_MEAN : OTHER_ARM_MEAN;
+}
+
+/**
+ * Cross-state pooling (Phase 13). Recipes whose effect is the same *kind* of
+ * change everywhere ("a little more bass", "a softer binaural layer") carry
+ * what they did in other states into this one's prior: a new state stops
+ * starting from scratch on a recipe that clearly worked — or clearly didn't —
+ * elsewhere. Recipes that mean different things per state (an alternate
+ * noise colour, an alternate ambience, toggling a pad that may or may not be
+ * there, sleep's "darker") are never pooled.
+ */
+export const POOLABLE_ARMS: ReadonlySet<string> = new Set([
+  'beat-down',
+  'beat-up',
+  'carrier-low',
+  'binaural-soft',
+  'noise-up',
+  'iso-off',
+  'ambience-up',
+  'bass-up',
+  'warmth-up',
+  'space-on',
+  'pulse-deep',
+]);
+/** Pseudo-observations of "no effect" the pooled evidence must outweigh. */
+export const POOL_SHRINK_N = 4;
+/** The pooled shift never moves a prior further than this. */
+export const POOL_MAX_SHIFT = 0.15;
+
+/**
+ * The prior mean for `armId` in `mental`: the fixed prior, shifted by the
+ * recipe's relative effect in every *other* state — its posterior mean minus
+ * that state's default-sound posterior mean — weighted by evidence and
+ * shrunk with POOL_SHRINK_N pseudo-observations of zero effect, capped at
+ * ±POOL_MAX_SHIFT. Exactly the fixed prior with no evidence elsewhere, so
+ * single-state histories (and the pinned draws) are untouched.
+ */
+export function pooledPriorMean(state: PersonalizationState, mental: MentalState, armId: string): number {
+  const base = basePriorMean(armId);
+  if (!POOLABLE_ARMS.has(armId)) return base;
+  let weight = 0;
+  let weighted = 0;
+  for (const [other, arms] of Object.entries(state.arms)) {
+    if (other === mental || !arms) continue;
+    const stats = arms[armId];
+    if (!stats || stats.n <= 0) continue;
+    const effect = posteriorFor(stats, armId).mean - posteriorFor(arms[PRIOR_ARM_ID], PRIOR_ARM_ID).mean;
+    weight += stats.n;
+    weighted += stats.n * effect;
+  }
+  if (weight <= 0) return base;
+  const shift = weighted / (weight + POOL_SHRINK_N);
+  return base + Math.min(POOL_MAX_SHIFT, Math.max(-POOL_MAX_SHIFT, shift));
+}
+
+/** `priorMean` defaults to the fixed prior; the bandit passes the pooled one. */
+export function posteriorFor(
+  stats: ArmStats | undefined,
+  armId: string,
+  priorMean = basePriorMean(armId),
+): Posterior {
   const n = stats?.n ?? 0;
   const sum = stats?.sum ?? 0;
   return {
@@ -99,8 +161,9 @@ export function contextualPosterior(
   stateStats: ArmStats | undefined,
   ctxStats: ArmStats | undefined,
   armId: string,
+  priorMean?: number,
 ): Posterior {
-  const base = posteriorFor(stateStats, armId);
+  const base = posteriorFor(stateStats, armId, priorMean);
   const nc = ctxStats?.n ?? 0;
   if (nc <= 0) return base;
   const n = stateStats?.n ?? 0;
@@ -142,7 +205,12 @@ export function sampleArm(
   let best = PRIOR_ARM_ID;
   let bestDraw = -Infinity;
   for (const { id } of candidatesFor(mental)) {
-    const { mean, std } = contextualPosterior(armStats[id], ctxStats?.[id], id);
+    const { mean, std } = contextualPosterior(
+      armStats[id],
+      ctxStats?.[id],
+      id,
+      pooledPriorMean(state, mental, id),
+    );
     const draw = mean + std * gaussian(rng);
     if (draw > bestDraw) {
       bestDraw = draw;
@@ -163,7 +231,12 @@ export function bestArm(
   let best = PRIOR_ARM_ID;
   let bestMean = -Infinity;
   for (const { id } of candidatesFor(mental)) {
-    const { mean } = contextualPosterior(armStats[id], ctxStats?.[id], id);
+    const { mean } = contextualPosterior(
+      armStats[id],
+      ctxStats?.[id],
+      id,
+      pooledPriorMean(state, mental, id),
+    );
     if (mean > bestMean) {
       bestMean = mean;
       best = id;

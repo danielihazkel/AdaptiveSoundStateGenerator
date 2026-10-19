@@ -9,6 +9,10 @@ import {
   DECAY_HALF_LIFE_SESSIONS,
   decayState,
   eligibleSessionCount,
+  OTHER_ARM_MEAN,
+  POOL_MAX_SHIFT,
+  POOLABLE_ARMS,
+  pooledPriorMean,
   posteriorFor,
   PRIOR_ARM_MEAN,
   rebuildFromSessions,
@@ -373,5 +377,69 @@ describe('contextual posterior', () => {
     expect(rebuilt).toEqual(incremental);
     expect(Object.keys(rebuilt.contexts!.focus!).length).toBe(2);
     expect(Object.keys(rebuilt.contexts!.focus!).some((k) => k.endsWith(':mono'))).toBe(true);
+  });
+});
+
+describe('Phase 13: cross-state pooled prior', () => {
+  it('is the plain prior without evidence from other states', () => {
+    let state = emptyState();
+    // Evidence in the *same* state never moves the pooled prior.
+    state = updateArm(state, 'sleep', 'bass-up', { value: 0.95, weight: 5 });
+    expect(pooledPriorMean(state, 'sleep', 'bass-up')).toBe(OTHER_ARM_MEAN);
+    expect(pooledPriorMean(state, 'relax', PRIOR_ARM_ID)).toBe(PRIOR_ARM_MEAN);
+  });
+
+  it('carries a recipe that worked elsewhere into an untried state', () => {
+    let state = emptyState();
+    // In relax, the default is fine and a warmer bass is clearly better.
+    for (let i = 0; i < 8; i++) {
+      state = updateArm(state, 'relax', PRIOR_ARM_ID, { value: 0.55, weight: 1 });
+      state = updateArm(state, 'relax', 'bass-up', { value: 0.85, weight: 1 });
+    }
+    const pooled = pooledPriorMean(state, 'sleep', 'bass-up');
+    expect(pooled).toBeGreaterThan(OTHER_ARM_MEAN);
+    expect(pooled).toBeLessThanOrEqual(OTHER_ARM_MEAN + POOL_MAX_SHIFT);
+    // The untried sleep arm's posterior now starts ahead of its untried peers…
+    expect(posteriorFor(undefined, 'bass-up', pooled).mean).toBeGreaterThan(
+      posteriorFor(undefined, 'beat-up').mean,
+    );
+    // …and Thompson sampling picks it more often than a peer.
+    const rng = lcg(5);
+    let bass = 0;
+    let beat = 0;
+    for (let i = 0; i < 400; i++) {
+      const arm = sampleArm(state, 'sleep', rng);
+      if (arm === 'bass-up') bass++;
+      if (arm === 'beat-up') beat++;
+    }
+    expect(bass).toBeGreaterThan(beat);
+  });
+
+  it('shrinks thin evidence and caps strong evidence', () => {
+    let thin = emptyState();
+    thin = updateArm(thin, 'relax', 'bass-up', { value: 1, weight: 0.5 });
+    const thinShift = pooledPriorMean(thin, 'sleep', 'bass-up') - OTHER_ARM_MEAN;
+    expect(thinShift).toBeGreaterThan(0);
+    expect(thinShift).toBeLessThan(0.1);
+
+    let strong = emptyState();
+    for (let i = 0; i < 60; i++) strong = updateArm(strong, 'relax', 'bass-up', { value: 1, weight: 1 });
+    expect(pooledPriorMean(strong, 'sleep', 'bass-up')).toBeCloseTo(OTHER_ARM_MEAN + POOL_MAX_SHIFT, 12);
+  });
+
+  it('never pools state-dependent recipes', () => {
+    let state = emptyState();
+    for (let i = 0; i < 20; i++) state = updateArm(state, 'relax', 'noise-alt', { value: 1, weight: 1 });
+    expect(POOLABLE_ARMS.has('noise-alt')).toBe(false);
+    expect(pooledPriorMean(state, 'sleep', 'noise-alt')).toBe(OTHER_ARM_MEAN);
+  });
+
+  it('a recipe that did worse elsewhere starts behind', () => {
+    let state = emptyState();
+    for (let i = 0; i < 10; i++) {
+      state = updateArm(state, 'focus', PRIOR_ARM_ID, { value: 0.7, weight: 1 });
+      state = updateArm(state, 'focus', 'iso-off', { value: 0.3, weight: 1 });
+    }
+    expect(pooledPriorMean(state, 'flow', 'iso-off')).toBeLessThan(OTHER_ARM_MEAN);
   });
 });
