@@ -24,6 +24,7 @@ import {
 import {
   modeFor,
   type InProgressSession,
+  type MoodLevel,
   type Preset,
   type SessionRecord,
   type Settings,
@@ -43,6 +44,7 @@ export interface FinishedSession {
   intensity: number;
   profile: SoundProfile;
   completed: boolean;
+  moodBefore?: MoodLevel;
 }
 
 /** Everything except the master volume — separates "tweaked the sound"
@@ -198,6 +200,7 @@ export function useSessionOrchestrator(deps: {
       wakeUp: result.config.wakeUp,
       openEnded: openEnded || undefined,
       sleepOnsetSec: result.woundDownAtSec,
+      moodBefore: checkpoint?.moodBefore,
     };
     appendSession(record);
     deps.onSessionStored();
@@ -210,6 +213,7 @@ export function useSessionOrchestrator(deps: {
       intensity: record.intensity,
       profile,
       completed: record.completed,
+      moodBefore: record.moodBefore,
     };
     // A completed sleep session gets no rating prompt — the user is asleep
     // (PRD §9; the next-morning prompt asks instead) — unless it woke them
@@ -255,7 +259,7 @@ export function useSessionOrchestrator(deps: {
    * that record directly ("Play last"), bypassing the selection so it can be
    * called in the same gesture as the tap without waiting for a re-render.
    */
-  const begin = async (opts: { replayOf?: SessionRecord } = {}) => {
+  const begin = async (opts: { replayOf?: SessionRecord; moodBefore?: MoodLevel } = {}) => {
     if (starting) return;
     // Synchronously inside the tap: iOS only starts media from a gesture, and
     // the keep-alive is what lets the session survive a locked screen.
@@ -430,6 +434,7 @@ export function useSessionOrchestrator(deps: {
         breathingPattern: breathing && breathing.id !== 'pulse' ? breathing.id : undefined,
         wakeUp,
         openEnded: openEnded || undefined,
+        moodBefore: opts.moodBefore,
       };
       startCheckpointing(controller);
       // Sleep-onset fade (Phase 9): opt-in, plain sleep sessions only — a

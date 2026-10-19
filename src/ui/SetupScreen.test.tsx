@@ -66,6 +66,8 @@ function props(overrides: Partial<Props> = {}): Props {
     onToggleMono: vi.fn(),
     onToggleChime: vi.fn(),
     onOpenSettings: vi.fn(),
+    moodBefore: undefined,
+    onMoodBeforeChange: vi.fn(),
     lastSession: null,
     onPlayLast: vi.fn(),
     onModeChange: vi.fn(),

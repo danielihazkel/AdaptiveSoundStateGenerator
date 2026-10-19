@@ -323,4 +323,17 @@ describe('useSessionOrchestrator', () => {
       state: 'focus',
     });
   });
+
+  it('records the optional mood going in, through the crash checkpoint too', async () => {
+    const { result } = setup();
+    await act(async () => {
+      await result.current.begin({ moodBefore: 2 });
+    });
+    expect(loadInProgress()).toMatchObject({ moodBefore: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(65_000);
+    });
+    expect(loadSessions()[0].moodBefore).toBe(2);
+    expect(result.current.getLastSession()?.moodBefore).toBe(2);
+  });
 });

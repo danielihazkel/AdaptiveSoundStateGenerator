@@ -1,4 +1,4 @@
-import { STATES } from '../audio/states';
+import { MOOD_AXES, STATES, type MentalState } from '../audio/states';
 import type { SoundComponent, StateInsights } from '../personalization/insights';
 import { TIME_BUCKET_LABELS } from '../personalization/context';
 import type { TrendDirection } from '../personalization/trends';
@@ -190,6 +190,17 @@ export function InsightsScreen(props: {
                   <dd>{insight.bestArm.label}</dd>
                 </>
               )}
+              {insight.moodShift && (
+                <>
+                  <dt>Mood</dt>
+                  <dd>
+                    {formatMoodShift(insight.state, insight.moodShift.meanDelta)} on average over{' '}
+                    {insight.moodShift.n} sessions
+                    {insight.moodShift.bestLift &&
+                      ` — most with “${insight.moodShift.bestLift.label}” (${signed(insight.moodShift.bestLift.meanDelta)})`}
+                  </dd>
+                </>
+              )}
               {insight.hrvDeltaPct && (
                 <>
                   <dt>Heart-rate variability</dt>
@@ -249,4 +260,12 @@ export function InsightsScreen(props: {
       </button>
     </div>
   );
+}
+
+const signed = (steps: number) => `${steps >= 0 ? '+' : '−'}${Math.abs(steps).toFixed(1)}`;
+
+/** "+1.2 toward Sharp" / "−0.4 toward Scattered" on the state's mood axis. */
+function formatMoodShift(state: MentalState, meanDelta: number): string {
+  const [low, high] = MOOD_AXES[state];
+  return `${signed(meanDelta)} toward ${meanDelta >= 0 ? high : low}`;
 }

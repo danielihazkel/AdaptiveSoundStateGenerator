@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import type { Distraction, FeedbackInput, Rating } from '../storage/types';
+import type { MentalState } from '../audio/states';
+import type { Distraction, FeedbackInput, MoodLevel, Rating } from '../storage/types';
+import { MoodScale } from './MoodScale';
 import { PresetSaveRow } from './PresetSaveRow';
 import { useRadioGroup } from './useRadioGroup';
 
@@ -23,7 +25,14 @@ export function FeedbackScreen(props: {
   onRate: (input: FeedbackInput) => void;
   onSkip: () => void;
   onSavePreset: (name: string) => void;
+  /**
+   * Ask the after-half of the mood question (Phase 13): only when the user
+   * answered the before-half — the shift needs both — and never for sleep,
+   * where "drowsy" after waking up points the wrong way.
+   */
+  moodState?: MentalState;
 }) {
+  const [moodAfter, setMoodAfter] = useState<MoodLevel | undefined>(undefined);
   const [distraction, setDistraction] = useState<Distraction | null>(null);
   const [useAgain, setUseAgain] = useState<boolean | null>(null);
   const distractionGroup = useRadioGroup<Distraction>({
@@ -44,12 +53,22 @@ export function FeedbackScreen(props: {
       rating,
       ...(distraction !== null ? { distraction } : {}),
       ...(useAgain !== null ? { useAgain } : {}),
+      ...(moodAfter !== undefined ? { moodAfter } : {}),
     });
   };
 
   return (
     <div className="feedback">
       <h2>{props.completed ? 'Session complete' : 'Session stopped'}</h2>
+
+      {props.moodState && (
+        <MoodScale
+          state={props.moodState}
+          question="How do you feel now?"
+          value={moodAfter}
+          onChange={setMoodAfter}
+        />
+      )}
 
       <div className="feedback-extra">
         <span className="setup-question" id="distraction-label">

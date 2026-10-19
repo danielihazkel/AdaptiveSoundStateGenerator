@@ -9,7 +9,7 @@ import {
 } from '../storage/types';
 import { posteriorFor } from './bandit';
 import { CANDIDATE_SET_VERSION } from './candidates';
-import { computeInsights, MIN_SESSIONS_FOR_INSIGHTS } from './insights';
+import { computeInsights, MIN_MOOD_SESSIONS, MIN_SESSIONS_FOR_INSIGHTS } from './insights';
 
 function emptyBandit(): PersonalizationState {
   return { schemaVersion: SCHEMA_VERSION, candidateSetVersion: CANDIDATE_SET_VERSION, arms: {} };
@@ -217,5 +217,48 @@ describe('works best at (time of day)', () => {
   it('is empty without context data', () => {
     const sessions = Array.from({ length: MIN_SESSIONS_FOR_INSIGHTS }, () => rated(4));
     expect(computeInsights(sessions, emptyBandit())[0].bestByTime).toEqual([]);
+  });
+});
+
+describe('mood shift (Phase 13)', () => {
+  const moodSession = (arm: string, before: number, after: number) =>
+    focusSession({
+      servedArmId: arm,
+      moodBefore: before as SessionRecord['moodBefore'],
+      feedback: {
+        rating: 4,
+        ratedAt: '2026-08-20T11:00:00.000Z',
+        moodAfter: after as NonNullable<SessionRecord['feedback']>['moodAfter'],
+      },
+    });
+
+  it('stays quiet below the paired-session minimum, and ignores one-sided answers', () => {
+    const sessions = [
+      ...Array.from({ length: MIN_MOOD_SESSIONS - 1 }, () => moodSession('prior', 2, 4)),
+      ...Array.from({ length: 5 }, () => rated(4, { moodBefore: 1 })),
+    ];
+    expect(computeInsights(sessions, emptyBandit())[0].moodShift).toBeNull();
+  });
+
+  it('reports the mean shift and the variation that lifted most', () => {
+    const sessions = [
+      moodSession('prior', 2, 3),
+      moodSession('prior', 3, 3),
+      moodSession('beat-down', 1, 4),
+      moodSession('beat-down', 2, 4),
+      moodSession('noise-up', 3, 2), // a single session never names a variation
+    ];
+    const shift = computeInsights(sessions, emptyBandit())[0].moodShift!;
+    expect(shift.n).toBe(5);
+    expect(shift.meanDelta).toBeCloseTo((1 + 0 + 3 + 2 - 1) / 5, 12);
+    expect(shift.bestLift).toMatchObject({ meanDelta: 2.5, n: 2 });
+    expect(shift.bestLift!.label).toMatch(/beat/i);
+  });
+
+  it('names no variation when nothing moved the mood up', () => {
+    const sessions = Array.from({ length: 6 }, () => moodSession('prior', 4, 3));
+    const shift = computeInsights(sessions, emptyBandit())[0].moodShift!;
+    expect(shift.meanDelta).toBe(-1);
+    expect(shift.bestLift).toBeNull();
   });
 });

@@ -11,6 +11,7 @@ import {
   DISTRACTION_ADJUST,
   END_CREDIT_MIN_SCALE,
   IMPLICIT_ONLY_WEIGHT,
+  MOOD_DELTA_WEIGHT,
   INTERVAL_SESSION_WEIGHT,
   OPEN_ENDED_TARGET_SEC,
   REPLAY_CHOICE_BLEND,
@@ -438,5 +439,41 @@ describe('pause penalty and recovered partial credit (Phase 10)', () => {
     expect(
       computeCredits(makeRecord({ recovered: true, servedBy: 'preset', presetId: 'p' })),
     ).toEqual([]);
+  });
+});
+
+describe('mood before/after (Phase 13)', () => {
+  const withMood = (rating: Rating, before?: number, after?: number) =>
+    rated(rating, {
+      moodBefore: before as SessionRecord['moodBefore'],
+      feedback: {
+        rating,
+        ratedAt: '2026-08-23T09:00:00.000Z',
+        ...(after !== undefined ? { moodAfter: after as NonNullable<SessionRecord['feedback']>['moodAfter'] } : {}),
+      },
+    });
+
+  it('records without moods (or with only one) score exactly as before', () => {
+    const base = scoreSession(rated(3));
+    expect(scoreSession(withMood(3))).toEqual(base);
+    expect(scoreSession(withMood(3, 2))).toEqual(base);
+    expect(scoreSession(withMood(3, undefined, 5))).toEqual(base);
+  });
+
+  it('nudges the value by the shift toward the state goal, symmetric and bounded', () => {
+    const base = scoreSession(rated(3)).value;
+    const lifted = scoreSession(withMood(3, 1, 5)).value;
+    const sank = scoreSession(withMood(3, 5, 1)).value;
+    const flat = scoreSession(withMood(3, 3, 3)).value;
+    expect(lifted - base).toBeCloseTo(MOOD_DELTA_WEIGHT, 12);
+    expect(base - sank).toBeCloseTo(MOOD_DELTA_WEIGHT, 12);
+    expect(flat).toBeCloseTo(base, 12);
+    // A one-step lift is a quarter of the full nudge.
+    expect(scoreSession(withMood(3, 2, 3)).value - base).toBeCloseTo(MOOD_DELTA_WEIGHT / 4, 12);
+  });
+
+  it('never outweighs a full rating step', () => {
+    // A 3 that lifted the mood all the way still scores below a plain 4.
+    expect(scoreSession(withMood(3, 1, 5)).value).toBeLessThan(scoreSession(rated(4)).value);
   });
 });

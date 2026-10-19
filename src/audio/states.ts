@@ -38,6 +38,24 @@ export interface StateDefinition {
   noDrivingWarning: boolean;
 }
 
+/**
+ * The one-tap "how do you feel right now?" scale per state (Phase 13), from
+ * 1 (far from the state) to 5 (there). Asked before a session and again
+ * with the rating; the shift between the two is a cleaner outcome than a
+ * rating alone — "it took me from scattered to sharp" vs "I was fine anyway".
+ */
+export const MOOD_AXES: Record<MentalState, readonly [low: string, high: string]> = {
+  focus: ['Scattered', 'Sharp'],
+  relax: ['Tense', 'At ease'],
+  sleep: ['Wired', 'Drowsy'],
+  energy: ['Flat', 'Charged'],
+  meditation: ['Restless', 'Settled'],
+  arousal: ['Distracted', 'Present'],
+  flow: ['Stuck', 'In the zone'],
+  calm: ['Anxious', 'Calm'],
+  creative: ['Blocked', 'Inspired'],
+};
+
 export function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }

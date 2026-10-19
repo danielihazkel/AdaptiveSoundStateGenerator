@@ -64,4 +64,19 @@ describe('FeedbackScreen', () => {
     renderScreen({ stateLabel: 'Relax' });
     expect(screen.getByDisplayValue('Relax session')).toBeInTheDocument();
   });
+
+  it('asks how you feel now only when given a mood state, and sends it with the rating', async () => {
+    const user = userEvent.setup();
+    const props = renderScreen({ moodState: 'focus' });
+    expect(screen.getByText('Scattered')).toBeInTheDocument();
+    expect(screen.getByText('Sharp')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^5 of 5/ }));
+    await user.click(screen.getByRole('button', { name: '3' }));
+    expect(props.onRate).toHaveBeenCalledWith({ rating: 3, moodAfter: 5 });
+  });
+
+  it('has no mood question without a mood state', () => {
+    renderScreen();
+    expect(screen.queryByText('How do you feel now?')).toBeNull();
+  });
 });

@@ -38,6 +38,10 @@ export const MIN_NOISE_SESSIONS = 3;
 export const GOOD_SESSION_SCORE = 0.5;
 /** Sessions carrying an HRV delta before the fact is shown (Phase 9). */
 export const MIN_HRV_SESSIONS = 3;
+/** Sessions answered on the mood scale both before and after (Phase 13). */
+export const MIN_MOOD_SESSIONS = 5;
+/** A variation needs this many paired sessions to be named as the best lift. */
+export const MIN_MOOD_ARM_SESSIONS = 2;
 
 export type SoundComponent =
   | 'binaural'
@@ -116,6 +120,16 @@ export interface StateInsights {
    * ones, scored identically; null until both groups have enough sessions.
    */
   flywheel: PersonalizationLift | null;
+  /**
+   * Phase 13: mean shift on the state's mood axis (after − before, in scale
+   * steps) over sessions answered both ways, and the variation with the
+   * largest positive mean shift; null below MIN_MOOD_SESSIONS.
+   */
+  moodShift: {
+    meanDelta: number;
+    n: number;
+    bestLift: { label: string; meanDelta: number; n: number } | null;
+  } | null;
 }
 
 interface Scored {
@@ -284,6 +298,7 @@ function computeStateInsights(
 
   return {
     state,
+    moodShift: moodShiftOf(state, records),
     sessionCount: scored.length,
     ratedCount: ratings.length,
     avgRating:
@@ -309,6 +324,26 @@ function computeStateInsights(
     completionRate: completionRate(records),
     bestFoundAfter: bestFoundAfter(records, bestArm?.id),
   };
+}
+
+function moodShiftOf(state: MentalState, records: SessionRecord[]): StateInsights['moodShift'] {
+  const paired = records.flatMap((r) =>
+    r.moodBefore !== undefined && r.feedback?.moodAfter !== undefined
+      ? [{ arm: r.servedArmId, delta: r.feedback.moodAfter - r.moodBefore }]
+      : [],
+  );
+  if (paired.length < MIN_MOOD_SESSIONS) return null;
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  let bestLift: { label: string; meanDelta: number; n: number } | null = null;
+  for (const spec of candidatesFor(state)) {
+    const deltas = paired.filter((p) => p.arm === spec.id).map((p) => p.delta);
+    if (deltas.length < MIN_MOOD_ARM_SESSIONS) continue;
+    const m = mean(deltas);
+    if (m > 0 && (!bestLift || m > bestLift.meanDelta)) {
+      bestLift = { label: spec.label, meanDelta: m, n: deltas.length };
+    }
+  }
+  return { meanDelta: mean(paired.map((p) => p.delta)), n: paired.length, bestLift };
 }
 
 /** Only states with enough sessions appear — PRD §10 "after several sessions". */

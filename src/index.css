@@ -817,6 +817,19 @@ input[type="checkbox"] {
   }
 }
 
+.mood-scale .preset-strip {
+  align-items: center;
+}
+
+.mood-anchor {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.mood-chip {
+  min-width: 2.25rem;
+}
+
 .shortcuts-help dl {
   display: grid;
   grid-template-columns: auto 1fr;

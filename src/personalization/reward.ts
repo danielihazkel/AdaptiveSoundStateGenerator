@@ -98,6 +98,15 @@ export const REPLAY_WEIGHT = 0.5;
 export const DISTRACTION_ADJUST: Record<Distraction, number> = { 1: 0.03, 2: 0, 3: -0.06 };
 export const USE_AGAIN_ADJUST = { yes: 0.05, no: -0.08 } as const;
 
+/**
+ * Mood shift (Phase 13): when the user answered the one-tap mood question
+ * both before and after, the move toward the state's goal nudges the value
+ * by up to ±MOOD_DELTA_WEIGHT (a full 1 → 5 swing). Smaller than one rating
+ * step (0.175), so it refines a rating rather than overriding it — a "3"
+ * that took someone from scattered to sharp edges above a "3" that didn't.
+ */
+export const MOOD_DELTA_WEIGHT = 0.1;
+
 /** Extra inputs for attribution that live outside the record itself. */
 export interface CreditContext {
   /** Arm behind a replayed session / saved preset (sourceArm.ts). */
@@ -150,6 +159,11 @@ export function scoreSession(record: SessionRecord): RewardResult {
   }
 
   if (record.sleepOnsetSec !== undefined) value += SLEEP_ONSET_ADJUST;
+
+  const moodAfter = record.feedback?.moodAfter;
+  if (record.moodBefore !== undefined && moodAfter !== undefined) {
+    value += (MOOD_DELTA_WEIGHT * (moodAfter - record.moodBefore)) / 4;
+  }
 
   value += Math.max(
     VOLUME_PENALTY_FLOOR,

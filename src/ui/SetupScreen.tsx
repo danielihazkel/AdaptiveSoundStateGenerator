@@ -18,6 +18,7 @@ import { programMinDurationSec, type Program } from '../programs/types';
 import {
   MAX_WAKE_RISE_MINUTES,
   MIN_WAKE_RISE_MINUTES,
+  type MoodLevel,
   type PersonalizationMode,
   type Preset,
   type SessionRecord,
@@ -29,6 +30,7 @@ import { ExportRow } from './ExportRow';
 import { PresetStrip } from './PresetStrip';
 import { DurationPicker } from './DurationPicker';
 import { HeadphoneHint, NoDrivingWarning } from './SafetyNotices';
+import { MoodScale } from './MoodScale';
 import { ShareButton } from './ShareButton';
 import { StatePicker } from './StatePicker';
 
@@ -92,6 +94,9 @@ export function SetupScreen(props: {
   onToggleMono: (mono: boolean) => void;
   onToggleChime: (chime: boolean) => void;
   onOpenSettings: () => void;
+  /** Optional "how do you feel right now?" on the state's axis (Phase 13). */
+  moodBefore: MoodLevel | undefined;
+  onMoodBeforeChange: (mood: MoodLevel | undefined) => void;
   /** Most recent session, for one-tap replay; null with no history. */
   lastSession: SessionRecord | null;
   onPlayLast: () => void;
@@ -482,6 +487,13 @@ export function SetupScreen(props: {
         </label>
       )}
       {stateDef.noDrivingWarning && <NoDrivingWarning />}
+
+      <MoodScale
+        state={props.state}
+        question="Right now I feel"
+        value={props.moodBefore}
+        onChange={props.onMoodBeforeChange}
+      />
 
       <div className="transport begin-row">
         <button

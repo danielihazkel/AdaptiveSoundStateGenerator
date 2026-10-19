@@ -22,7 +22,7 @@ import {
   setPresetFavorite,
 } from './storage/storage';
 import type { SharePayload } from './share/shareLink';
-import { DEFAULT_WAKE_UP, modeFor, type Theme } from './storage/types';
+import { DEFAULT_WAKE_UP, modeFor, type MoodLevel, type Theme } from './storage/types';
 import { nightstandFor } from './session/sessionOptions';
 import { BiometricsPanel } from './ui/BiometricsPanel';
 import { CoachInput } from './ui/CoachInput';
@@ -217,6 +217,8 @@ export function App() {
   // sessions already predates it and just gets it marked as seen. Settings
   // can ask for it again.
   const [tourReplay, setTourReplay] = useState(false);
+  /** Phase 13: the optional "how do you feel right now?" answer for the next Begin. */
+  const [moodBefore, setMoodBefore] = useState<MoodLevel | undefined>(undefined);
   const showTour =
     screen === 'setup' &&
     (tourReplay || (data.sessionsLoaded && shouldShowTour(settings, data.historyAvailable)));
@@ -494,7 +496,13 @@ export function App() {
             })
           }
           onShowInsights={() => navigate('insights')}
-          onBegin={() => void session.begin()}
+          moodBefore={moodBefore}
+          onMoodBeforeChange={setMoodBefore}
+          onBegin={() => {
+            // The answer belongs to this one session.
+            void session.begin({ moodBefore });
+            setMoodBefore(undefined);
+          }}
           exporter={exporter}
           onDownload={handleDownload}
         />
@@ -633,6 +641,11 @@ export function App() {
         <FeedbackScreen
           stateLabel={STATES[lastSession.state].label}
           completed={lastSession.completed}
+          moodState={
+            lastSession.moodBefore !== undefined && lastSession.state !== 'sleep'
+              ? lastSession.state
+              : undefined
+          }
           onRate={feedback.rate}
           onSkip={feedback.skip}
           onSavePreset={(name) => session.storePreset(name, lastSession)}

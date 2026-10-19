@@ -93,6 +93,8 @@ export interface Preset {
 export type Rating = 1 | 2 | 3 | 4 | 5;
 /** PRD §9 "Distraction" scale: 1 = not at all, 2 = a little, 3 = very. */
 export type Distraction = 1 | 2 | 3;
+/** Phase 13 mood scale on the state's own axis (MOOD_AXES): 1 = far from it, 5 = there. */
+export type MoodLevel = 1 | 2 | 3 | 4 | 5;
 
 /** What the feedback screen collects: the rating, plus two optional PRD §9 questions. */
 export interface FeedbackInput {
@@ -100,6 +102,8 @@ export interface FeedbackInput {
   distraction?: Distraction;
   /** "Would you use this again?" */
   useAgain?: boolean;
+  /** How the user feels now, on the state's mood axis (Phase 13). */
+  moodAfter?: MoodLevel;
 }
 
 /**
@@ -158,7 +162,11 @@ export interface SessionRecord {
     /** Optional PRD §9 extras; absent on records rated before they existed. */
     distraction?: Distraction;
     useAgain?: boolean;
+    /** Phase 13: how the user felt afterwards, on the state's mood axis. */
+    moodAfter?: MoodLevel;
   };
+  /** Phase 13: how the user felt going in, on the state's mood axis (optional, one tap). */
+  moodBefore?: MoodLevel;
   /** Bandit candidate recipe that produced the served profile (absent for presets). */
   servedArmId?: string;
   /** How the starting profile was chosen. Absent on pre-Phase-2 records. */
@@ -226,6 +234,7 @@ export interface InProgressSession {
   openEnded?: true;
   /** Sleep onset already detected at this elapsed second (Phase 9). */
   sleepOnsetSec?: number;
+  moodBefore?: MoodLevel;
   /** Listening time at the last checkpoint. */
   elapsedSec: number;
   updatedAt: string; // ISO

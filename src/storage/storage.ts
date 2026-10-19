@@ -556,6 +556,7 @@ export function attachFeedback(sessionId: string, input: Rating | FeedbackInput)
       ratedAt: new Date().toISOString(),
       ...(feedback.distraction !== undefined ? { distraction: feedback.distraction } : {}),
       ...(feedback.useAgain !== undefined ? { useAgain: feedback.useAgain } : {}),
+      ...(feedback.moodAfter !== undefined ? { moodAfter: feedback.moodAfter } : {}),
     },
   }));
 }
