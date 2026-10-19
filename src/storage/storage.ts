@@ -1,5 +1,6 @@
 import { normalizeProfile } from '../audio/types';
 import { normalizeProgram, type Program } from '../programs/types';
+import { normalizeSettings } from './normalizeSettings';
 import { movePreset } from './presetOrder';
 import {
   countSessions,
@@ -266,7 +267,7 @@ export function loadSettings(): Settings {
   const raw = readRaw(SETTINGS_KEY);
   const payload = parse(raw);
   const status = schemaStatus(raw, payload);
-  if (status === 'current') return { ...defaultSettings, ...(payload as Partial<Settings>) };
+  if (status === 'current') return normalizeSettings(payload);
   if (status === 'newer') {
     quarantine(SETTINGS_KEY, raw);
     reportFailure(SETTINGS_KEY, 'incompatible');

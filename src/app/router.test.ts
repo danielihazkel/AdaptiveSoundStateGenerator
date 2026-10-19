@@ -36,7 +36,16 @@ describe('router', () => {
   });
 
   it('covers every screen exactly once between navigable and locked or setup', () => {
-    const all: Screen[] = ['setup', 'session', 'feedback', 'insights', 'history', 'programEditor', 'lab'];
+    const all: Screen[] = [
+      'setup',
+      'session',
+      'feedback',
+      'insights',
+      'history',
+      'programEditor',
+      'lab',
+      'settings',
+    ];
     for (const screen of all) {
       const navigable = NAVIGABLE.has(screen);
       const locked = LOCKED.has(screen);

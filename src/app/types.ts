@@ -5,4 +5,5 @@ export type Screen =
   | 'insights'
   | 'history'
   | 'programEditor'
-  | 'lab';
+  | 'lab'
+  | 'settings';

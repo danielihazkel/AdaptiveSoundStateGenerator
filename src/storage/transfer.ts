@@ -13,6 +13,7 @@ import {
   savePersonalization,
   saveSettings,
 } from './storage';
+import { normalizeSettings } from './normalizeSettings';
 import {
   SCHEMA_VERSION,
   type PersonalizationState,
@@ -138,13 +139,13 @@ export function importBundle(bundle: ExportBundle): ImportSummary {
   overwriteSessions(merged);
 
   const localSettings = loadSettings();
+  // The bundle's settings are type-checked field by field before they land.
+  const incoming = normalizeSettings({ ...localSettings, ...bundle.settings });
   saveSettings({
-    ...localSettings,
-    ...bundle.settings,
+    ...incoming,
     schemaVersion: SCHEMA_VERSION,
     disclaimerAcknowledgedAt:
-      localSettings.disclaimerAcknowledgedAt ??
-      bundle.settings.disclaimerAcknowledgedAt,
+      localSettings.disclaimerAcknowledgedAt ?? incoming.disclaimerAcknowledgedAt,
   });
 
   savePersonalization(rebuildFromSessions(loadSessions(), loadPresets()));

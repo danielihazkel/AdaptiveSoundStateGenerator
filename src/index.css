@@ -961,6 +961,17 @@ input[type="checkbox"] {
   padding: 0.25rem 0.5rem;
 }
 
+.link-button.inline {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+}
+
+.heart-rate-status {
+  text-align: center;
+}
+
 .link-button:hover {
   text-decoration: underline;
 }

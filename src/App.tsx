@@ -69,6 +69,9 @@ const LabScreen = lazy(() => import('./ui/lab/LabScreen').then((m) => ({ default
 const ProgramEditor = lazy(() =>
   import('./ui/ProgramEditor').then((m) => ({ default: m.ProgramEditor })),
 );
+const SettingsScreen = lazy(() =>
+  import('./ui/SettingsScreen').then((m) => ({ default: m.SettingsScreen })),
+);
 
 const SCREEN_LOADING = (
   <p className="hint" role="status">
@@ -78,7 +81,7 @@ const SCREEN_LOADING = (
 
 const STORAGE_NOTICES = {
   write:
-    "Couldn't save to this device's storage (it may be full). Your session history may not be recorded — export your data from “Your data” below to keep it safe.",
+    "Couldn't save to this device's storage (it may be full). Your session history may not be recorded — export your data from Settings → “Your data” to keep it safe.",
   incompatible:
     'Some saved data was written by a newer version of Resonance and has been kept aside untouched. Update the app to see it again.',
   corrupt:
@@ -211,9 +214,12 @@ export function App() {
   });
 
   // First-run tour: new users see it once after the disclaimer; anyone with
-  // sessions already predates it and just gets it marked as seen.
+  // sessions already predates it and just gets it marked as seen. Settings
+  // can ask for it again.
+  const [tourReplay, setTourReplay] = useState(false);
   const showTour =
-    screen === 'setup' && data.sessionsLoaded && shouldShowTour(settings, data.historyAvailable);
+    screen === 'setup' &&
+    (tourReplay || (data.sessionsLoaded && shouldShowTour(settings, data.historyAvailable)));
   useEffect(() => {
     if (data.sessionsLoaded && shouldAutoCompleteTour(settings, data.historyAvailable)) {
       updateSettings({ onboardingCompletedAt: new Date().toISOString() });
@@ -302,7 +308,10 @@ export function App() {
 
       {showTour && (
         <OnboardingTour
-          onDone={() => updateSettings({ onboardingCompletedAt: new Date().toISOString() })}
+          onDone={() => {
+            setTourReplay(false);
+            updateSettings({ onboardingCompletedAt: new Date().toISOString() });
+          }}
         />
       )}
 
@@ -427,7 +436,6 @@ export function App() {
           selectedProgramId={selection.selectedProgramId}
           monoMode={settings.monoMode}
           chimeEnabled={settings.chimeEnabled}
-          adaptationEnabled={settings.adaptationEnabled !== false}
           starting={session.starting}
           onStateChange={selection.selectState}
           onIntensityChange={selection.setIntensity}
@@ -466,9 +474,7 @@ export function App() {
             session.setMonoMode(mono);
           }}
           onToggleChime={(chime) => updateSettings({ chimeEnabled: chime })}
-          onToggleAdaptation={(enabled) => updateSettings({ adaptationEnabled: enabled })}
-          theme={theme}
-          onThemeChange={(next) => updateSettings({ theme: next })}
+          onOpenSettings={() => navigate('settings')}
           lastSession={data.lastSession}
           onPlayLast={playLast}
           personalizationActive={data.activeStates.has(selection.mentalState)}
@@ -494,27 +500,55 @@ export function App() {
         />
       )}
 
-      {screen === 'setup' && biometrics.possible && (
-        <BiometricsPanel
-          status={biometrics.status}
-          consented={Boolean(settings.biometricsConsentAt)}
-          simulated={biometrics.simulated}
-          onConsent={(consented) =>
-            updateSettings({
-              biometricsConsentAt: consented ? new Date().toISOString() : null,
-            })
-          }
-          onConnect={() => void biometrics.connect()}
-          onDisconnect={biometrics.disconnect}
-          sleepOnsetFade={settings.sleepOnsetFade === true}
-          onSleepOnsetFadeChange={(on) => updateSettings({ sleepOnsetFade: on })}
-        />
+      {screen === 'setup' && biometrics.possible && settings.biometricsConsentAt && (
+        <p className="hint heart-rate-status">
+          ❤ Heart-rate sensor:{' '}
+          {biometrics.status === 'connected' ? (
+            'connected'
+          ) : (
+            <button type="button" className="link-button inline" onClick={() => navigate('settings')}>
+              not connected — connect in Settings
+            </button>
+          )}
+        </p>
       )}
-
-      {screen === 'setup' && <DataPanel onImported={data.reloadAll} onImportShare={importShare} />}
 
       <ErrorBoundary key={screen}>
       <Suspense fallback={SCREEN_LOADING}>
+      {screen === 'settings' && (
+        <SettingsScreen
+          settings={settings}
+          onChange={(change) => {
+            updateSettings(change);
+            if (change.monoMode !== undefined) session.setMonoMode(change.monoMode);
+          }}
+          onReplayTour={() => {
+            setTourReplay(true);
+            navigate('setup');
+          }}
+          onBack={() => navigate('setup')}
+          biometrics={
+            biometrics.possible ? (
+              <BiometricsPanel
+                status={biometrics.status}
+                consented={Boolean(settings.biometricsConsentAt)}
+                simulated={biometrics.simulated}
+                onConsent={(consented) =>
+                  updateSettings({
+                    biometricsConsentAt: consented ? new Date().toISOString() : null,
+                  })
+                }
+                onConnect={() => void biometrics.connect()}
+                onDisconnect={biometrics.disconnect}
+                sleepOnsetFade={settings.sleepOnsetFade === true}
+                onSleepOnsetFadeChange={(on) => updateSettings({ sleepOnsetFade: on })}
+              />
+            ) : undefined
+          }
+          data={<DataPanel onImported={data.reloadAll} onImportShare={importShare} />}
+        />
+      )}
+
       {screen === 'insights' && (
         <InsightsScreen insights={data.insights} onBack={() => navigate('setup')} />
       )}

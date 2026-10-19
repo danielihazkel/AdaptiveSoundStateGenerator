@@ -18,16 +18,13 @@ import { programMinDurationSec, type Program } from '../programs/types';
 import {
   MAX_WAKE_RISE_MINUTES,
   MIN_WAKE_RISE_MINUTES,
-  THEMES,
   type PersonalizationMode,
   type Preset,
   type SessionRecord,
   type Settings,
-  type Theme,
 } from '../storage/types';
 import { formatDuration } from './format';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
-import { useRadioGroup } from './useRadioGroup';
 import { ExportRow } from './ExportRow';
 import { PresetStrip } from './PresetStrip';
 import { DurationPicker } from './DurationPicker';
@@ -65,7 +62,6 @@ export function SetupScreen(props: {
   selectedProgramId: string | undefined;
   monoMode: boolean;
   chimeEnabled: boolean;
-  adaptationEnabled: boolean;
   starting: boolean;
   /** True once this state is past the bandit's cold start (PRD §9). */
   personalizationActive: boolean;
@@ -95,9 +91,7 @@ export function SetupScreen(props: {
   onOpenLab: () => void;
   onToggleMono: (mono: boolean) => void;
   onToggleChime: (chime: boolean) => void;
-  onToggleAdaptation: (enabled: boolean) => void;
-  theme: Theme;
-  onThemeChange: (theme: Theme) => void;
+  onOpenSettings: () => void;
   /** Most recent session, for one-tap replay; null with no history. */
   lastSession: SessionRecord | null;
   onPlayLast: () => void;
@@ -130,12 +124,6 @@ export function SetupScreen(props: {
   const exportFormat = props.exporter.options.format.toUpperCase();
   const exportCapped = !openEnded && sessionMinutes * 60 > exportMaxSec;
   const exportMinutes = exportCapped ? exportMaxSec / 60 : sessionMinutes;
-  const themeGroup = useRadioGroup<Theme>({
-    items: THEMES,
-    value: props.theme,
-    onChange: props.onThemeChange,
-    getKey: (t) => t,
-  });
   const last = props.lastSession;
   // Enter begins — only from the page itself, never from a focused control.
   useKeyboardShortcuts({ Enter: props.starting ? undefined : props.onBegin });
@@ -482,34 +470,7 @@ export function SetupScreen(props: {
         </label>
       )}
 
-      <label className="mono-toggle adaptation-toggle">
-        <input
-          type="checkbox"
-          checked={props.adaptationEnabled}
-          onChange={(e) => props.onToggleAdaptation(e.target.checked)}
-        />
-        Adapt mid-session — occasionally check in and adjust the sound
-      </label>
-
       <HeadphoneHint monoMode={props.monoMode} onToggleMono={props.onToggleMono} />
-      <div className="option-row theme-row">
-        <span className="hint" id="theme-label">
-          Appearance
-        </span>
-        <div className="preset-strip" {...themeGroup.groupProps} aria-labelledby="theme-label">
-          {THEMES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`chip${props.theme === t ? ' selected' : ''}`}
-              {...themeGroup.itemProps(t)}
-              onClick={() => props.onThemeChange(t)}
-            >
-              {THEME_LABELS[t]}
-            </button>
-          ))}
-        </div>
-      </div>
       {stateDef.end.chime === 'optional' && (
         <label className="mono-toggle chime-toggle">
           <input
@@ -579,11 +540,13 @@ export function SetupScreen(props: {
       <button type="button" className="link-button" onClick={props.onOpenLab}>
         Sound lab →
       </button>
+
+      <button type="button" className="link-button" onClick={props.onOpenSettings}>
+        ⚙ Settings →
+      </button>
     </>
   );
 }
-
-const THEME_LABELS: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' };
 
 /** "today" / "yesterday" / "3 days ago" / a date. */
 function relativeDay(iso: string, now = new Date()): string {
