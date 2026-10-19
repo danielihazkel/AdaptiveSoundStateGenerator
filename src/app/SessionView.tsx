@@ -24,6 +24,7 @@ export function SessionView(props: {
     onRespond: (response: CheckpointResponse) => void;
     onDismiss: () => void;
   };
+  nightstand?: boolean;
 }) {
   const snapshot = useSession(props.controller);
   const stateDef = STATES[props.mentalState];
@@ -54,6 +55,7 @@ export function SessionView(props: {
       onSnooze={() => void props.controller.snooze()}
       onSavePreset={props.onSavePreset}
       microPrompt={props.microPrompt}
+      nightstand={props.nightstand}
     />
   );
 }

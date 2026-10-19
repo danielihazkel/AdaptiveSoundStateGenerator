@@ -774,6 +774,49 @@ input[type="checkbox"] {
   justify-content: center;
 }
 
+.nightstand-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: #000;
+  color: #8a8f9c;
+  cursor: pointer;
+  animation: nightstand-in 3s ease-out;
+}
+
+.nightstand-time {
+  font-size: 2.5rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.25;
+}
+
+.nightstand-remaining {
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.18;
+}
+
+@keyframes nightstand-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nightstand-overlay {
+    animation: none;
+  }
+}
+
 .session-volume {
   max-width: 22rem;
   margin: 1rem auto 0;

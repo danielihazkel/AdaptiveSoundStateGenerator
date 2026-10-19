@@ -23,6 +23,7 @@ import {
 } from './storage/storage';
 import type { SharePayload } from './share/shareLink';
 import { DEFAULT_WAKE_UP, modeFor, type Theme } from './storage/types';
+import { nightstandFor } from './session/sessionOptions';
 import { BiometricsPanel } from './ui/BiometricsPanel';
 import { CoachInput } from './ui/CoachInput';
 import { DataPanel } from './ui/DataPanel';
@@ -287,6 +288,7 @@ export function App() {
 
   const lastSession = session.getLastSession();
   const controller = session.getController();
+  const sessionState = adaptation.getMeta()?.state ?? selection.mentalState;
 
   return (
     <main className="app">
@@ -574,7 +576,8 @@ export function App() {
       {screen === 'session' && controller && session.liveProfile && (
         <SessionView
           controller={controller}
-          mentalState={adaptation.getMeta()?.state ?? selection.mentalState}
+          mentalState={sessionState}
+          nightstand={nightstandFor(sessionState, settings.nightstand)}
           program={session.getSessionProgram() ?? undefined}
           breathing={session.getSessionBreathing() ?? undefined}
           profile={session.liveProfile}

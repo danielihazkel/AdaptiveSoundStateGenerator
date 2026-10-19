@@ -12,6 +12,7 @@ import { BreathingPacer } from './BreathingPacer';
 import { pacerRateFor } from './breathing';
 import { formatClock } from './format';
 import { MicroPrompt } from './MicroPrompt';
+import { NightstandOverlay } from './NightstandOverlay';
 import { PresetSaveRow } from './PresetSaveRow';
 import { Slider } from './Slider';
 
@@ -38,6 +39,8 @@ export function SessionScreen(props: {
     onRespond: (response: CheckpointResponse) => void;
     onDismiss: () => void;
   };
+  /** Dark nightstand screen after a quiet spell (sleep, by default). */
+  nightstand?: boolean;
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { phase, remainingSec, elapsedSec, resumeFailed, openEnded } = props.snapshot;
@@ -61,8 +64,21 @@ export function SessionScreen(props: {
   const breathPattern =
     props.breathing ?? (pacerRate !== null ? pulseDerivedPattern(pacerRate) : null);
 
+  const live = phase === 'running' || phase === 'paused' || phase === 'ending';
+  // Lift the cover whenever the session needs the user.
+  const needsAttention =
+    (phase === 'running' && props.microPrompt !== undefined) ||
+    phase === 'alarm' ||
+    phase === 'interrupted' ||
+    resumeFailed === true;
+
   return (
     <>
+      <NightstandOverlay
+        active={props.nightstand === true && live}
+        hold={needsAttention}
+        clock={formatClock(openEnded ? elapsedSec : remainingSec)}
+      />
       <div className="session-header">
         <span className="session-state">
           {props.stateDef.emoji} {props.stateDef.label}

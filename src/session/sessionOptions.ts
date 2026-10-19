@@ -27,6 +27,12 @@ export function breathingFor(
   return setting;
 }
 
+/** Whether a session in `state` should show the dark nightstand screen. */
+export function nightstandFor(state: MentalState, setting: Settings['nightstand']): boolean {
+  const mode = setting ?? 'sleep';
+  return mode === 'always' || (mode === 'sleep' && state === 'sleep');
+}
+
 /**
  * Wake-up rise for a plain session, or null. The rise never exceeds half
  * the session: a 10-minute nap with a 10-minute rise would be all rise.

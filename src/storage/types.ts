@@ -42,7 +42,15 @@ export interface Settings {
   onboardingCompletedAt?: string | null;
   /** Download format / bitrate; absent = MP3 192 kbps. */
   export?: ExportOptions;
+  /**
+   * Black, near-dark session screen (the wake lock keeps the display on, so
+   * a lit phone would sit on the nightstand all night). Absent = 'sleep'.
+   */
+  nightstand?: NightstandMode;
 }
+
+export type NightstandMode = 'sleep' | 'always' | 'never';
+export const NIGHTSTAND_MODES: readonly NightstandMode[] = ['sleep', 'always', 'never'];
 
 export type Theme = 'system' | 'light' | 'dark';
 export const THEMES: readonly Theme[] = ['system', 'light', 'dark'];

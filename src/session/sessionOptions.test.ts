@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { breathingFor, wakeUpFor } from './sessionOptions';
+import { breathingFor, nightstandFor, wakeUpFor } from './sessionOptions';
+
+describe('nightstandFor', () => {
+  it('defaults to sleep sessions only', () => {
+    expect(nightstandFor('sleep', undefined)).toBe(true);
+    expect(nightstandFor('focus', undefined)).toBe(false);
+    expect(nightstandFor('sleep', 'sleep')).toBe(true);
+  });
+
+  it('honours always / never', () => {
+    expect(nightstandFor('focus', 'always')).toBe(true);
+    expect(nightstandFor('sleep', 'never')).toBe(false);
+  });
+});
 
 describe('breathingFor', () => {
   it('only applies to breathing states and explicit patterns', () => {
