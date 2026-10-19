@@ -7,6 +7,8 @@ export default defineConfig({
   test: {
     // Node by default; React suites opt into jsdom per file.
     setupFiles: ["src/test/setup.ts"],
+    // Browser specs in e2e/ belong to Playwright.
+    include: ['src/**/*.test.{ts,tsx}'],
   },
   plugins: [
     react(),
