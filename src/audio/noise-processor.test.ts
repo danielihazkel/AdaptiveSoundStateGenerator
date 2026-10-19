@@ -1,54 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { loadWorkletProcessor, renderSeconds, rms } from '../test/audioQa';
 import { NOISE_PROCESSOR_NAME, processorSource } from './noise-processor';
 
-const SAMPLE_RATE = 44100;
-
-interface ProcessorLike {
-  port: { onmessage: ((e: { data: unknown }) => void) | null };
-  process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean;
-}
-
-/** Same harness as ambience-processor.test.ts: the worklet source under Node. */
-function loadProcessor(): new () => ProcessorLike {
-  let registered: unknown;
-  class AudioWorkletProcessor {
-    port = { onmessage: null as ((e: { data: unknown }) => void) | null };
-  }
-  const factory = new Function(
-    'sampleRate',
-    'AudioWorkletProcessor',
-    'registerProcessor',
-    processorSource,
-  );
-  factory(SAMPLE_RATE, AudioWorkletProcessor, (name: string, cls: unknown) => {
-    expect(name).toBe(NOISE_PROCESSOR_NAME);
-    registered = cls;
-  });
-  return registered as new () => ProcessorLike;
-}
-
-function renderSeconds(proc: ProcessorLike, seconds: number): [Float32Array, Float32Array] {
-  const frames = Math.floor((seconds * SAMPLE_RATE) / 128);
-  const out: [Float32Array, Float32Array] = [
-    new Float32Array(frames * 128),
-    new Float32Array(frames * 128),
-  ];
-  const block = [new Float32Array(128), new Float32Array(128)];
-  for (let f = 0; f < frames; f++) {
-    block[0].fill(0);
-    block[1].fill(0);
-    if (!proc.process([], [block])) throw new Error('processor asked to stop');
-    out[0].set(block[0], f * 128);
-    out[1].set(block[1], f * 128);
-  }
-  return out;
-}
-
-function rms(data: Float32Array): number {
-  let sum = 0;
-  for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-  return Math.sqrt(sum / data.length);
-}
+const loadProcessor = () => loadWorkletProcessor(processorSource, NOISE_PROCESSOR_NAME);
 
 /** Lag-1 autocorrelation: ~0 for white, → 1 for brown. A colour fingerprint. */
 function lag1(data: Float32Array): number {

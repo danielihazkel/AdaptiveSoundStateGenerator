@@ -5,53 +5,15 @@ import {
   processorSource,
 } from './ambience-processor';
 import { AMBIENCE_TYPES } from './types';
+import {
+  loadWorkletProcessor,
+  QA_SAMPLE_RATE as SAMPLE_RATE,
+  renderSeconds,
+  type ProcessorLike,
+} from '../test/audioQa';
 
-const SAMPLE_RATE = 44100;
-
-interface ProcessorLike {
-  port: { onmessage: ((e: { data: unknown }) => void) | null };
-  process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean;
-}
-
-/**
- * Evaluates the worklet source under Node with the AudioWorklet globals
- * stubbed, returning the registered processor class. The generators are plain
- * math, so this exercises the real code path the browser runs.
- */
-function loadProcessor(): new () => ProcessorLike {
-  let registered: unknown;
-  class AudioWorkletProcessor {
-    port = { onmessage: null as ((e: { data: unknown }) => void) | null };
-  }
-  const factory = new Function(
-    'sampleRate',
-    'AudioWorkletProcessor',
-    'registerProcessor',
-    processorSource,
-  );
-  factory(SAMPLE_RATE, AudioWorkletProcessor, (name: string, cls: unknown) => {
-    expect(name).toBe(AMBIENCE_PROCESSOR_NAME);
-    registered = cls;
-  });
-  return registered as new () => ProcessorLike;
-}
-
-function renderSeconds(proc: ProcessorLike, seconds: number): [Float32Array, Float32Array] {
-  const frames = Math.floor((seconds * SAMPLE_RATE) / 128);
-  const out: [Float32Array, Float32Array] = [
-    new Float32Array(frames * 128),
-    new Float32Array(frames * 128),
-  ];
-  const block = [new Float32Array(128), new Float32Array(128)];
-  for (let f = 0; f < frames; f++) {
-    block[0].fill(0);
-    block[1].fill(0);
-    if (!proc.process([], [block])) throw new Error('processor asked to stop');
-    out[0].set(block[0], f * 128);
-    out[1].set(block[1], f * 128);
-  }
-  return out;
-}
+/** The real worklet source under Node (see src/test/audioQa.ts). */
+const loadProcessor = () => loadWorkletProcessor(processorSource, AMBIENCE_PROCESSOR_NAME);
 
 function stats(data: Float32Array): { peak: number; rms: number; finite: boolean } {
   let peak = 0;
