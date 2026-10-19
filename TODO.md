@@ -152,6 +152,17 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [ ] Re-run `npm run calibrate:loudness` whenever the arm menu changes (`candidates.test.ts` fails until the table covers every arm)
 - [ ] Verify by ear: in the lab, A/B a state's default against binaural-soft / ambience-up — similar loudness, different character; the mood chips show up in the History record's data export
 
+## Phase 14 — New features + platform polish
+
+- [x] Routines: 2–5 states back to back, each leg a normal served session handing over without a fade (`SessionController.continueWith`, `SessionConfig.handOff`); templates, storage, backup, share links, setup panel, `#routine` editor, per-leg ratings — `src/routines/`, `useSessionOrchestrator.beginRoutine`, `src/ui/RoutinesPanel.tsx`, `src/ui/RoutineEditor.tsx`
+- [x] Session visualizer: analyser-driven glow (level + low-band warmth), ~30 fps, static under reduced motion, hidden with nightstand / the breathing pacer, `Settings.visualizer` — `src/ui/SessionVisualizer.tsx`
+- [x] "This week" reflection card on History — `weeklyReflection` in `src/personalization/history.ts`
+- [x] Lock-screen artwork drawn per state (canvas, cached) — `src/platform/artwork.ts`
+- [x] Export metadata: ID3v2.3 (title, artist, album, genre, comment, cover) for MP3, LIST/INFO for WAV — `src/export/id3.ts`, `src/export/tagExport.ts`
+- [x] Ambience recordings keep playing offline: runtime cache + Cache API probe fallback — `vite.config.ts`, `src/audio/ambienceAssets.ts`
+- [ ] Out of scope for now: MP3 export of a whole routine; mood check-in on routines; routine legs that run a timed program
+- [ ] Verify by ear / on a phone: a real routine's hand-offs sound like one continuous piece; Android lock screen shows the artwork; an exported MP3 shows its title + cover in the phone's player; with a recording in `public/ambience/`, it still plays after going offline
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs
