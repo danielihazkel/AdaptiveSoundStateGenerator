@@ -1320,6 +1320,21 @@ input[type="checkbox"] {
   margin-top: 0.25rem;
 }
 
+/* "Why this sound" (Phase 15) — quiet, under the phase line. */
+.why-sound {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.why-sound .link-button {
+  color: var(--text-muted);
+}
+
+.why-sound .hint {
+  margin: 0.25rem auto 0;
+  max-width: 28rem;
+}
+
 /* --- Sound lab ------------------------------------------------------------ */
 
 .lab-screen .state-grid {

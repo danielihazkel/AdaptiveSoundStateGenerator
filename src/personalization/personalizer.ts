@@ -24,6 +24,7 @@ import {
   PRIOR_ARM_ID,
 } from './candidates';
 import { contextOf, type ServeContext } from './context';
+import { explainServed, type ExplainInput, type SoundExplanation } from './explain';
 import { ratingWindowExpired } from './morningPrompt';
 import { computeCredits, hasBanditSignal } from './reward';
 import { makeSourceArmResolver } from './sourceArm';
@@ -146,4 +147,9 @@ export function resolvePendingOutcomes(now: Date = new Date()): void {
       resolveOutcome(record.id);
     }
   }
+}
+
+/** "Why this sound" for the running session (explain.ts), read against the stored posterior. */
+export function describeServedSound(input: ExplainInput): SoundExplanation | null {
+  return explainServed(input, loadPersonalization(CANDIDATE_SET_VERSION));
 }

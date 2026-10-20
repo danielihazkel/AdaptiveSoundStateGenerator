@@ -4,6 +4,7 @@ import { pulseDerivedPattern, type BreathPattern } from '../audio/breathing';
 import type { StateDefinition } from '../audio/states';
 import { MAX_MASTER_VOLUME, VOLUME_KEY_STEP } from '../audio/mixPolicy';
 import { cloneProfile, type SoundProfile } from '../audio/types';
+import type { SoundExplanation } from '../personalization/explain';
 import { evaluateProgram, segmentAt } from '../programs/evaluator';
 import type { Program } from '../programs/types';
 import type { RoutineRef } from '../routines/types';
@@ -18,6 +19,7 @@ import { SessionVisualizer } from './SessionVisualizer';
 import { PresetSaveRow } from './PresetSaveRow';
 import { Slider } from './Slider';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { WhySound } from './WhySound';
 
 export function SessionScreen(props: {
   stateDef: StateDefinition;
@@ -47,6 +49,8 @@ export function SessionScreen(props: {
   /** Visualizer source (AudioEngine.attachAnalyser); absent = no visualizer. */
   getAnalyser?: () => AnalyserNode | null;
   routine?: RoutineRef;
+  /** "Why this sound" (Phase 15); absent = hidden. */
+  explanation?: SoundExplanation;
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { phase, remainingSec, elapsedSec, resumeFailed, openEnded } = props.snapshot;
@@ -129,6 +133,7 @@ export function SessionScreen(props: {
               } in ${formatClock(Math.ceil(programPhase.nextIn))}`}
           </p>
         )}
+        {props.explanation && <WhySound explanation={props.explanation} />}
       </div>
 
       {/* One moving shape at a time: the pacer wins when it is shown, and the

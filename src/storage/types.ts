@@ -50,6 +50,8 @@ export interface Settings {
   nightstand?: NightstandMode;
   /** Soft glow that follows the sound on the session screen; absent = on. */
   visualizer?: boolean;
+  /** Phase 15: "why this sound" line on the session screen; absent = on. */
+  explainSound?: boolean;
 }
 
 export type NightstandMode = 'sleep' | 'always' | 'never';

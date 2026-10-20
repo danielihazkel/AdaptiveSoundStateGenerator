@@ -176,7 +176,7 @@ export function contextualPosterior(
   };
 }
 
-function contextStatsFor(
+export function contextStatsFor(
   state: PersonalizationState,
   mental: MentalState,
   ctx: ServeContext | undefined,

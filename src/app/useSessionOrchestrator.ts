@@ -6,6 +6,7 @@ import { AudioEngine } from '../audio/engine';
 import { STATES, type MentalState } from '../audio/states';
 import { cloneProfile, normalizeProfile, type SoundProfile } from '../audio/types';
 import { timeBucketOf, type ServeContext } from '../personalization/context';
+import type { SessionSoundKind } from '../personalization/explain';
 import { chooseProfile, type ServedProfile } from '../personalization/personalizer';
 import { playSilentKeepAlive } from '../platform/silentAudio';
 import { acquireSessionLock, type LockRelease } from '../platform/tabGuard';
@@ -99,6 +100,8 @@ export function useSessionOrchestrator(deps: {
   const lastSessionRef = useRef<FinishedSession | null>(null);
   /** What the personalizer served for the running session (null for presets). */
   const servedRef = useRef<ServedProfile | null>(null);
+  /** Where the running session's sound came from ("why this sound", Phase 15). */
+  const soundKindRef = useRef<SessionSoundKind>('served');
   /** Program driving the currently running session, if any. */
   const sessionProgramRef = useRef<Program | null>(null);
   /** Guided breathing pattern of the running session, if any (drives the pacer). */
@@ -354,14 +357,18 @@ export function useSessionOrchestrator(deps: {
         // interval program on a served sound credits that arm.
         profile = normalizeProfile(program.baseProfile);
         servedRef.current = servedForProgram;
+        soundKindRef.current = servedForProgram ? 'served' : 'program';
       } else if (preset) {
         profile = cloneProfile(preset.profile);
         servedRef.current = null;
+        soundKindRef.current = 'preset';
       } else if (replaying) {
         // Stored profiles may predate schema additions — complete them.
         profile = normalizeProfile(replaying.profile);
         servedRef.current = null;
+        soundKindRef.current = 'replay';
       } else {
+        soundKindRef.current = 'served';
         const served = chooseProfile(
           mentalState,
           intensity,
@@ -528,6 +535,7 @@ export function useSessionOrchestrator(deps: {
     const playing = engineRef.current?.getProfile();
     if (mode === 'continue' && playing) profile.masterVolume = playing.masterVolume;
     servedRef.current = served;
+    soundKindRef.current = 'served';
     sessionProgramRef.current = null;
     sessionIntervalsRef.current = null;
     const breathingId = breathingFor(leg.state, settings.breathingPattern);
@@ -703,6 +711,8 @@ export function useSessionOrchestrator(deps: {
     getLastSession: () => lastSessionRef.current,
     getSessionProgram: () => sessionProgramRef.current,
     getSessionBreathing: () => sessionBreathingRef.current,
+    /** What the running session plays and where it came from ("why this sound"). */
+    getServedInfo: () => ({ kind: soundKindRef.current, served: servedRef.current }),
     prepareLab,
     releaseLab,
     setMonoMode: (mono: boolean) => engineRef.current?.setMonoMode(mono),

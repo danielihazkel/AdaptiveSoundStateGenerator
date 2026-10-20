@@ -90,6 +90,14 @@ export function SettingsScreen(props: {
           />
           Show a soft glow that moves with the sound
         </label>
+        <label className="mono-toggle">
+          <input
+            type="checkbox"
+            checked={s.explainSound !== false}
+            onChange={(e) => props.onChange({ explainSound: e.target.checked })}
+          />
+          Say why each sound was chosen for you
+        </label>
         <p className="hint">
           The screen stays on during a session so the sound keeps playing; after a quiet
           spell it goes black except for a dim clock. Tap to bring the controls back.

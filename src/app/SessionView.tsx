@@ -2,6 +2,7 @@ import type { CheckpointResponse } from '../adaptation/types';
 import type { BreathPattern } from '../audio/breathing';
 import { STATES, type MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
+import type { SoundExplanation } from '../personalization/explain';
 import { stateArtwork } from '../platform/artwork';
 import { useSessionPlatform } from '../platform/useSessionPlatform';
 import type { Program } from '../programs/types';
@@ -30,6 +31,8 @@ export function SessionView(props: {
   getAnalyser?: () => AnalyserNode | null;
   /** The routine this session is a leg of (Phase 14). */
   routine?: RoutineRef;
+  /** "Why this sound" line (Phase 15); absent = hidden. */
+  explanation?: SoundExplanation;
 }) {
   const snapshot = useSession(props.controller);
   const stateDef = STATES[props.mentalState];
@@ -69,6 +72,7 @@ export function SessionView(props: {
       nightstand={props.nightstand}
       getAnalyser={props.getAnalyser}
       routine={props.routine}
+      explanation={props.explanation}
     />
   );
 }

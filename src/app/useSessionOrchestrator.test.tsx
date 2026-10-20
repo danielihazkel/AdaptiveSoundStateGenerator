@@ -44,6 +44,7 @@ function adaptationStub(): AdaptationLoop {
     onCheckpoint: vi.fn(),
     answerPrompt: vi.fn(),
     getMeta: vi.fn(() => null),
+    getCurrentArmId: vi.fn(() => null),
     beginSession: vi.fn(),
     noteVolumeTweak: vi.fn(),
     disable: vi.fn(),

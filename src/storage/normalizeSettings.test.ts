@@ -26,6 +26,7 @@ describe('normalizeSettings', () => {
       export: { format: 'wav' as const, kbps: 192 },
       nightstand: 'never' as const,
       visualizer: false,
+      explainSound: false,
     };
     expect(normalizeSettings(full)).toEqual(full);
   });

@@ -2,10 +2,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { STATES } from '../audio/states';
+import type { SoundExplanation } from '../personalization/explain';
 import type { SessionSnapshot } from '../session/sessionController';
 import { SessionScreen } from './SessionScreen';
 
-function renderSession(snapshot: Partial<SessionSnapshot> = {}) {
+function renderSession(
+  snapshot: Partial<SessionSnapshot> = {},
+  extra: { explanation?: SoundExplanation } = {},
+) {
   const onProfileChange = vi.fn();
   const profile = STATES.focus.buildProfile(0.5);
   render(
@@ -20,6 +24,7 @@ function renderSession(snapshot: Partial<SessionSnapshot> = {}) {
       onDismissAlarm={vi.fn()}
       onSnooze={vi.fn()}
       onSavePreset={vi.fn()}
+      explanation={extra.explanation}
     />,
   );
   return { onProfileChange, profile };
@@ -41,6 +46,20 @@ describe('SessionScreen', () => {
     const { onProfileChange, profile } = renderSession();
     fireEvent.keyDown(document.body, { key: 'ArrowUp' });
     expect(onProfileChange.mock.calls[0][0].masterVolume).toBeCloseTo(profile.masterVolume + 0.05);
+  });
+
+  it('says why this sound plays, with the score one tap away', () => {
+    renderSession({}, { explanation: { label: 'Warmer tone', reason: 'Trying a variation', scorePct: 71, ciPct: 12 } });
+    const toggle = screen.getByRole('button', { name: 'Warmer tone · Trying a variation' });
+    expect(screen.queryByText(/Scores 71%/)).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText(/Scores 71% ±12 for you so far/)).toBeTruthy();
+  });
+
+  it('shows no explanation line when there is none', () => {
+    renderSession();
+    expect(screen.queryByRole('button', { name: /·/ })).toBeNull();
   });
 
   it('hides the volume slider once the session is over', () => {

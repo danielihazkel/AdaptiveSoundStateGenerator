@@ -173,6 +173,8 @@ export function useAdaptationLoop(deps: {
     onCheckpoint,
     answerPrompt,
     getMeta: () => metaRef.current,
+    /** The arm playing now — changes when a check-in switches or reverts. */
+    getCurrentArmId: (): string | null => segmentsRef.current.at(-1)?.armId ?? null,
     /** Reset every per-session counter and open the initial segment. */
     beginSession: (meta: SessionMeta) => {
       metaRef.current = meta;

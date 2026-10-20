@@ -3,11 +3,14 @@ import {
   Suspense,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from 'react';
 import { STATES } from './audio/states';
+import { timeBucketOf } from './personalization/context';
+import { describeServedSound } from './personalization/personalizer';
 import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
 import type { Program } from './programs/types';
@@ -320,6 +323,26 @@ export function App() {
   const lastSession = session.getLastSession();
   const controller = session.getController();
   const sessionState = adaptation.getMeta()?.state ?? selection.mentalState;
+  // "Why this sound" (Phase 15): recomputed when the served sound or the
+  // playing arm changes, not on every volume step.
+  const { kind: soundKind, served } = session.getServedInfo();
+  const currentArmId = adaptation.getCurrentArmId();
+  const sessionMono = session.getEngine()?.isMonoMode ?? settings.monoMode;
+  const explainOn = screen === 'session' && settings.explainSound !== false;
+  const soundExplanation = useMemo(
+    () =>
+      explainOn
+        ? describeServedSound({
+            state: sessionState,
+            kind: soundKind,
+            servedArmId: served?.armId,
+            servedBy: served?.servedBy,
+            currentArmId: currentArmId ?? undefined,
+            ctx: { bucket: timeBucketOf(new Date()), mono: sessionMono },
+          })
+        : null,
+    [explainOn, sessionState, soundKind, served, currentArmId, sessionMono],
+  );
   const getAnalyser = useStableCallback(() => session.getEngine()?.attachAnalyser() ?? null);
 
   return (
@@ -684,6 +707,7 @@ export function App() {
           getAnalyser={settings.visualizer === false ? undefined : getAnalyser}
           program={session.getSessionProgram() ?? undefined}
           breathing={session.getSessionBreathing() ?? undefined}
+          explanation={soundExplanation ?? undefined}
           profile={session.liveProfile}
           onProfileChange={session.handleProfileChange}
           onStop={session.stop}
