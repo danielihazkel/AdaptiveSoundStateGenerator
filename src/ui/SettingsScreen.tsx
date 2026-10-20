@@ -25,7 +25,7 @@ export function SettingsScreen(props: {
   onChange: (change: Partial<Settings>) => void;
   onReplayTour: () => void;
   onBack: () => void;
-  /** The heart-rate panel, when a sensor source is possible in this browser. */
+  /** Sensor panels (heart rate, phone motion), when a source is possible here. */
   biometrics?: ReactNode;
   /** Export / import of everything on this device. */
   data: ReactNode;

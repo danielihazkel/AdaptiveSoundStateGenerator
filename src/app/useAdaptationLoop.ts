@@ -12,6 +12,7 @@ import type { MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
 import { computeHrTrend } from '../biometrics/hrTrend';
 import { computeHrvTrend } from '../biometrics/hrv';
+import { computeMotionTrend, type MotionSample } from '../biometrics/motion';
 import type { BiometricSample } from '../biometrics/types';
 import { CANDIDATE_SET_VERSION } from '../personalization/candidates';
 import { buildCandidateProfile } from '../personalization/candidates';
@@ -41,6 +42,8 @@ export function useAdaptationLoop(deps: {
   getEngine: () => AudioEngine | null;
   getController: () => SessionController | null;
   getHrSamples: () => BiometricSample[];
+  /** Phase 16: the phone's motion epochs (absent / empty = no motion sensor). */
+  getMotionSamples?: () => MotionSample[];
   setLiveProfile: (profile: SoundProfile) => void;
 }) {
   const metaRef = useRef<SessionMeta | null>(null);
@@ -81,12 +84,17 @@ export function useAdaptationLoop(deps: {
       recentWindowMs: ADAPT_INTERVAL_SEC * 1000,
       now: Date.now(),
     });
+    const motion = computeMotionTrend(deps.getMotionSamples?.() ?? [], {
+      recentWindowMs: ADAPT_INTERVAL_SEC * 1000,
+      now: Date.now(),
+    });
 
     current.endSec = info.elapsedSec;
     if (response) current.response = response;
     current.volumeAdjustments = segmentVolumeTweaksRef.current;
     if (hr) current.hrDeltaBpm = Math.round(hr.deltaBpm);
     if (hrv) current.hrvDeltaPct = Math.round(hrv.deltaPct * 100);
+    if (motion) current.restlessPct = Math.round(motion.restlessShare * 100);
 
     const action = decideAdaptation({
       state: meta.state,
@@ -104,6 +112,7 @@ export function useAdaptationLoop(deps: {
         customizedInSegment: false, // customization disables adaptation upstream
         hrTrend: hr?.trend ?? null,
         hrvTrend: hrv?.trend ?? null,
+        motionTrend: motion?.trend ?? null,
       },
       personalization: loadPersonalization(CANDIDATE_SET_VERSION),
       context: {

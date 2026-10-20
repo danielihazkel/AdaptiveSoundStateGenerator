@@ -1,4 +1,5 @@
 import type { MentalState } from '../audio/states';
+import type { MotionTrend } from '../biometrics/motion';
 import { cloneProfile, type SoundProfile } from '../audio/types';
 import { sampleArm } from '../personalization/bandit';
 import { PRIOR_ARM_ID } from '../personalization/candidates';
@@ -53,12 +54,14 @@ export interface AdaptationInput {
  * Phase 9 — falling HRV, its parasympathetic mirror. For focus/energy/flow
  * a rising HR could just as well be engagement, and for arousal it is
  * expected, so both are ignored there. One boolean, so HR and HRV moving
- * together never double-count.
+ * together never double-count. Phase 16 adds the phone's motion: tossing
+ * and turning is adverse in exactly the same calm states.
  */
 function isAdverseBiometric(
   state: MentalState,
   hr: HrTrend | null,
   hrv: HrTrend | null,
+  motion: MotionTrend | null | undefined,
 ): boolean {
   const calmState =
     state === 'relax' ||
@@ -67,7 +70,7 @@ function isAdverseBiometric(
     state === 'calm' ||
     state === 'creative';
   if (!calmState) return false;
-  return hr === 'rising' || hrv === 'falling';
+  return hr === 'rising' || hrv === 'falling' || motion === 'restless';
 }
 
 /** Apply the soften nudge to the currently playing profile (arm unchanged). */
@@ -85,7 +88,7 @@ export function decideAdaptation(input: AdaptationInput): AdaptationAction {
   // jump risks waking the user. Biometrics-only: one soften nudge per session.
   if (state === 'sleep') {
     if (
-      isAdverseBiometric(state, observation.hrTrend, observation.hrvTrend) &&
+      isAdverseBiometric(state, observation.hrTrend, observation.hrvTrend, observation.motionTrend) &&
       !input.softenedAlready
     ) {
       return { kind: 'soften' };
@@ -99,7 +102,12 @@ export function decideAdaptation(input: AdaptationInput): AdaptationAction {
   const response = observation.response;
   if (response === 'better' || response === 'same') return { kind: 'stay' };
 
-  const adverseBio = isAdverseBiometric(state, observation.hrTrend, observation.hrvTrend);
+  const adverseBio = isAdverseBiometric(
+    state,
+    observation.hrTrend,
+    observation.hrvTrend,
+    observation.motionTrend,
+  );
   const implicitBad =
     observation.volumeTweaksInSegment >= IMPLICIT_SWITCH_VOLUME_TWEAKS || adverseBio;
 

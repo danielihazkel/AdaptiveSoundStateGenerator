@@ -27,6 +27,8 @@ export interface Settings {
   adaptationEnabled?: boolean;
   /** ISO timestamp of explicit wearable-data consent (PRD §14); null = none. */
   biometricsConsentAt?: string | null;
+  /** Phase 16: ISO timestamp of consent to read the phone's motion sensor; null = none. */
+  motionConsentAt?: string | null;
   /** Guided breathing for calm/relax/meditation; absent = follow the pulse. */
   breathingPattern?: BreathingPatternId;
   /** Sleep sessions: rise gently over the last `riseMinutes` and end with a chime. */
@@ -130,6 +132,8 @@ export interface SessionSegment {
   hrDeltaBpm?: number;
   /** RMSSD change vs the session baseline in this segment, signed % (Phase 9). */
   hrvDeltaPct?: number;
+  /** Phase 16: share of this segment's minutes the phone sensed movement, 0–100. */
+  restlessPct?: number;
 }
 
 export interface SessionRecord {
@@ -202,6 +206,8 @@ export interface SessionRecord {
   coachUsed?: boolean;
   /** A biometric source was connected during the session. */
   biometricsUsed?: boolean;
+  /** Phase 16: the phone's motion sensor delivered during the session. */
+  motionUsed?: boolean;
   /** Guided breathing pattern the mix followed (absent = none / pulse-derived). */
   breathingPattern?: Exclude<BreathingPatternId, 'pulse'>;
   /** The session closed with a wake-up rise of this length. */

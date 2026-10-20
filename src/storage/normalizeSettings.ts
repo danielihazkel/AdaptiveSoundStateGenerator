@@ -43,6 +43,7 @@ export function normalizeSettings(raw: unknown): Settings {
       }
     }
   }
+  if (p.motionConsentAt !== undefined) out.motionConsentAt = isoOrNull(p.motionConsentAt);
   if (isBreathingPatternId(p.breathingPattern)) out.breathingPattern = p.breathingPattern;
   if (isRecord(p.wakeUp) && typeof p.wakeUp.enabled === 'boolean') {
     const minutes = Number(p.wakeUp.riseMinutes);

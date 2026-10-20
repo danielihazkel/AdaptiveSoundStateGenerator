@@ -17,6 +17,7 @@ describe('normalizeSettings', () => {
       chimeEnabled: false,
       adaptationEnabled: false,
       biometricsConsentAt: '2026-01-02T00:00:00.000Z',
+      motionConsentAt: '2026-01-03T00:00:00.000Z',
       personalizationMode: { focus: 'locked' as const, sleep: 'explore' as const },
       breathingPattern: 'box' as const,
       wakeUp: { enabled: true, riseMinutes: 12 },

@@ -12,6 +12,7 @@ import { OTHER_TAB_SESSION_MESSAGE, START_ERROR_MESSAGE } from '../ui/SafetyNoti
 import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
 import type { Coach } from './useCoach';
+import type { Motion } from './useMotion';
 import { useSessionOrchestrator } from './useSessionOrchestrator';
 import type { SetupSelection } from './useSetupSelection';
 
@@ -60,6 +61,13 @@ const biometrics = {
   getSamples: () => [],
 } as unknown as Biometrics;
 const coach = { consumeApplied: () => false, reset: vi.fn() } as unknown as Coach;
+const motion = {
+  possible: false,
+  start: vi.fn(async () => {}),
+  resetForSession: vi.fn(),
+  wasUsed: () => false,
+  getSamples: () => [],
+} as unknown as Motion;
 
 function setup(opts: { settings?: Partial<Settings>; selection?: Partial<SetupSelection>; presets?: Preset[] } = {}) {
   const callbacks = {
@@ -77,6 +85,7 @@ function setup(opts: { settings?: Partial<Settings>; selection?: Partial<SetupSe
       programs: [],
       adaptation,
       biometrics,
+      motion,
       coach,
       ...callbacks,
     }),

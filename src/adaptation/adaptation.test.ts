@@ -190,6 +190,25 @@ describe('decideAdaptation', () => {
     ).toEqual({ kind: 'stay' });
   });
 
+  it('Phase 16: restless phone motion is adverse for calm states only, and softens sleep once', () => {
+    const relax = decideAdaptation(
+      input({ state: 'relax', observation: observation({ motionTrend: 'restless' }) }),
+    );
+    expect(relax.kind).toBe('switch');
+    if (relax.kind === 'switch') expect(relax.trigger).toBe('biometric');
+    for (const state of ['focus', 'energy', 'arousal'] as const) {
+      expect(
+        decideAdaptation(input({ state, observation: observation({ motionTrend: 'restless' }) })),
+      ).toEqual({ kind: 'stay' });
+    }
+    expect(
+      decideAdaptation(input({ state: 'relax', observation: observation({ motionTrend: 'still' }) })),
+    ).toEqual({ kind: 'stay' });
+    expect(
+      decideAdaptation(input({ state: 'sleep', observation: observation({ motionTrend: 'restless' }) })),
+    ).toEqual({ kind: 'soften' });
+  });
+
   it('sleep softens once on falling HRV, like rising HR', () => {
     expect(
       decideAdaptation(

@@ -39,6 +39,7 @@ import { OTHER_TAB_SESSION_MESSAGE, START_ERROR_MESSAGE } from '../ui/SafetyNoti
 import { watchSleepOnset, type SleepOnsetWatch } from './sleepOnsetWatcher';
 import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
+import type { Motion } from './useMotion';
 import type { Coach } from './useCoach';
 import type { SetupSelection } from './useSetupSelection';
 import { resolveSessionProgram } from './resolveSessionProgram';
@@ -83,6 +84,8 @@ export function useSessionOrchestrator(deps: {
   programs: Program[];
   adaptation: AdaptationLoop;
   biometrics: Biometrics;
+  /** Phase 16: the phone's motion sensor (opt-in). */
+  motion: Motion;
   coach: Coach;
   /** A session record was written — refresh stored-data views. */
   onSessionStored: () => void;
@@ -136,7 +139,16 @@ export function useSessionOrchestrator(deps: {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
-  const { settings, selection, adaptation, biometrics, coach } = deps;
+  const { settings, selection, adaptation, biometrics, motion, coach } = deps;
+
+  /**
+   * Opted-in motion sensing starts from the Begin tap (iOS asks permission
+   * inside a gesture, so this must run before the first await) and then
+   * keeps running across sessions.
+   */
+  const startMotionIfConsented = () => {
+    if (settings.motionConsentAt && motion.possible) void motion.start();
+  };
 
   const stopCheckpointing = () => {
     unsubscribeCheckpointRef.current?.();
@@ -214,6 +226,7 @@ export function useSessionOrchestrator(deps: {
       segments: adaptation.finalizeSegments(result.actualDurationSec),
       coachUsed: meta?.coachUsed || undefined,
       biometricsUsed: biometrics.wasUsed() || undefined,
+      motionUsed: motion.wasUsed() || undefined,
       breathingPattern:
         result.config.breathing && result.config.breathing.id !== 'pulse'
           ? result.config.breathing.id
@@ -304,6 +317,7 @@ export function useSessionOrchestrator(deps: {
     // Synchronously inside the tap: iOS only starts media from a gesture, and
     // the keep-alive is what lets the session survive a locked screen.
     playSilentKeepAlive();
+    startMotionIfConsented();
     setStarting(true);
     setStartError(null);
     try {
@@ -427,6 +441,7 @@ export function useSessionOrchestrator(deps: {
       });
       coach.reset();
       biometrics.resetForSession();
+      motion.resetForSession();
 
       // Presets adapt away from the exact sound the user chose — never do
       // that. The toggle turns checkpoints off entirely. Saved programs never
@@ -521,13 +536,19 @@ export function useSessionOrchestrator(deps: {
   const armSleepOnsetWatch = (controller: SessionController, eligible: boolean) => {
     stopSleepOnsetWatch();
     if (!eligible || settings.sleepOnsetFade !== true) return;
-    // Without a connected sensor the detector simply never has fresh samples.
-    sleepOnsetWatchRef.current = watchSleepOnset(controller, biometrics.getSamples, (elapsedSec) => {
-      // Remember the onset in the crash checkpoint too.
-      if (checkpointRef.current) {
-        checkpointRef.current = { ...checkpointRef.current, sleepOnsetSec: elapsedSec };
-      }
-    });
+    // Without a live sensor (heart rate or motion) the detector simply never
+    // has fresh samples.
+    sleepOnsetWatchRef.current = watchSleepOnset(
+      controller,
+      biometrics.getSamples,
+      (elapsedSec) => {
+        // Remember the onset in the crash checkpoint too.
+        if (checkpointRef.current) {
+          checkpointRef.current = { ...checkpointRef.current, sleepOnsetSec: elapsedSec };
+        }
+      },
+      motion.getSamples,
+    );
   };
 
   /**
@@ -571,6 +592,7 @@ export function useSessionOrchestrator(deps: {
       servedArmId: served.armId,
     });
     biometrics.resetForSession();
+    motion.resetForSession();
     const durationSec = leg.minutes * 60;
     // Only the last leg can end in a wake-up rise.
     const wakeUp = last ? (wakeUpFor(leg.state, settings.wakeUp, durationSec) ?? undefined) : undefined;
@@ -615,6 +637,7 @@ export function useSessionOrchestrator(deps: {
   const beginRoutine = async (routine: Routine) => {
     if (starting) return;
     playSilentKeepAlive();
+    startMotionIfConsented();
     setStarting(true);
     setStartError(null);
     try {

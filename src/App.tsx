@@ -31,7 +31,7 @@ import {
 import type { SharePayload } from './share/shareLink';
 import { DEFAULT_WAKE_UP, modeFor, type MoodLevel, type Theme } from './storage/types';
 import { nightstandFor } from './session/sessionOptions';
-import { BiometricsPanel } from './ui/BiometricsPanel';
+import { BiometricsPanel, MotionPanel, SleepOnsetToggle } from './ui/BiometricsPanel';
 import { CoachInput } from './ui/CoachInput';
 import { DataPanel } from './ui/DataPanel';
 import { FeedbackScreen } from './ui/FeedbackScreen';
@@ -48,6 +48,7 @@ import { screenForHash } from './app/router';
 import { useHashScreen } from './app/useHashScreen';
 import { useAdaptationLoop } from './app/useAdaptationLoop';
 import { useBiometrics } from './app/useBiometrics';
+import { useMotion } from './app/useMotion';
 import { useCoach } from './app/useCoach';
 import { useFeedbackHandlers } from './app/useFeedbackHandlers';
 import {
@@ -171,6 +172,7 @@ export function App() {
   const coach = useCoach();
   const selection = useSetupSelection({ onUserOverride: coach.reset });
   const biometrics = useBiometrics();
+  const motion = useMotion();
   const exporter = useMp3Export({
     options: settings.export,
     onOptionsChange: (next) => updateSettings({ export: next }),
@@ -207,6 +209,7 @@ export function App() {
     getEngine: () => sessionRef.current?.getEngine() ?? null,
     getController: () => sessionRef.current?.getController() ?? null,
     getHrSamples: biometrics.getSamples,
+    getMotionSamples: motion.getSamples,
     setLiveProfile: (profile) => sessionRef.current?.setLiveProfile(profile),
   });
   const session = useSessionOrchestrator({
@@ -216,6 +219,7 @@ export function App() {
     programs,
     adaptation,
     biometrics,
+    motion,
     coach,
     onSessionStored: data.bumpData,
     onPresetSaved: data.refreshPresets,
@@ -580,6 +584,13 @@ export function App() {
         />
       )}
 
+      {screen === 'setup' && motion.possible && settings.motionConsentAt && (
+        <p className="hint heart-rate-status">
+          📱 Phone motion: {motion.status === 'connected' ? 'sensing' : 'starts when you begin'} — lay
+          the phone on the bed and leave the screen on
+        </p>
+      )}
+
       {screen === 'setup' && biometrics.possible && settings.biometricsConsentAt && (
         <p className="hint heart-rate-status">
           ❤ Heart-rate sensor:{' '}
@@ -608,21 +619,41 @@ export function App() {
           }}
           onBack={() => navigate('setup')}
           biometrics={
-            biometrics.possible ? (
-              <BiometricsPanel
-                status={biometrics.status}
-                consented={Boolean(settings.biometricsConsentAt)}
-                simulated={biometrics.simulated}
-                onConsent={(consented) =>
-                  updateSettings({
-                    biometricsConsentAt: consented ? new Date().toISOString() : null,
-                  })
-                }
-                onConnect={() => void biometrics.connect()}
-                onDisconnect={biometrics.disconnect}
-                sleepOnsetFade={settings.sleepOnsetFade === true}
-                onSleepOnsetFadeChange={(on) => updateSettings({ sleepOnsetFade: on })}
-              />
+            biometrics.possible || motion.possible ? (
+              <>
+                {biometrics.possible && (
+                  <BiometricsPanel
+                    status={biometrics.status}
+                    consented={Boolean(settings.biometricsConsentAt)}
+                    simulated={biometrics.simulated}
+                    onConsent={(consented) =>
+                      updateSettings({
+                        biometricsConsentAt: consented ? new Date().toISOString() : null,
+                      })
+                    }
+                    onConnect={() => void biometrics.connect()}
+                    onDisconnect={biometrics.disconnect}
+                  />
+                )}
+                {motion.possible && (
+                  <MotionPanel
+                    status={motion.status}
+                    consented={Boolean(settings.motionConsentAt)}
+                    simulated={motion.simulated}
+                    onConsent={(consented) => {
+                      updateSettings({ motionConsentAt: consented ? new Date().toISOString() : null });
+                      if (!consented) motion.stop();
+                    }}
+                    onStart={() => void motion.start()}
+                  />
+                )}
+                {(settings.biometricsConsentAt || settings.motionConsentAt) && (
+                  <SleepOnsetToggle
+                    checked={settings.sleepOnsetFade === true}
+                    onChange={(on) => updateSettings({ sleepOnsetFade: on })}
+                  />
+                )}
+              </>
             ) : undefined
           }
           data={<DataPanel onImported={data.reloadAll} onImportShare={importShare} />}

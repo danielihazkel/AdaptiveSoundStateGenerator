@@ -1,3 +1,5 @@
+import type { MotionTrend } from '../biometrics/motion';
+
 /** One-tap micro-prompt answer at a checkpoint (PRD §17). */
 export type CheckpointResponse = 'better' | 'same' | 'worse';
 
@@ -12,6 +14,12 @@ export interface SegmentObservation {
   customizedInSegment: boolean;
   /** null = no biometric source connected. */
   hrTrend: HrTrend | null;
+  /**
+   * Phase 16: the phone's motion over the segment (phone on the mattress);
+   * null = no live motion sensor. Restless is adverse for calm states.
+   * Optional so pre-Phase-16 observations stay valid.
+   */
+  motionTrend?: MotionTrend | null;
   /**
    * RMSSD trend from RR intervals (Phase 9); null = no source, or the
    * sensor sends no RR data. For calm states *falling* HRV is adverse —
