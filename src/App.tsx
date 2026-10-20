@@ -573,6 +573,7 @@ export function App() {
       {screen === 'setup' && (
         <RoutinesPanel
           routines={data.routines}
+          programs={programs}
           starting={session.starting}
           onStart={(routine) => void session.beginRoutine(routine)}
           onEdit={openRoutineEditor}
@@ -707,6 +708,7 @@ export function App() {
       {screen === 'routineEditor' && editingRoutine && (
         <RoutineEditor
           routine={editingRoutine}
+          programs={programs}
           onSave={(routine) => {
             saveRoutine(routine);
             data.refreshRoutines();

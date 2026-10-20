@@ -172,3 +172,29 @@ describe('routine share links (Phase 14)', () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe('routine links carry their programs (Phase 17)', () => {
+  it('round-trip the programs a routine plays', async () => {
+    const program = { ...defaultProgram('relax', 0.3), id: 'p1', name: 'Unwind' };
+    const routine = {
+      ...routineFromTemplate(ROUTINE_TEMPLATES[0]),
+      legs: [
+        { state: 'focus' as const, intensity: 0.5, minutes: 25 },
+        { state: 'relax' as const, intensity: 0.3, minutes: 10, programId: 'p1' },
+      ],
+    };
+    const token = await encodeShare({ v: 1, kind: 'routine', routine, programs: [program] });
+    const back = validateSharePayload(await decodeShare(token));
+    expect(back.ok).toBe(true);
+    if (back.ok && back.payload.kind === 'routine') {
+      expect(back.payload.routine.legs[1].programId).toBe('p1');
+      expect(back.payload.programs).toEqual([normalizeProgram(program)]);
+    }
+  });
+
+  it('ignores junk in the programs list', () => {
+    const routine = routineFromTemplate(ROUTINE_TEMPLATES[0]);
+    const back = validateSharePayload({ v: 1, kind: 'routine', routine, programs: [null, 'x', { name: 'no segments' }] });
+    expect(back).toEqual({ ok: true, payload: { v: 1, kind: 'routine', routine } });
+  });
+});

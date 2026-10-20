@@ -11,24 +11,44 @@ import {
   type Routine,
   type RoutineLeg,
 } from '../routines/types';
+import { programMinDurationSec, type Program } from '../programs/types';
 import { formatDuration } from './format';
 import { Slider } from './Slider';
 
 /**
  * Routine editor (Phase 14, route #routine): a name and 2–5 legs, each a
- * state, a depth and a length, reorderable. Saving normalizes like any
- * import; a built-in template is saved as the user's own copy.
+ * state, a depth and a length — or (Phase 17) one of the user's programs —
+ * reorderable. Saving normalizes like any import; a built-in template is
+ * saved as the user's own copy.
  */
 export function RoutineEditor(props: {
   routine: Routine;
+  /** The user's saved programs, for program legs. */
+  programs?: Program[];
   onSave: (routine: Routine) => void;
   onCancel: () => void;
 }) {
+  const programs = props.programs ?? [];
   const [name, setName] = useState(props.routine.name);
   const [legs, setLegs] = useState<RoutineLeg[]>(() => props.routine.legs.map((l) => ({ ...l })));
 
   const update = (index: number, change: Partial<RoutineLeg>) =>
     setLegs((prev) => prev.map((l, i) => (i === index ? { ...l, ...change } : l)));
+  /** A program leg takes the program's state and at least its closed phases' length. */
+  const setProgram = (index: number, programId: string) =>
+    setLegs((prev) =>
+      prev.map((l, i) => {
+        if (i !== index) return l;
+        const program = programs.find((p) => p.id === programId);
+        if (!program) {
+          const served = { ...l };
+          delete served.programId;
+          return served;
+        }
+        const minMinutes = Math.ceil(programMinDurationSec(program) / 60);
+        return { ...l, programId, state: program.baseState, minutes: Math.max(l.minutes, minMinutes) };
+      }),
+    );
   const move = (index: number, by: -1 | 1) =>
     setLegs((prev) => {
       const next = [...prev];
@@ -64,63 +84,91 @@ export function RoutineEditor(props: {
       </label>
 
       <ol className="routine-leg-list">
-        {legs.map((leg, i) => (
-          <li key={i} className="panel">
-            <div className="option-row">
-              <label>
-                <span className="hint">Part {i + 1}</span>{' '}
-                <select
-                  value={leg.state}
-                  aria-label={`Part ${i + 1} state`}
-                  onChange={(e) => update(i, { state: e.target.value as MentalState })}
+        {legs.map((leg, i) => {
+          const program = leg.programId ? programs.find((p) => p.id === leg.programId) : undefined;
+          return (
+            <li key={i} className="panel">
+              <div className="option-row">
+                <label>
+                  <span className="hint">Part {i + 1}</span>{' '}
+                  <select
+                    value={leg.state}
+                    aria-label={`Part ${i + 1} state`}
+                    disabled={program !== undefined}
+                    onChange={(e) => update(i, { state: e.target.value as MentalState })}
+                  >
+                    {STATE_LIST.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.emoji} {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <input
+                    type="number"
+                    min={MIN_LEG_MINUTES}
+                    max={MAX_LEG_MINUTES}
+                    value={leg.minutes}
+                    aria-label={`Part ${i + 1} minutes`}
+                    onChange={(e) => update(i, { minutes: Number(e.target.value) || MIN_LEG_MINUTES })}
+                  />{' '}
+                  min
+                </label>
+              </div>
+              {programs.length > 0 && (
+                <label className="option-row">
+                  <span className="hint">Sound</span>
+                  <select
+                    value={program ? program.id : ''}
+                    aria-label={`Part ${i + 1} sound`}
+                    onChange={(e) => setProgram(i, e.target.value)}
+                  >
+                    <option value="">Personalized for you</option>
+                    {programs.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        📋 {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {program ? (
+                <p className="hint">
+                  Plays your “{program.name}” program — its own sound and phases (at least{' '}
+                  {formatDuration(programMinDurationSec(program))}).
+                </p>
+              ) : (
+                <Slider
+                  label="Depth"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={leg.intensity}
+                  display={leg.intensity < 0.33 ? STATES[leg.state].intensityLabels[0] : leg.intensity > 0.66 ? STATES[leg.state].intensityLabels[1] : 'Medium'}
+                  onChange={(v) => update(i, { intensity: v })}
+                />
+              )}
+              <div className="preset-strip">
+                <button type="button" className="chip" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move part ${i + 1} earlier`}>
+                  ↑
+                </button>
+                <button type="button" className="chip" disabled={i === legs.length - 1} onClick={() => move(i, 1)} aria-label={`Move part ${i + 1} later`}>
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  className="chip"
+                  disabled={legs.length <= MIN_ROUTINE_LEGS}
+                  onClick={() => setLegs((prev) => prev.filter((_, j) => j !== i))}
+                  aria-label={`Remove part ${i + 1}`}
                 >
-                  {STATE_LIST.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.emoji} {s.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <input
-                  type="number"
-                  min={MIN_LEG_MINUTES}
-                  max={MAX_LEG_MINUTES}
-                  value={leg.minutes}
-                  aria-label={`Part ${i + 1} minutes`}
-                  onChange={(e) => update(i, { minutes: Number(e.target.value) || MIN_LEG_MINUTES })}
-                />{' '}
-                min
-              </label>
-            </div>
-            <Slider
-              label="Depth"
-              min={0}
-              max={1}
-              step={0.05}
-              value={leg.intensity}
-              display={leg.intensity < 0.33 ? STATES[leg.state].intensityLabels[0] : leg.intensity > 0.66 ? STATES[leg.state].intensityLabels[1] : 'Medium'}
-              onChange={(v) => update(i, { intensity: v })}
-            />
-            <div className="preset-strip">
-              <button type="button" className="chip" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move part ${i + 1} earlier`}>
-                ↑
-              </button>
-              <button type="button" className="chip" disabled={i === legs.length - 1} onClick={() => move(i, 1)} aria-label={`Move part ${i + 1} later`}>
-                ↓
-              </button>
-              <button
-                type="button"
-                className="chip"
-                disabled={legs.length <= MIN_ROUTINE_LEGS}
-                onClick={() => setLegs((prev) => prev.filter((_, j) => j !== i))}
-                aria-label={`Remove part ${i + 1}`}
-              >
-                Remove
-              </button>
-            </div>
-          </li>
-        ))}
+                  Remove
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ol>
 
       {legs.length < MAX_ROUTINE_LEGS && (

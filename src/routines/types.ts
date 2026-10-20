@@ -4,13 +4,21 @@ import { STATES, type MentalState } from '../audio/states';
  * Routines (Phase 14): a chain of states played back to back — energy into
  * focus, relax into sleep — with each leg handing over to the next without
  * a fade (SessionController.continueWith). Every leg is a normal served
- * session: the bandit chooses its sound, and it gets its own history record.
+ * session — the bandit chooses its sound — unless it names one of the
+ * user's timed programs (Phase 17), and every leg gets its own history record.
  */
 export interface RoutineLeg {
   state: MentalState;
   /** 0..1, the setup screen's depth slider. */
   intensity: number;
   minutes: number;
+  /**
+   * Phase 17: play this saved program instead of a served sound. The program
+   * owns the leg's sound and shape (its base state and depth win); the leg
+   * runs at least the program's closed phases. A program that no longer
+   * exists falls back to a served leg of `state`.
+   */
+  programId?: string;
 }
 
 export interface Routine {
@@ -45,11 +53,13 @@ function normalizeLeg(raw: unknown): RoutineLeg | null {
   if (!isMentalState(l.state)) return null;
   const intensity = typeof l.intensity === 'number' && Number.isFinite(l.intensity) ? l.intensity : 0.5;
   const minutes = typeof l.minutes === 'number' && Number.isFinite(l.minutes) ? l.minutes : 10;
-  return {
+  const leg: RoutineLeg = {
     state: l.state,
     intensity: Math.min(1, Math.max(0, intensity)),
     minutes: Math.min(MAX_LEG_MINUTES, Math.max(MIN_LEG_MINUTES, Math.round(minutes))),
   };
+  if (typeof l.programId === 'string' && l.programId.length > 0) leg.programId = l.programId;
+  return leg;
 }
 
 /**
@@ -78,7 +88,22 @@ export function routineMinutes(routine: Pick<Routine, 'legs'>): number {
   return routine.legs.reduce((acc, l) => acc + l.minutes, 0);
 }
 
-/** "⚡ 10 → 🎯 50 → 🌿 5" */
+/** "⚡ 10 → 🎯 50 → 🌿 5" — a program leg shows its 📋. */
 export function describeRoutine(routine: Pick<Routine, 'legs'>): string {
-  return routine.legs.map((l) => `${STATES[l.state].emoji} ${l.minutes}`).join(' → ');
+  return routine.legs
+    .map((l) => `${STATES[l.state].emoji}${l.programId ? '📋' : ''} ${l.minutes}`)
+    .join(' → ');
+}
+
+/** Program ids the routine's legs name, each once, in leg order. */
+export function routineProgramIds(routine: Pick<Routine, 'legs'>): string[] {
+  return [...new Set(routine.legs.flatMap((l) => (l.programId ? [l.programId] : [])))];
+}
+
+/** 1-based numbers of legs whose program is gone (they'll play a served sound). */
+export function legsWithMissingProgram(
+  routine: Pick<Routine, 'legs'>,
+  programIds: ReadonlySet<string>,
+): number[] {
+  return routine.legs.flatMap((l, i) => (l.programId && !programIds.has(l.programId) ? [i + 1] : []));
 }

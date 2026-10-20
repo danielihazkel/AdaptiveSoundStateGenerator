@@ -5,6 +5,7 @@ import { STATES } from '../audio/states';
 import { cloneProfile, type SoundProfile } from '../audio/types';
 import { buildCandidateProfile } from '../personalization/candidates';
 import { SessionController } from '../session/sessionController';
+import { defaultProgram, programMinDurationSec, type Program } from '../programs/types';
 import { loadInProgress, loadSessions } from '../storage/storage';
 import { defaultSettings, type Preset, type Settings } from '../storage/types';
 import { fakeEngine, type FakeEngine } from '../test/fakeEngine';
@@ -77,7 +78,14 @@ const roomMasking = {
   getMaxBoostDb: () => null,
 } as unknown as RoomMasking;
 
-function setup(opts: { settings?: Partial<Settings>; selection?: Partial<SetupSelection>; presets?: Preset[] } = {}) {
+function setup(
+  opts: {
+    settings?: Partial<Settings>;
+    selection?: Partial<SetupSelection>;
+    presets?: Preset[];
+    programs?: Program[];
+  } = {},
+) {
   const callbacks = {
     onSessionStored: vi.fn(),
     onPresetSaved: vi.fn(),
@@ -90,7 +98,7 @@ function setup(opts: { settings?: Partial<Settings>; selection?: Partial<SetupSe
       settings: { ...defaultSettings, ...opts.settings },
       selection: selectionStub(opts.selection),
       presets: opts.presets ?? [],
-      programs: [],
+      programs: opts.programs ?? [],
       adaptation,
       biometrics,
       motion,
@@ -345,6 +353,65 @@ describe('useSessionOrchestrator', () => {
     expect(result.current.getLastSession()?.routineLegs).toEqual([
       { recordId: sessions[1].id, state: 'energy' },
     ]);
+  });
+
+  it('Phase 17: a routine leg can run a saved program — its sound and phases, no bandit', async () => {
+    const program = { ...defaultProgram('relax', 0.3), id: 'prog-1', name: 'Unwind' };
+    const { result, adaptation } = setup({ programs: [program] });
+    const continueWith = vi.spyOn(SessionController.prototype, 'continueWith');
+    const routine = {
+      id: 'r3',
+      name: 'Work then unwind',
+      createdAt: '2026-10-19T08:00:00.000Z',
+      legs: [
+        { state: 'focus' as const, intensity: 0.5, minutes: 1 },
+        // The leg's own state/depth are ignored: the program owns them.
+        { state: 'energy' as const, intensity: 0.9, minutes: 1, programId: 'prog-1' },
+      ],
+    };
+    await act(async () => {
+      await result.current.beginRoutine(routine);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(continueWith).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: 'relax',
+        intensity: program.baseIntensity,
+        program,
+        checkpointSec: undefined,
+        breathing: undefined,
+        // At least the program's closed phases.
+        durationSec: programMinDurationSec(program),
+      }),
+    );
+    expect(adaptation.beginSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ state: 'relax', servedArmId: null }),
+    );
+    expect(result.current.getSessionProgram()).toBe(program);
+    expect(result.current.getServedInfo()).toEqual({ kind: 'program', served: null });
+    expect(loadInProgress()).toMatchObject({ state: 'relax', programId: 'prog-1', routine: { leg: 1 } });
+    continueWith.mockRestore();
+  });
+
+  it('Phase 17: a leg whose program was deleted plays a served sound instead', async () => {
+    const { result, adaptation } = setup();
+    await act(async () => {
+      await result.current.beginRoutine({
+        id: 'r4',
+        name: 'Gone',
+        createdAt: '2026-10-19T08:00:00.000Z',
+        legs: [
+          { state: 'focus', intensity: 0.5, minutes: 1, programId: 'deleted' },
+          { state: 'relax', intensity: 0.5, minutes: 1 },
+        ],
+      });
+    });
+    expect(adaptation.beginSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ state: 'focus', servedArmId: 'prior' }),
+    );
+    expect(result.current.getSessionProgram()).toBeNull();
   });
 
   it('stopping mid-routine ends the routine at that leg', async () => {

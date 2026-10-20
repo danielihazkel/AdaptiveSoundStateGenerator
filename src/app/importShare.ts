@@ -27,8 +27,25 @@ export function importSharePayload(
     deps.refreshPrograms();
     deps.selectProgram(program);
   } else if (payload.kind === 'routine') {
-    const routine: Routine = { ...payload.routine, id: newId(), createdAt: now };
+    // Programs travelling with the routine get fresh ids; the legs follow.
+    const programIds = new Map<string, string>();
+    for (const shared of payload.programs ?? []) {
+      const program: Program = { ...shared, id: newId(), createdAt: now };
+      programIds.set(shared.id, program.id);
+      saveProgram(program);
+    }
+    const routine: Routine = {
+      ...payload.routine,
+      id: newId(),
+      createdAt: now,
+      legs: payload.routine.legs.map((leg) =>
+        leg.programId && programIds.has(leg.programId)
+          ? { ...leg, programId: programIds.get(leg.programId) }
+          : leg,
+      ),
+    };
     saveRoutine(routine);
+    if (programIds.size > 0) deps.refreshPrograms();
     deps.refreshRoutines();
   } else {
     const preset: Preset = { id: newId(), createdAt: now, ...payload.preset };

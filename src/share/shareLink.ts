@@ -21,7 +21,12 @@ export interface SharedPreset {
 export type SharePayload =
   | { v: 1; kind: 'program'; program: Program }
   | { v: 1; kind: 'preset'; preset: SharedPreset }
-  | { v: 1; kind: 'routine'; routine: Routine };
+  /**
+   * `programs` (Phase 17): the saved programs the routine's legs play, so a
+   * program leg arrives working on another device. Optional — older links
+   * and program-free routines carry none.
+   */
+  | { v: 1; kind: 'routine'; routine: Routine; programs?: Program[] };
 
 export const SHARE_HASH_KEY = 'share';
 /** Comfortably inside every modern browser's URL limit. */
@@ -192,9 +197,18 @@ export function validateSharePayload(raw: unknown): ShareValidation {
   if (p.kind === 'routine') {
     const routine = normalizeRoutine(p.routine);
     if (!routine) return { ok: false, error: 'This link does not contain a valid routine.' };
+    const rawPrograms = (p as { programs?: unknown }).programs;
+    const programs = (Array.isArray(rawPrograms) ? rawPrograms : [])
+      .filter((x): x is Partial<Program> => typeof x === 'object' && x !== null && Array.isArray((x as Program).segments))
+      .map((x) => normalizeProgram({ ...x, name: cleanName(x.name, 'Shared program') }));
     return {
       ok: true,
-      payload: { v: 1, kind: 'routine', routine: { ...routine, name: cleanName(routine.name, 'Shared routine') } },
+      payload: {
+        v: 1,
+        kind: 'routine',
+        routine: { ...routine, name: cleanName(routine.name, 'Shared routine') },
+        ...(programs.length > 0 ? { programs } : {}),
+      },
     };
   }
   return { ok: false, error: 'This link does not contain a Resonance program or sound.' };

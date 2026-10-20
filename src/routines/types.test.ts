@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ROUTINE_TEMPLATES, routineFromTemplate } from './templates';
 import {
   describeRoutine,
+  legsWithMissingProgram,
   MAX_LEG_MINUTES,
   MAX_ROUTINE_LEGS,
   normalizeRoutine,
   routineMinutes,
+  routineProgramIds,
 } from './types';
 
 describe('normalizeRoutine', () => {
@@ -58,5 +60,31 @@ describe('routine templates', () => {
     const kickoff = routineFromTemplate(ROUTINE_TEMPLATES[0]);
     expect(routineMinutes(kickoff)).toBe(60);
     expect(describeRoutine(kickoff)).toMatch(/^\S+ 10 → \S+ 50$/u);
+  });
+});
+
+describe('program legs (Phase 17)', () => {
+  const routine = {
+    legs: [
+      { state: 'focus' as const, intensity: 0.5, minutes: 25, programId: 'p1' },
+      { state: 'relax' as const, intensity: 0.4, minutes: 5 },
+      { state: 'sleep' as const, intensity: 0.4, minutes: 30, programId: 'p1' },
+    ],
+  };
+
+  it('keeps a leg’s program reference through normalization, drops junk', () => {
+    const r = normalizeRoutine({
+      name: 'x',
+      legs: [...routine.legs, { state: 'calm', intensity: 0.5, minutes: 5, programId: 42 }],
+    })!;
+    expect(r.legs.map((l) => l.programId)).toEqual(['p1', undefined, 'p1', undefined]);
+    expect('programId' in r.legs[3]).toBe(false);
+  });
+
+  it('lists the programs a routine uses and the legs whose program is gone', () => {
+    expect(routineProgramIds(routine)).toEqual(['p1']);
+    expect(legsWithMissingProgram(routine, new Set(['p1']))).toEqual([]);
+    expect(legsWithMissingProgram(routine, new Set())).toEqual([1, 3]);
+    expect(describeRoutine(routine)).toContain('📋');
   });
 });

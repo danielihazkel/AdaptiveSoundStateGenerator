@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { ROUTINE_TEMPLATES, routineFromTemplate } from '../routines/templates';
-import { describeRoutine, routineMinutes, type Routine } from '../routines/types';
+import type { Program } from '../programs/types';
+import {
+  describeRoutine,
+  legsWithMissingProgram,
+  routineMinutes,
+  routineProgramIds,
+  type Routine,
+} from '../routines/types';
 import { formatDuration } from './format';
 import { ShareButton } from './ShareButton';
 
@@ -11,6 +18,8 @@ import { ShareButton } from './ShareButton';
  */
 export function RoutinesPanel(props: {
   routines: Routine[];
+  /** The user's programs — program legs (Phase 17) and their share links. */
+  programs?: Program[];
   starting: boolean;
   onStart: (routine: Routine) => void;
   onEdit: (routine: Routine) => void;
@@ -27,6 +36,10 @@ export function RoutinesPanel(props: {
   ];
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = all.find((r) => r.routine.id === selectedId) ?? null;
+  const programs = props.programs ?? [];
+  const missing = selected
+    ? legsWithMissingProgram(selected.routine, new Set(programs.map((p) => p.id)))
+    : [];
 
   return (
     <section className="setup-section routines-panel" aria-labelledby="routines-title">
@@ -57,6 +70,12 @@ export function RoutinesPanel(props: {
             {describeRoutine(selected.routine)} min · {formatDuration(routineMinutes(selected.routine) * 60)}
           </p>
           {selected.description && <p className="hint">{selected.description}</p>}
+          {missing.length > 0 && (
+            <p className="notice warning" role="note">
+              {missing.length === 1 ? `Part ${missing[0]}'s program` : `The programs of parts ${missing.join(', ')}`}{' '}
+              no longer exist — {missing.length === 1 ? 'it' : 'they'} will play a sound chosen for you.
+            </p>
+          )}
           <div className="transport">
             <button
               type="button"
@@ -72,7 +91,16 @@ export function RoutinesPanel(props: {
               {selected.builtIn ? 'Customize…' : 'Edit'}
             </button>
             <ShareButton
-              getPayload={() => ({ v: 1, kind: 'routine', routine: selected.routine })}
+              getPayload={() => {
+                const ids = new Set(routineProgramIds(selected.routine));
+                const used = programs.filter((p) => ids.has(p.id));
+                return {
+                  v: 1,
+                  kind: 'routine',
+                  routine: selected.routine,
+                  ...(used.length > 0 ? { programs: used } : {}),
+                };
+              }}
               ariaLabel={`Share ${selected.routine.name}`}
             />
             {!selected.builtIn && (

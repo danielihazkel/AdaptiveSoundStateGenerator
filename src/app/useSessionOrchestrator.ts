@@ -605,46 +605,61 @@ export function useSessionOrchestrator(deps: {
     const leg = routine.legs[index];
     const last = index === routine.legs.length - 1;
     current.leg = index;
-    const served = chooseProfile(leg.state, leg.intensity, modeFor(settings, leg.state), Math.random, {
-      bucket: timeBucketOf(new Date()),
-      mono: settings.monoMode,
-    });
-    const profile = cloneProfile(served.profile);
+    // Phase 17: a leg may run one of the user's programs — it owns the sound
+    // and shape (state, depth, phases), like a saved-program session: no
+    // bandit, no adaptation, no breathing, no wake-up. A deleted program
+    // falls back to a served leg (the routines panel warns beforehand).
+    const program = leg.programId ? (deps.programs.find((p) => p.id === leg.programId) ?? null) : null;
+    const state = program ? program.baseState : leg.state;
+    const intensity = program ? program.baseIntensity : leg.intensity;
+    const served = program
+      ? null
+      : chooseProfile(state, intensity, modeFor(settings, state), Math.random, {
+          bucket: timeBucketOf(new Date()),
+          mono: settings.monoMode,
+        });
+    const profile = cloneProfile(served ? served.profile : normalizeProfile(program!.baseProfile));
     // The listener's volume carries over from leg to leg.
     const playing = engineRef.current?.getProfile();
     if (mode === 'continue' && playing) profile.masterVolume = playing.masterVolume;
     servedRef.current = served;
-    soundKindRef.current = 'served';
-    sessionProgramRef.current = null;
+    soundKindRef.current = program ? 'program' : 'served';
+    sessionProgramRef.current = program;
     sessionIntervalsRef.current = null;
-    const breathingId = breathingFor(leg.state, settings.breathingPattern);
+    const breathingId = program ? null : breathingFor(state, settings.breathingPattern);
     const breathing = breathingId ? BREATH_PATTERNS[breathingId] : undefined;
     sessionBreathingRef.current = breathing ?? null;
     customizedRef.current = false;
     volumeAdjustmentsRef.current = 0;
     lastVolumeChangeRef.current = Number.NEGATIVE_INFINITY;
     adaptation.beginSession({
-      state: leg.state,
-      intensity: leg.intensity,
-      mode: modeFor(settings, leg.state),
+      state,
+      intensity,
+      mode: modeFor(settings, state),
       coachUsed: false,
-      servedArmId: served.armId,
+      servedArmId: served?.armId ?? null,
     });
     biometrics.resetForSession();
     motion.resetForSession();
-    roomMasking.setActive(MASKING_STATES.has(leg.state));
-    const durationSec = leg.minutes * 60;
+    roomMasking.setActive(MASKING_STATES.has(state));
+    // A program's closed phases always play out in full.
+    const durationSec = program
+      ? Math.max(leg.minutes * 60, programMinDurationSec(program))
+      : leg.minutes * 60;
     // Only the last leg can end in a wake-up rise.
-    const wakeUp = last ? (wakeUpFor(leg.state, settings.wakeUp, durationSec) ?? undefined) : undefined;
+    const wakeUp =
+      last && !program ? (wakeUpFor(state, settings.wakeUp, durationSec) ?? undefined) : undefined;
     const config: SessionConfig = {
-      state: leg.state,
-      intensity: leg.intensity,
+      state,
+      intensity,
       durationSec,
       profile,
+      program: program ?? undefined,
       chimeEnabled: settings.chimeEnabled,
       breathing,
       wakeUp,
-      checkpointSec: settings.adaptationEnabled !== false ? ADAPT_INTERVAL_SEC : undefined,
+      checkpointSec:
+        !program && settings.adaptationEnabled !== false ? ADAPT_INTERVAL_SEC : undefined,
       endGuardSec: END_GUARD_SEC,
       handOff: !last,
     };
@@ -654,19 +669,20 @@ export function useSessionOrchestrator(deps: {
     const afterStart = () => {
       checkpointRef.current = {
         startedAt: new Date().toISOString(),
-        state: leg.state,
-        intensity: leg.intensity,
+        state,
+        intensity,
         plannedDurationSec: durationSec,
         profile: cloneProfile(profile),
         monoMode: engineRef.current?.isMonoMode ?? false,
-        servedArmId: served.armId,
-        servedBy: served.servedBy,
+        programId: program?.id,
+        servedArmId: served?.armId,
+        servedBy: served?.servedBy,
         breathingPattern: breathing && breathing.id !== 'pulse' ? breathing.id : undefined,
         wakeUp,
         routine: ref,
       };
       startCheckpointing(controller);
-      armSleepOnsetWatch(controller, last && leg.state === 'sleep' && !wakeUp);
+      armSleepOnsetWatch(controller, last && state === 'sleep' && !wakeUp && !program);
       armSmartWakeWatch(controller, wakeUp);
     };
     if (mode === 'start') return controller.start(config).then(afterStart);
