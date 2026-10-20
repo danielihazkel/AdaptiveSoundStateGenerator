@@ -120,7 +120,7 @@ export function resolveOutcome(sessionId: string): void {
   });
   if (credits.length > 0) {
     // Credit lands in the context the session was actually served in.
-    const ctx = contextOf(record.startedAt, record.monoMode) ?? undefined;
+    const ctx = contextOf(record.startedAt, record.monoMode, record.moodBefore) ?? undefined;
     let state = decayState(
       loadPersonalization(CANDIDATE_SET_VERSION),
       record.state,

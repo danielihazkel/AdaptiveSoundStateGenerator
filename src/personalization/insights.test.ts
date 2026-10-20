@@ -7,9 +7,14 @@ import {
   type Rating,
   type SessionRecord,
 } from '../storage/types';
-import { posteriorFor } from './bandit';
+import { posteriorFor, updateArm } from './bandit';
 import { CANDIDATE_SET_VERSION } from './candidates';
-import { computeInsights, MIN_MOOD_SESSIONS, MIN_SESSIONS_FOR_INSIGHTS } from './insights';
+import {
+  computeInsights,
+  MIN_MOOD_CELL_PULLS,
+  MIN_MOOD_SESSIONS,
+  MIN_SESSIONS_FOR_INSIGHTS,
+} from './insights';
 
 function emptyBandit(): PersonalizationState {
   return { schemaVersion: SCHEMA_VERSION, candidateSetVersion: CANDIDATE_SET_VERSION, arms: {} };
@@ -260,5 +265,21 @@ describe('mood shift (Phase 13)', () => {
     const shift = computeInsights(sessions, emptyBandit())[0].moodShift!;
     expect(shift.meanDelta).toBe(-1);
     expect(shift.bestLift).toBeNull();
+  });
+});
+
+describe('best by mood (Phase 15)', () => {
+  it('names a mood winner only once its arm has enough sessions in that mood', () => {
+    const sessions = Array.from({ length: MIN_SESSIONS_FOR_INSIGHTS }, () => focusSession());
+    let bandit = emptyBandit();
+    const low = { bucket: 'morning' as const, mono: false, mood: 'low' as const };
+    for (let i = 0; i < MIN_MOOD_CELL_PULLS - 1; i++) {
+      bandit = updateArm(bandit, 'focus', 'pulse-deep', { value: 0.95, weight: 1 }, low);
+    }
+    expect(computeInsights(sessions, bandit)[0].bestByMood).toEqual([]);
+    bandit = updateArm(bandit, 'focus', 'pulse-deep', { value: 0.95, weight: 1 }, low);
+    expect(computeInsights(sessions, bandit)[0].bestByMood).toEqual([
+      { mood: 'low', label: 'Stronger pulse', n: MIN_MOOD_CELL_PULLS },
+    ]);
   });
 });

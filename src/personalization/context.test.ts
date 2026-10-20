@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contextKey, contextOf, parseContextKey, timeBucketOf } from './context';
+import { contextKey, contextOf, moodBucketOf, moodContextKey, parseContextKey, timeBucketOf } from './context';
 
 /** Local-time constructor so the buckets don't depend on the machine's zone. */
 function at(hour: number, minute = 0): Date {
@@ -43,5 +43,28 @@ describe('contextOf / contextKey', () => {
     expect(parseContextKey('noon:stereo')).toBeNull();
     expect(parseContextKey('morning:loud')).toBeNull();
     expect(parseContextKey('')).toBeNull();
+  });
+});
+
+describe('mood context (Phase 15)', () => {
+  it('buckets the before-mood at the ends of the axis only', () => {
+    expect(moodBucketOf(undefined)).toBeNull();
+    expect(moodBucketOf(1)).toBe('low');
+    expect(moodBucketOf(2)).toBe('low');
+    expect(moodBucketOf(3)).toBeNull();
+    expect(moodBucketOf(4)).toBe('high');
+    expect(moodBucketOf(5)).toBe('high');
+  });
+
+  it('adds the mood to a stored context only when it carries one', () => {
+    expect(contextOf(at(8).toISOString(), false, 1)).toEqual({ bucket: 'morning', mono: false, mood: 'low' });
+    expect(contextOf(at(8).toISOString(), false, 3)).toEqual({ bucket: 'morning', mono: false });
+  });
+
+  it('keeps mood cells out of the time-of-day key space', () => {
+    expect(moodContextKey('high')).toBe('mood:high');
+    expect(parseContextKey(moodContextKey('low'))).toBeNull();
+    // The time key never encodes the mood.
+    expect(contextKey({ bucket: 'evening', mono: false, mood: 'low' })).toBe('evening:stereo');
   });
 });

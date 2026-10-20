@@ -3,7 +3,14 @@ import { normalizeProfile, type NoiseType } from '../audio/types';
 import type { ArmStats, PersonalizationState, SessionRecord } from '../storage/types';
 import { contextualPosterior, posteriorFor } from './bandit';
 import { candidatesFor } from './candidates';
-import { parseContextKey, TIME_BUCKETS, type TimeBucket } from './context';
+import {
+  MOOD_BUCKETS,
+  moodContextKey,
+  parseContextKey,
+  TIME_BUCKETS,
+  type MoodBucket,
+  type TimeBucket,
+} from './context';
 import { scoreSession } from './reward';
 import {
   bestFoundAfter,
@@ -32,6 +39,8 @@ export const MIN_ARM_PULLS = 3;
 export const ARM_CI_Z = 1.96;
 /** A time of day needs this many weighted pulls (all arms) before it gets a winner. */
 export const MIN_CONTEXT_PULLS = 2;
+/** Sessions the winning arm needs inside a mood cell before Insights names it. */
+export const MIN_MOOD_CELL_PULLS = 3;
 /** Sessions per noise type before it can be called "preferred". */
 export const MIN_NOISE_SESSIONS = 3;
 /** Sessions scoring at least this count as "worked" for volume preference. */
@@ -97,6 +106,12 @@ export interface StateInsights {
   arms: ArmInsight[];
   /** Best variation per time of day, where that time has enough evidence. */
   bestByTime: Array<{ bucket: TimeBucket; label: string; n: number }>;
+  /**
+   * Phase 15: best variation by how the user felt going in (the low / high
+   * end of the state's mood axis), once that mood's best arm has at least
+   * MIN_MOOD_CELL_PULLS sessions of its own.
+   */
+  bestByMood: Array<{ mood: MoodBucket; label: string; n: number }>;
   componentEffectiveness: ComponentEffectiveness[];
   /** Reward-weighted P25–P75 of the binaural beat, Hz. */
   preferredBeatRange: [number, number] | null;
@@ -237,6 +252,22 @@ function computeStateInsights(
     if (winner) bestByTime.push({ bucket, label: winner.label, n });
   }
 
+  // Mood winners (Phase 15): the same chain the bandit serves with, minus
+  // the time context — state posterior, then the mood cell.
+  const bestByMood: StateInsights['bestByMood'] = [];
+  for (const mood of MOOD_BUCKETS) {
+    const cell = contexts[moodContextKey(mood)];
+    if (!cell) continue;
+    let winner: { label: string; mean: number; n: number } | null = null;
+    for (const spec of candidatesFor(state)) {
+      const { mean } = contextualPosterior(armStats[spec.id], undefined, spec.id, undefined, cell[spec.id]);
+      if (!winner || mean > winner.mean) winner = { label: spec.label, mean, n: cell[spec.id]?.n ?? 0 };
+    }
+    if (winner && winner.n >= MIN_MOOD_CELL_PULLS) {
+      bestByMood.push({ mood, label: winner.label, n: winner.n });
+    }
+  }
+
   const componentEffectiveness: ComponentEffectiveness[] = SOUND_COMPONENTS.map((component) => {
     const on = scored.filter((s) => componentEnabled(s.record, component));
     const totalWeight = on.reduce((acc, s) => acc + s.weight, 0);
@@ -314,6 +345,7 @@ function computeStateInsights(
     hrvDeltaPct,
     flywheel: personalizationLift(records),
     bestByTime,
+    bestByMood,
     componentEffectiveness,
     preferredBeatRange,
     preferredNoiseType,

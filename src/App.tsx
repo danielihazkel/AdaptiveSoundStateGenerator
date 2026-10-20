@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { STATES } from './audio/states';
-import { timeBucketOf } from './personalization/context';
+import { moodBucketOf, timeBucketOf } from './personalization/context';
 import { describeServedSound } from './personalization/personalizer';
 import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
@@ -328,6 +328,7 @@ export function App() {
   const { kind: soundKind, served } = session.getServedInfo();
   const currentArmId = adaptation.getCurrentArmId();
   const sessionMono = session.getEngine()?.isMonoMode ?? settings.monoMode;
+  const sessionMood = moodBucketOf(adaptation.getMeta()?.moodBefore);
   const explainOn = screen === 'session' && settings.explainSound !== false;
   const soundExplanation = useMemo(
     () =>
@@ -338,10 +339,10 @@ export function App() {
             servedArmId: served?.armId,
             servedBy: served?.servedBy,
             currentArmId: currentArmId ?? undefined,
-            ctx: { bucket: timeBucketOf(new Date()), mono: sessionMono },
+            ctx: { bucket: timeBucketOf(new Date()), mono: sessionMono, mood: sessionMood },
           })
         : null,
-    [explainOn, sessionState, soundKind, served, currentArmId, sessionMono],
+    [explainOn, sessionState, soundKind, served, currentArmId, sessionMono, sessionMood],
   );
   const getAnalyser = useStableCallback(() => session.getEngine()?.attachAnalyser() ?? null);
 

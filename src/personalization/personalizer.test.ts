@@ -340,3 +340,42 @@ describe('serving context', () => {
     expect(at('night')).toBe('beat-down');
   });
 });
+
+describe('mood context (Phase 15)', () => {
+  it('a session that started "scattered" also credits the low-mood cell, and locked mode follows it', () => {
+    const startedAt = new Date(2026, 8, 1, 8).toISOString();
+    for (let i = 0; i < 4; i++) {
+      for (const [armId, moodBefore, rating] of [
+        ['pulse-deep', 1, 5],
+        ['pulse-deep', 5, 1],
+        ['beat-down', 1, 1],
+        ['beat-down', 5, 5],
+      ] as const) {
+        const s = makeSession({
+          startedAt,
+          servedArmId: armId,
+          servedBy: 'bandit',
+          moodBefore,
+          feedback: { rating, ratedAt: startedAt },
+        });
+        appendSession(s);
+        resolveOutcome(s.id);
+      }
+    }
+    const state = loadPersonalization(CANDIDATE_SET_VERSION);
+    expect(Object.keys(state.contexts!.focus!).sort()).toEqual(['mood:high', 'mood:low', 'morning:stereo']);
+    const pick = (mood: 'low' | 'high') =>
+      chooseProfile('focus', 0.5, 'locked', Math.random, { bucket: 'morning', mono: false, mood }).armId;
+    expect(pick('low')).toBe('pulse-deep');
+    expect(pick('high')).toBe('beat-down');
+  });
+
+  it('pinned sessions credit the arm without advancing the cold-start count', () => {
+    const s = makeSession({ servedArmId: 'bass-up', servedBy: 'pinned', feedback: { rating: 5, ratedAt: new Date().toISOString() } });
+    appendSession(s);
+    resolveOutcome(s.id);
+    const state = loadPersonalization(CANDIDATE_SET_VERSION);
+    expect(state.arms.focus!['bass-up'].n).toBeGreaterThan(0);
+    expect(eligibleSessionCount(state, 'focus')).toBe(0);
+  });
+});

@@ -15,10 +15,10 @@ import { computeHrvTrend } from '../biometrics/hrv';
 import type { BiometricSample } from '../biometrics/types';
 import { CANDIDATE_SET_VERSION } from '../personalization/candidates';
 import { buildCandidateProfile } from '../personalization/candidates';
-import { timeBucketOf } from '../personalization/context';
+import { moodBucketOf, timeBucketOf } from '../personalization/context';
 import type { CheckpointInfo, SessionController } from '../session/sessionController';
 import { loadPersonalization } from '../storage/storage';
-import type { PersonalizationMode, SessionSegment } from '../storage/types';
+import type { MoodLevel, PersonalizationMode, SessionSegment } from '../storage/types';
 
 export interface SessionMeta {
   state: MentalState;
@@ -27,6 +27,8 @@ export interface SessionMeta {
   coachUsed: boolean;
   /** The arm the personalizer served, or null for presets/programs/replays. */
   servedArmId: string | null;
+  /** Phase 15: the before-mood, so a mid-session resample sees the same context. */
+  moodBefore?: MoodLevel;
 }
 
 /**
@@ -104,7 +106,11 @@ export function useAdaptationLoop(deps: {
         hrvTrend: hrv?.trend ?? null,
       },
       personalization: loadPersonalization(CANDIDATE_SET_VERSION),
-      context: { bucket: timeBucketOf(new Date()), mono: engine.isMonoMode },
+      context: {
+        bucket: timeBucketOf(new Date()),
+        mono: engine.isMonoMode,
+        mood: moodBucketOf(meta.moodBefore),
+      },
     });
     segmentVolumeTweaksRef.current = 0;
 

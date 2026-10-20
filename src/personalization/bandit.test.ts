@@ -20,7 +20,7 @@ import {
   updateArm,
 } from './bandit';
 import { computeReward } from './reward';
-import { contextualPosterior, CONTEXT_SHRINK_N, MIN_POSTERIOR_STD } from './bandit';
+import { contextualPosterior, CONTEXT_SHRINK_N, MIN_POSTERIOR_STD, servePosterior } from './bandit';
 import { contextOf, timeBucketOf, type ServeContext } from './context';
 
 /** Deterministic LCG (numerical recipes constants) for seeded Thompson draws. */
@@ -109,11 +109,12 @@ describe('decayState', () => {
     expect(decayState(after, 'focus').resolved).toEqual({ focus: 2 });
   });
 
-  it('an uncounted session decays but leaves the schedule counter alone — even when absent', () => {
+  it('an uncounted session decays but does not advance the schedule counter', () => {
     let state = updateArm(emptyState(), 'focus', PRIOR_ARM_ID, { value: 0.6, weight: 1 });
-    const legacy = decayState(state, 'focus', false);
-    expect(legacy.arms.focus![PRIOR_ARM_ID].n).toBeCloseTo(DECAY, 12);
-    expect(legacy.resolved).toBeUndefined();
+    const first = decayState(state, 'focus', false);
+    expect(first.arms.focus![PRIOR_ARM_ID].n).toBeCloseTo(DECAY, 12);
+    // Written as 0, so the Σn fallback can't count it either.
+    expect(first.resolved).toEqual({ focus: 0 });
     state = decayState(state, 'focus');
     expect(decayState(state, 'focus', false).resolved).toEqual({ focus: 1 });
   });
@@ -338,6 +339,69 @@ describe('contextual posterior', () => {
     expect(Array.from({ length: 12 }, () => sampleArm(state, 'relax', rng1))).toEqual(pinned);
     const rng2 = lcg(123);
     expect(Array.from({ length: 12 }, () => sampleArm(state, 'relax', rng2, morning))).toEqual(pinned);
+    // Phase 15: a mood with no evidence of its own changes nothing either.
+    const rng3 = lcg(123);
+    expect(
+      Array.from({ length: 12 }, () => sampleArm(state, 'relax', rng3, { ...morning, mood: 'low' })),
+    ).toEqual(pinned);
+  });
+
+  it('Phase 15: credit also lands in the mood cell, and serving shrinks toward it', () => {
+    const lowMorning: ServeContext = { ...morning, mood: 'low' };
+    let state = emptyState();
+    for (let i = 0; i < 4; i++) {
+      state = updateArm(state, 'focus', 'bass-up', { value: 0.95, weight: 1 }, lowMorning);
+      state = updateArm(state, 'focus', 'bass-up', { value: 0.3, weight: 1 }, morning);
+    }
+    expect(Object.keys(state.contexts!.focus!).sort()).toEqual(['mood:low', 'morning:stereo']);
+    expect(state.contexts!.focus!['mood:low']['bass-up'].n).toBe(4);
+    const plain = servePosterior(state, 'focus', 'bass-up', morning);
+    const low = servePosterior(state, 'focus', 'bass-up', lowMorning);
+    const high = servePosterior(state, 'focus', 'bass-up', { ...morning, mood: 'high' });
+    expect(low.mean).toBeGreaterThan(plain.mean);
+    expect(high).toEqual(plain);
+    // The chain: time context first, then the mood cell on top of it.
+    const ctxStats = state.contexts!.focus!['morning:stereo']['bass-up'];
+    const timeOnly = contextualPosterior(state.arms.focus!['bass-up'], ctxStats, 'bass-up');
+    const moodStats = state.contexts!.focus!['mood:low']['bass-up'];
+    expect(low.mean).toBeCloseTo(
+      (timeOnly.mean * CONTEXT_SHRINK_N + moodStats.sum) / (CONTEXT_SHRINK_N + moodStats.n),
+      12,
+    );
+  });
+
+  it('Phase 15: rebuild with before-moods equals incremental', () => {
+    const base = {
+      id: 'x',
+      state: 'focus' as const,
+      intensity: 0.5,
+      plannedDurationSec: 1800,
+      actualDurationSec: 1800,
+      completed: true,
+      customized: false,
+      volumeAdjustments: 0,
+      monoMode: false,
+      profile: STATES.focus.buildProfile(0.5),
+      servedBy: 'bandit' as const,
+    };
+    const records: SessionRecord[] = [
+      { ...base, id: 'b', startedAt: '2026-08-21T09:00:00.000Z', servedArmId: 'bass-up', moodBefore: 5, banditResolvedAt: '2026-08-21T10:00:00.000Z' },
+      { ...base, id: 'a', startedAt: '2026-08-20T09:00:00.000Z', servedArmId: PRIOR_ARM_ID, moodBefore: 1, banditResolvedAt: '2026-08-20T10:00:00.000Z' },
+    ];
+    let incremental = emptyState();
+    for (const r of [...records].reverse()) {
+      incremental = decayState(incremental, r.state);
+      incremental = updateArm(
+        incremental,
+        r.state,
+        r.servedArmId!,
+        computeReward(r)!,
+        contextOf(r.startedAt, r.monoMode, r.moodBefore) ?? undefined,
+      );
+    }
+    const rebuilt = rebuildFromSessions(records);
+    expect(rebuilt).toEqual(incremental);
+    expect(Object.keys(rebuilt.contexts!.focus!)).toEqual(expect.arrayContaining(['mood:low', 'mood:high']));
   });
 
   it('equals posteriorFor with no context evidence, then shrinks toward the context mean', () => {

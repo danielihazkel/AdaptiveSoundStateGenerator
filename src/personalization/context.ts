@@ -5,6 +5,8 @@
  * bandit keeps a per-(state, context) posterior shrunk toward the state-level
  * one, so context only matters once there is context-specific evidence.
  */
+import type { MoodLevel } from '../storage/types';
+
 export type TimeBucket = 'morning' | 'afternoon' | 'evening' | 'night';
 
 export const TIME_BUCKETS: readonly TimeBucket[] = ['morning', 'afternoon', 'evening', 'night'];
@@ -20,6 +22,34 @@ export interface ServeContext {
   bucket: TimeBucket;
   /** Speaker / mono fallback active — binaural arms are substituted. */
   mono: boolean;
+  /**
+   * Phase 15: how the user said they felt going in, bucketed. A separate
+   * cell family from time × output (see moodContextKey) — crossing the two
+   * would leave too little evidence per cell at ~1 session a day.
+   */
+  mood?: MoodBucket | null;
+}
+
+/** Before-mood, coarsened: the low or high end of the state's own axis. */
+export type MoodBucket = 'low' | 'high';
+
+export const MOOD_BUCKETS: readonly MoodBucket[] = ['low', 'high'];
+
+/** 1–2 = low, 4–5 = high; the neutral middle and "didn't say" carry no mood context. */
+export function moodBucketOf(level: MoodLevel | undefined): MoodBucket | null {
+  if (level === undefined) return null;
+  if (level <= 2) return 'low';
+  if (level >= 4) return 'high';
+  return null;
+}
+
+/**
+ * Storage key of a mood cell, in the same per-state contexts map as the
+ * time × output cells. parseContextKey rejects it ("mood" is no time
+ * bucket), so time-of-day readers skip mood cells by construction.
+ */
+export function moodContextKey(mood: MoodBucket): string {
+  return `mood:${mood}`;
 }
 
 /** Local time of day: 5–11 morning, 11–17 afternoon, 17–22 evening, else night. */
@@ -32,10 +62,15 @@ export function timeBucketOf(date: Date): TimeBucket {
 }
 
 /** Context a stored session was served in; null when its timestamp is unusable. */
-export function contextOf(startedAtIso: string, mono: boolean): ServeContext | null {
+export function contextOf(
+  startedAtIso: string,
+  mono: boolean,
+  moodBefore?: MoodLevel,
+): ServeContext | null {
   const date = new Date(startedAtIso);
   if (Number.isNaN(date.getTime())) return null;
-  return { bucket: timeBucketOf(date), mono };
+  const mood = moodBucketOf(moodBefore);
+  return mood ? { bucket: timeBucketOf(date), mono, mood } : { bucket: timeBucketOf(date), mono };
 }
 
 /** Stable storage key for a context — never change the format. */

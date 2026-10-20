@@ -1,13 +1,6 @@
 import type { MentalState } from '../audio/states';
 import type { PersonalizationState } from '../storage/types';
-import {
-  bestArm,
-  COLD_START_SESSIONS,
-  contextStatsFor,
-  contextualPosterior,
-  eligibleSessionCount,
-  pooledPriorMean,
-} from './bandit';
+import { bestArm, COLD_START_SESSIONS, eligibleSessionCount, servePosterior } from './bandit';
 import { candidatesFor, PRIOR_ARM_ID } from './candidates';
 import type { ServeContext } from './context';
 import { ARM_CI_Z } from './insights';
@@ -98,13 +91,8 @@ export function explainServed(
   const explanation: SoundExplanation = { label: armLabel(state, armId), reason };
   const stats = personalization.arms[state]?.[armId];
   if (stats && stats.n > 0) {
-    // The same posterior the bandit decided with (context + pooled prior).
-    const { mean, std } = contextualPosterior(
-      stats,
-      contextStatsFor(personalization, state, ctx)?.[armId],
-      armId,
-      pooledPriorMean(personalization, state, armId),
-    );
+    // The same posterior the bandit decided with (context, mood, pooled prior).
+    const { mean, std } = servePosterior(personalization, state, armId, ctx);
     explanation.scorePct = Math.round(mean * 100);
     explanation.ciPct = Math.round(ARM_CI_Z * std * 100);
   }

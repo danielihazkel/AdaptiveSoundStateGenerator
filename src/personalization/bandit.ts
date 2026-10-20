@@ -7,7 +7,7 @@ import type {
 } from '../storage/types';
 import { SCHEMA_VERSION } from '../storage/types';
 import { CANDIDATE_SET_VERSION, candidatesFor, PRIOR_ARM_ID } from './candidates';
-import { contextKey, contextOf, type ServeContext } from './context';
+import { contextKey, contextOf, moodContextKey, type ServeContext } from './context';
 import { computeCredits, hasBanditSignal, type RewardResult } from './reward';
 import { makeSourceArmResolver } from './sourceArm';
 
@@ -162,16 +162,26 @@ export function contextualPosterior(
   ctxStats: ArmStats | undefined,
   armId: string,
   priorMean?: number,
+  /**
+   * Phase 15: the before-mood cell, shrunk in a chain — toward the
+   * time-context posterior, which is itself shrunk toward the state one.
+   * Absent or empty = exactly the two-level result.
+   */
+  moodStats?: ArmStats,
 ): Posterior {
   const base = posteriorFor(stateStats, armId, priorMean);
   const nc = ctxStats?.n ?? 0;
-  if (nc <= 0) return base;
+  const nm = moodStats?.n ?? 0;
+  if (nc <= 0 && nm <= 0) return base;
   const n = stateStats?.n ?? 0;
+  let mean = base.mean;
+  if (nc > 0) mean = (mean * CONTEXT_SHRINK_N + (ctxStats?.sum ?? 0)) / (CONTEXT_SHRINK_N + nc);
+  if (nm > 0) mean = (mean * CONTEXT_SHRINK_N + (moodStats?.sum ?? 0)) / (CONTEXT_SHRINK_N + nm);
   return {
-    mean: (base.mean * CONTEXT_SHRINK_N + (ctxStats?.sum ?? 0)) / (CONTEXT_SHRINK_N + nc),
+    mean,
     std: Math.max(
       MIN_POSTERIOR_STD,
-      Math.sqrt(blendedVariance(stateStats) / (PRIOR_N + n + nc)),
+      Math.sqrt(blendedVariance(stateStats) / (PRIOR_N + n + nc + nm)),
     ),
   };
 }
@@ -183,6 +193,36 @@ export function contextStatsFor(
 ): Record<string, ArmStats> | undefined {
   if (!ctx) return undefined;
   return state.contexts?.[mental]?.[contextKey(ctx)];
+}
+
+/** The before-mood cell for this serve, when the user said how they felt. */
+export function moodStatsFor(
+  state: PersonalizationState,
+  mental: MentalState,
+  ctx: ServeContext | undefined,
+): Record<string, ArmStats> | undefined {
+  if (!ctx?.mood) return undefined;
+  return state.contexts?.[mental]?.[moodContextKey(ctx.mood)];
+}
+
+/**
+ * The posterior the bandit decides with for one arm in one serve: state
+ * level, the time × output context, the before-mood cell, and the pooled
+ * cross-state prior. Shared by sampling, locked mode and "why this sound".
+ */
+export function servePosterior(
+  state: PersonalizationState,
+  mental: MentalState,
+  armId: string,
+  ctx?: ServeContext,
+): Posterior {
+  return contextualPosterior(
+    state.arms[mental]?.[armId],
+    contextStatsFor(state, mental, ctx)?.[armId],
+    armId,
+    pooledPriorMean(state, mental, armId),
+    moodStatsFor(state, mental, ctx)?.[armId],
+  );
 }
 
 /** Box–Muller standard normal from a uniform rng. */
@@ -200,17 +240,10 @@ export function sampleArm(
   rng: () => number = Math.random,
   ctx?: ServeContext,
 ): string {
-  const armStats = state.arms[mental] ?? {};
-  const ctxStats = contextStatsFor(state, mental, ctx);
   let best = PRIOR_ARM_ID;
   let bestDraw = -Infinity;
   for (const { id } of candidatesFor(mental)) {
-    const { mean, std } = contextualPosterior(
-      armStats[id],
-      ctxStats?.[id],
-      id,
-      pooledPriorMean(state, mental, id),
-    );
+    const { mean, std } = servePosterior(state, mental, id, ctx);
     const draw = mean + std * gaussian(rng);
     if (draw > bestDraw) {
       bestDraw = draw;
@@ -226,17 +259,10 @@ export function bestArm(
   mental: MentalState,
   ctx?: ServeContext,
 ): string {
-  const armStats = state.arms[mental] ?? {};
-  const ctxStats = contextStatsFor(state, mental, ctx);
   let best = PRIOR_ARM_ID;
   let bestMean = -Infinity;
   for (const { id } of candidatesFor(mental)) {
-    const { mean } = contextualPosterior(
-      armStats[id],
-      ctxStats?.[id],
-      id,
-      pooledPriorMean(state, mental, id),
-    );
+    const { mean } = servePosterior(state, mental, id, ctx);
     if (mean > bestMean) {
       bestMean = mean;
       best = id;
@@ -287,16 +313,13 @@ export function updateArm(
     },
   };
   if (!ctx) return next;
-  const key = contextKey(ctx);
-  const stateContexts = state.contexts?.[mental] ?? {};
-  const inContext = stateContexts[key] ?? {};
-  next.contexts = {
-    ...(state.contexts ?? {}),
-    [mental]: {
-      ...stateContexts,
-      [key]: { ...inContext, [armId]: addReward(inContext[armId], reward) },
-    },
-  };
+  const stateContexts = { ...(state.contexts?.[mental] ?? {}) };
+  const keys = ctx.mood ? [contextKey(ctx), moodContextKey(ctx.mood)] : [contextKey(ctx)];
+  for (const key of keys) {
+    const inContext = stateContexts[key] ?? {};
+    stateContexts[key] = { ...inContext, [armId]: addReward(inContext[armId], reward) };
+  }
+  next.contexts = { ...(state.contexts ?? {}), [mental]: stateContexts };
   return next;
 }
 
@@ -331,15 +354,14 @@ export function decayState(
   mental: MentalState,
   count = true,
 ): PersonalizationState {
+  // The counter is written either way: from here on it, not the Σn
+  // fallback, is the count — an uncounted session must not count via Σn.
+  const resolved = state.resolved?.[mental] ?? 0;
   const next: PersonalizationState = {
     ...state,
     arms: { ...state.arms, [mental]: decayStats(state.arms[mental] ?? {}) },
+    resolved: { ...(state.resolved ?? {}), [mental]: count ? resolved + 1 : resolved },
   };
-  // An uncounted session leaves the counter untouched — even absent, so a
-  // legacy payload keeps its Σn fallback (eligibleSessionCount).
-  if (count) {
-    next.resolved = { ...(state.resolved ?? {}), [mental]: (state.resolved?.[mental] ?? 0) + 1 };
-  }
   const stateContexts = state.contexts?.[mental];
   if (stateContexts) {
     const decayed: Record<string, Record<string, ArmStats>> = {};
@@ -378,7 +400,7 @@ export function rebuildFromSessions(
   for (const { record } of ordered) {
     const credits = computeCredits(record, { sourceArm });
     if (credits.length === 0) continue;
-    const ctx = contextOf(record.startedAt, record.monoMode) ?? undefined;
+    const ctx = contextOf(record.startedAt, record.monoMode, record.moodBefore) ?? undefined;
     state = decayState(state, record.state, countsTowardSchedule(record));
     for (const credit of credits) {
       state = updateArm(state, record.state, credit.armId, credit.reward, ctx);

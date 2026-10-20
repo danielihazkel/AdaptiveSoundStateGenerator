@@ -252,6 +252,20 @@ export function InsightsScreen(props: {
                   </dd>
                 </>
               )}
+              {insight.bestByMood.length > 0 && (
+                <>
+                  <dt>Works best when</dt>
+                  <dd>
+                    {insight.bestByMood.map((b) => (
+                      <div key={b.mood}>
+                        you start out{' '}
+                        {MOOD_AXES[insight.state][b.mood === 'low' ? 0 : 1].toLowerCase()} ·{' '}
+                        {b.label}
+                      </div>
+                    ))}
+                  </dd>
+                </>
+              )}
               {insight.preferredBeatRange && (
                 <>
                   <dt>Preferred beat</dt>

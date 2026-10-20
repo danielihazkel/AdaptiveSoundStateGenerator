@@ -5,7 +5,7 @@ import { BREATH_PATTERNS, type BreathPattern } from '../audio/breathing';
 import { AudioEngine } from '../audio/engine';
 import { STATES, type MentalState } from '../audio/states';
 import { cloneProfile, normalizeProfile, type SoundProfile } from '../audio/types';
-import { timeBucketOf, type ServeContext } from '../personalization/context';
+import { moodBucketOf, timeBucketOf, type ServeContext } from '../personalization/context';
 import type { SessionSoundKind } from '../personalization/explain';
 import { chooseProfile, pinnedProfile, type ServedProfile } from '../personalization/personalizer';
 import { playSilentKeepAlive } from '../platform/silentAudio';
@@ -307,10 +307,12 @@ export function useSessionOrchestrator(deps: {
     setStarting(true);
     setStartError(null);
     try {
-      // Time of day and speakers-vs-headphones shape which arm works (context.ts).
+      // Time of day, speakers-vs-headphones and (Phase 15) how the user feels
+      // going in shape which arm works (context.ts).
       const serveContext: ServeContext = {
         bucket: timeBucketOf(new Date()),
         mono: settings.monoMode,
+        mood: moodBucketOf(opts.moodBefore),
       };
       const direct = opts.replayOf ?? null;
       const pin = direct ? null : (opts.pinArm ?? null);
@@ -421,6 +423,7 @@ export function useSessionOrchestrator(deps: {
         mode: modeFor(settings, sessionState),
         coachUsed: coach.consumeApplied(),
         servedArmId: servedRef.current?.armId ?? null,
+        moodBefore: opts.moodBefore,
       });
       coach.reset();
       biometrics.resetForSession();
