@@ -395,6 +395,41 @@ describe('useSessionOrchestrator', () => {
     continueWith.mockRestore();
   });
 
+  it('Phase 17: a routine before-mood lands on the final leg, and is context only where its axis applies', async () => {
+    const { result, adaptation } = setup();
+    await act(async () => {
+      await result.current.beginRoutine(
+        {
+          id: 'r5',
+          name: 'Into focus',
+          createdAt: '2026-10-19T08:00:00.000Z',
+          legs: [
+            { state: 'energy', intensity: 0.5, minutes: 1 },
+            { state: 'focus', intensity: 0.5, minutes: 1 },
+          ],
+        },
+        { moodBefore: 2 },
+      );
+    });
+    // Leg one (energy) is on another axis: no mood there.
+    expect(adaptation.beginSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ state: 'energy', moodBefore: undefined }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(adaptation.beginSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ state: 'focus', moodBefore: 2 }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(65_000);
+    });
+    const [last, first] = loadSessions();
+    expect(first.moodBefore).toBeUndefined();
+    expect(last).toMatchObject({ state: 'focus', moodBefore: 2 });
+    expect(result.current.getLastSession()?.moodBefore).toBe(2);
+  });
+
   it('Phase 17: a leg whose program was deleted plays a served sound instead', async () => {
     const { result, adaptation } = setup();
     await act(async () => {

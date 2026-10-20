@@ -6,6 +6,7 @@ import {
   MAX_LEG_MINUTES,
   MAX_ROUTINE_LEGS,
   normalizeRoutine,
+  routineDestination,
   routineMinutes,
   routineProgramIds,
 } from './types';
@@ -86,5 +87,16 @@ describe('program legs (Phase 17)', () => {
     expect(legsWithMissingProgram(routine, new Set(['p1']))).toEqual([]);
     expect(legsWithMissingProgram(routine, new Set())).toEqual([1, 3]);
     expect(describeRoutine(routine)).toContain('📋');
+  });
+});
+
+describe('routineDestination (Phase 17)', () => {
+  it('is the last leg’s state, or its program’s base state', () => {
+    const legs = [
+      { state: 'energy' as const, intensity: 0.5, minutes: 10 },
+      { state: 'focus' as const, intensity: 0.5, minutes: 10, programId: 'p' },
+    ];
+    expect(routineDestination({ legs }, [])).toBe('focus');
+    expect(routineDestination({ legs }, [{ id: 'p', baseState: 'relax' }])).toBe('relax');
   });
 });

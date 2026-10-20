@@ -4,10 +4,13 @@ import type { Program } from '../programs/types';
 import {
   describeRoutine,
   legsWithMissingProgram,
+  routineDestination,
   routineMinutes,
   routineProgramIds,
   type Routine,
 } from '../routines/types';
+import type { MoodLevel } from '../storage/types';
+import { MoodScale } from './MoodScale';
 import { formatDuration } from './format';
 import { ShareButton } from './ShareButton';
 
@@ -21,7 +24,8 @@ export function RoutinesPanel(props: {
   /** The user's programs — program legs (Phase 17) and their share links. */
   programs?: Program[];
   starting: boolean;
-  onStart: (routine: Routine) => void;
+  /** `moodBefore` (Phase 17): the optional check-in, on the destination's axis. */
+  onStart: (routine: Routine, moodBefore?: MoodLevel) => void;
   onEdit: (routine: Routine) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
@@ -35,6 +39,7 @@ export function RoutinesPanel(props: {
     })),
   ];
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [moodBefore, setMoodBefore] = useState<MoodLevel | undefined>(undefined);
   const selected = all.find((r) => r.routine.id === selectedId) ?? null;
   const programs = props.programs ?? [];
   const missing = selected
@@ -54,7 +59,10 @@ export function RoutinesPanel(props: {
             type="button"
             className={`chip${selectedId === routine.id ? ' selected' : ''}`}
             aria-pressed={selectedId === routine.id}
-            onClick={() => setSelectedId(selectedId === routine.id ? null : routine.id)}
+            onClick={() => {
+              setSelectedId(selectedId === routine.id ? null : routine.id);
+              setMoodBefore(undefined);
+            }}
           >
             {routine.name}
           </button>
@@ -76,12 +84,22 @@ export function RoutinesPanel(props: {
               no longer exist — {missing.length === 1 ? 'it' : 'they'} will play a sound chosen for you.
             </p>
           )}
+          <MoodScale
+            state={routineDestination(selected.routine, programs)}
+            question="Before the routine I feel"
+            value={moodBefore}
+            onChange={setMoodBefore}
+          />
           <div className="transport">
             <button
               type="button"
               className="play-button"
               disabled={props.starting}
-              onClick={() => props.onStart(selected.routine)}
+              onClick={() => {
+                // The answer belongs to this one run.
+                props.onStart(selected.routine, moodBefore);
+                setMoodBefore(undefined);
+              }}
             >
               {props.starting ? 'Starting…' : `► Start ${selected.routine.name}`}
             </button>

@@ -107,3 +107,17 @@ export function legsWithMissingProgram(
 ): number[] {
   return routine.legs.flatMap((l, i) => (l.programId && !programIds.has(l.programId) ? [i + 1] : []));
 }
+
+/**
+ * Where the routine ends up: its last leg's state — or, for a program leg,
+ * the program's base state (when the program still exists). The mood
+ * check-in is asked on this state's axis.
+ */
+export function routineDestination(
+  routine: Pick<Routine, 'legs'>,
+  programs: ReadonlyArray<{ id: string; baseState: MentalState }>,
+): MentalState {
+  const last = routine.legs[routine.legs.length - 1];
+  const program = last.programId ? programs.find((p) => p.id === last.programId) : undefined;
+  return program ? program.baseState : last.state;
+}

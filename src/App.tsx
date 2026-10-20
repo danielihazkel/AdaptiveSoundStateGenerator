@@ -575,7 +575,7 @@ export function App() {
           routines={data.routines}
           programs={programs}
           starting={session.starting}
-          onStart={(routine) => void session.beginRoutine(routine)}
+          onStart={(routine, mood) => void session.beginRoutine(routine, { moodBefore: mood })}
           onEdit={openRoutineEditor}
           onNew={() =>
             openRoutineEditor({

@@ -19,7 +19,7 @@ import {
   type SessionConfig,
   type SessionResult,
 } from '../session/sessionController';
-import type { Routine, RoutineRef } from '../routines/types';
+import { routineDestination, type Routine, type RoutineRef } from '../routines/types';
 import {
   appendSession,
   clearInProgress,
@@ -145,6 +145,12 @@ export function useSessionOrchestrator(deps: {
     routine: Routine;
     leg: number;
     records: Array<{ recordId: string; state: MentalState }>;
+    /**
+     * Phase 17: how the user felt going in, on the routine's destination
+     * axis (its last leg's state) — it pairs with the after-mood on the
+     * final leg's record, and is serving context for legs in that state.
+     */
+    moodBefore?: MoodLevel;
   } | null>(null);
   /** Which leg is playing — React state so the session screen follows hand-offs. */
   const [routineLeg, setRoutineLeg] = useState<RoutineRef | null>(null);
@@ -612,11 +618,16 @@ export function useSessionOrchestrator(deps: {
     const program = leg.programId ? (deps.programs.find((p) => p.id === leg.programId) ?? null) : null;
     const state = program ? program.baseState : leg.state;
     const intensity = program ? program.baseIntensity : leg.intensity;
+    // The before-mood was asked on the destination's axis: it only means
+    // something for legs in that state.
+    const moodBefore =
+      state === routineDestination(routine, deps.programs) ? current.moodBefore : undefined;
     const served = program
       ? null
       : chooseProfile(state, intensity, modeFor(settings, state), Math.random, {
           bucket: timeBucketOf(new Date()),
           mono: settings.monoMode,
+          mood: moodBucketOf(moodBefore),
         });
     const profile = cloneProfile(served ? served.profile : normalizeProfile(program!.baseProfile));
     // The listener's volume carries over from leg to leg.
@@ -638,6 +649,7 @@ export function useSessionOrchestrator(deps: {
       mode: modeFor(settings, state),
       coachUsed: false,
       servedArmId: served?.armId ?? null,
+      moodBefore,
     });
     biometrics.resetForSession();
     motion.resetForSession();
@@ -680,6 +692,8 @@ export function useSessionOrchestrator(deps: {
         breathingPattern: breathing && breathing.id !== 'pulse' ? breathing.id : undefined,
         wakeUp,
         routine: ref,
+        // Recorded on the final leg, where the after-mood is asked.
+        moodBefore: last ? current.moodBefore : undefined,
       };
       startCheckpointing(controller);
       armSleepOnsetWatch(controller, last && state === 'sleep' && !wakeUp && !program);
@@ -691,7 +705,7 @@ export function useSessionOrchestrator(deps: {
   };
 
   /** Start a routine from its first leg (Phase 14). Same gesture rules as begin(). */
-  const beginRoutine = async (routine: Routine) => {
+  const beginRoutine = async (routine: Routine, opts: { moodBefore?: MoodLevel } = {}) => {
     if (starting) return;
     playSilentKeepAlive();
     startMotionIfConsented();
@@ -712,7 +726,7 @@ export function useSessionOrchestrator(deps: {
       }
       sessionLockRef.current = releaseLock;
       coach.reset();
-      routineRef.current = { routine, leg: 0, records: [] };
+      routineRef.current = { routine, leg: 0, records: [], moodBefore: opts.moodBefore };
       await startLeg(0, 'start');
       deps.onSessionStarted();
     } catch (err) {
