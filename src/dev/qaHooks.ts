@@ -5,7 +5,7 @@ import { analyzeTransition, type TransitionReport } from '../audio/signalMetrics
 import { STATES, type MentalState } from '../audio/states';
 import { normalizeProfile, type SoundProfile } from '../audio/types';
 import { ChunkSeamer } from '../export/chunkSeamer';
-import { renderSessionChunks } from '../export/offlineRenderer';
+import { renderSessionChunks, routineExportSelection } from '../export/offlineRenderer';
 import { CHUNK_CROSSFADE_SEC, EXPORT_SAMPLE_RATE } from '../export/renderTimeline';
 import { buildCandidateProfile, candidatesFor, PRIOR_ARM_ID } from '../personalization/candidates';
 import { PROGRAM_TYPE_FADE_SEC } from '../programs/evaluator';
@@ -57,6 +57,42 @@ async function render(spec: RenderSpec): Promise<{ seconds: number }> {
       program,
       chimeEnabled: false,
     },
+    (buffer, chunk) => {
+      const { start, end } = seamer.seam(buffer, chunk);
+      parts.push({
+        left: buffer.getChannelData(0).slice(start, end),
+        right: buffer.getChannelData(1).slice(start, end),
+      });
+    },
+    () => undefined,
+    undefined,
+    { chunkSec: spec.chunkSec },
+  );
+  last = join(parts);
+  return { seconds: last.left.length / SR };
+}
+
+/**
+ * A routine export (Phase 17) through the real chunk-and-seam path: each
+ * leg a state default, legs handing over like continueWith. Short chunks
+ * let a test put a seam right on a hand-off.
+ */
+async function renderRoutine(spec: {
+  legs: Array<{ state: MentalState; durationSec: number }>;
+  chunkSec?: number;
+}): Promise<{ seconds: number }> {
+  const legs = spec.legs.map((leg) => ({
+    profile: profileFor({ state: leg.state }),
+    state: leg.state,
+    durationSec: leg.durationSec,
+    program: null,
+  }));
+  const volume = legs[0].profile.masterVolume;
+  for (const leg of legs) leg.profile.masterVolume = volume;
+  const seamer = new ChunkSeamer(Math.round(CHUNK_CROSSFADE_SEC * SR), SR);
+  const parts: { left: Float32Array; right: Float32Array }[] = [];
+  await renderSessionChunks(
+    routineExportSelection(legs, false, { name: 'QA', description: 'qa' }),
     (buffer, chunk) => {
       const { start, end } = seamer.seam(buffer, chunk);
       parts.push({
@@ -213,6 +249,6 @@ async function measureArms(
   return out;
 }
 
-const hooks = { render, renderGlide, renderMasking, transition, lufs, measureArms };
+const hooks = { render, renderRoutine, renderGlide, renderMasking, transition, lufs, measureArms };
 export type QaHooks = typeof hooks;
 (window as unknown as { __qa: QaHooks }).__qa = hooks;

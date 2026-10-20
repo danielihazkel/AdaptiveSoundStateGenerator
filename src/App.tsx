@@ -11,6 +11,7 @@ import {
 import { STATES } from './audio/states';
 import { moodBucketOf, timeBucketOf } from './personalization/context';
 import { describeServedSound } from './personalization/personalizer';
+import { resolveRoutineExport } from './export/routineExport';
 import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
 import type { Program } from './programs/types';
@@ -576,6 +577,16 @@ export function App() {
           programs={programs}
           starting={session.starting}
           onStart={(routine, mood) => void session.beginRoutine(routine, { moodBefore: mood })}
+          exporter={exporter}
+          onDownload={(routine) => {
+            const { sel, label } = resolveRoutineExport(routine, {
+              programs,
+              chimeEnabled: settings.chimeEnabled,
+              breathingPattern: settings.breathingPattern,
+              wakeUp: settings.wakeUp,
+            });
+            void exporter.start(sel, label);
+          }}
           onEdit={openRoutineEditor}
           onNew={() =>
             openRoutineEditor({

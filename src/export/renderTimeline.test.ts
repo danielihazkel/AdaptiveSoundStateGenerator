@@ -7,6 +7,7 @@ import {
   MODULATION_STEP_SEC,
   splitRenderPlan,
 } from './renderTimeline';
+import { resolveEndFadeSeconds } from '../session/endPolicy';
 
 describe('buildRenderPlan', () => {
   it('gives sleep its 60s fade starting at duration−60 and never a chime', () => {
@@ -223,5 +224,49 @@ describe('splitRenderPlan', () => {
     for (let i = 1; i < plan.events.length; i++) {
       expect(plan.events[i].time).toBeGreaterThan(plan.events[i - 1].time);
     }
+  });
+});
+
+describe('buildRenderPlan with routine legs (Phase 17)', () => {
+  it('puts a hand-off at each later leg’s start, in place of that second’s modulation', () => {
+    const plan = buildRenderPlan({
+      state: 'relax',
+      durationSec: 600,
+      chimeEnabled: false,
+      legs: [{ startSec: 0 }, { startSec: 240 }, { startSec: 420 }],
+    });
+    const at240 = plan.events.filter((e) => e.time === 240);
+    expect(at240).toEqual([{ time: 240, kind: 'handoff', leg: 1 }]);
+    expect(plan.events.filter((e) => e.kind === 'handoff').map((e) => e.time)).toEqual([240, 420]);
+    // Still strictly increasing, and the ending belongs to the last leg's state.
+    for (let i = 1; i < plan.events.length; i++) {
+      expect(plan.events[i].time).toBeGreaterThan(plan.events[i - 1].time);
+    }
+    expect(plan.events.find((e) => e.kind === 'endFade')).toMatchObject({
+      time: 600 - resolveEndFadeSeconds('relax'),
+    });
+  });
+
+  it('offsets a program leg’s boundary cues by its start', () => {
+    const plan = buildRenderPlan({
+      state: 'focus',
+      durationSec: 1200,
+      chimeEnabled: false,
+      legs: [
+        { startSec: 0 },
+        {
+          startSec: 300,
+          program: {
+            boundaryChime: true,
+            segments: [
+              { endMin: 2 } as never,
+              { endMin: null } as never,
+            ],
+          },
+        },
+      ],
+    });
+    const cues = plan.events.filter((e) => e.kind === 'chime').map((e) => e.time);
+    expect(cues[0]).toBeCloseTo(300 + 120 + 0.01, 6);
   });
 });

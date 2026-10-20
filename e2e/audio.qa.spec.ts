@@ -155,3 +155,22 @@ test('adaptive masking at its cap stays within +3 LU and click-free', async ({ p
   expect(lift).toBeLessThanOrEqual(3.05);
   expect(report.glide.clickRatio).toBeLessThan(CLICK_LIMIT);
 });
+
+test('a routine export hands over click-free, even with a chunk seam right on the hand-off', async ({ page }) => {
+  const report = await page.evaluate(async () => {
+    const qa = window.__qa;
+    // 60 s chunks: the second chunk takes over exactly where focus hands to relax.
+    const { seconds } = await qa.renderRoutine({
+      legs: [
+        { state: 'focus', durationSec: 60 },
+        { state: 'relax', durationSec: 60 },
+      ],
+      chunkSec: 60,
+    });
+    return { seconds, handoff: qa.transition([48, 57.9], [57.9, 70], [70, 110]) };
+  });
+  expect(report.seconds).toBeGreaterThan(119);
+  // Different states differ in loudness and texture by design: judge clicks and dropouts.
+  expect(report.handoff.clickRatio).toBeLessThan(CLICK_LIMIT);
+  expect(report.handoff.dipRatio).toBeGreaterThan(DIP_LIMIT);
+});

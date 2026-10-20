@@ -1,10 +1,10 @@
 import type { BreathPattern } from '../audio/breathing';
 import { AudioEngine } from '../audio/engine';
 import type { PulseHandover } from '../audio/pulseModulator';
-import { EVOLUTION_TIME_CONSTANT } from '../audio/ramp';
+import { ADAPT_RAMP_TIME_CONSTANT, EVOLUTION_TIME_CONSTANT } from '../audio/ramp';
 import type { MentalState } from '../audio/states';
 import type { SoundProfile } from '../audio/types';
-import { evaluateProgram } from '../programs/evaluator';
+import { evaluateProgram, PROGRAM_TYPE_FADE_SEC } from '../programs/evaluator';
 import type { Program } from '../programs/types';
 import { evaluateArc, resolveArc, type WakeUp } from '../session/evolution';
 import { alignmentDelays, frac } from './phaseTracker';
@@ -12,6 +12,7 @@ import {
   buildRenderPlan,
   CHUNK_CROSSFADE_SEC,
   CHUNK_LEAD_SEC,
+  EXPORT_MAX_SECONDS,
   EXPORT_SAMPLE_RATE,
   MODULATION_STEP_SEC,
   splitRenderPlan,
@@ -35,6 +36,109 @@ export interface ExportSelection {
   breathing?: BreathPattern | null;
   /** Wake-up rise + chime (plain sessions only) — see SessionConfig. */
   wakeUp?: WakeUp | null;
+  /**
+   * Routine export (Phase 17): the legs played back to back, each handing
+   * over to the next exactly like the live controller's continueWith. When
+   * set, the top-level fields describe the whole (routineExportSelection):
+   * the first leg's sound, the last leg's state / program / wake-up (it owns
+   * the ending), and the summed duration.
+   */
+  legs?: ExportLeg[];
+  /** Routine export: the routine, for the file's tags. */
+  routine?: { name: string; description: string };
+}
+
+/** One leg of a routine export — a single session's worth of ExportSelection. */
+export interface ExportLeg {
+  profile: SoundProfile;
+  state: MentalState;
+  durationSec: number;
+  program: Program | null;
+  breathing?: BreathPattern | null;
+  wakeUp?: WakeUp | null;
+}
+
+/** A routine export: the legs' sounds, with the top-level fields derived from them. */
+export function routineExportSelection(
+  legs: ExportLeg[],
+  chimeEnabled: boolean,
+  routine: { name: string; description: string },
+): ExportSelection {
+  const last = legs[legs.length - 1];
+  return {
+    profile: legs[0].profile,
+    state: last.state,
+    durationSec: legs.reduce((acc, l) => acc + l.durationSec, 0),
+    program: last.program,
+    chimeEnabled,
+    wakeUp: last.program ? null : (last.wakeUp ?? null),
+    legs,
+    routine,
+  };
+}
+
+/** A leg placed on the render's absolute timeline. */
+interface TimedLeg extends ExportLeg {
+  startSec: number;
+}
+
+/**
+ * The render as legs: a plain export is one leg spanning the (capped)
+ * session; a routine's legs are laid end to end and cut off at the cap.
+ */
+function timedLegs(sel: ExportSelection, durationSec: number): TimedLeg[] {
+  if (!sel.legs || sel.legs.length === 0) {
+    return [
+      {
+        profile: sel.profile,
+        state: sel.state,
+        durationSec,
+        program: sel.program,
+        breathing: sel.breathing,
+        wakeUp: sel.wakeUp,
+        startSec: 0,
+      },
+    ];
+  }
+  const out: TimedLeg[] = [];
+  let startSec = 0;
+  for (const leg of sel.legs) {
+    if (startSec >= durationSec) break;
+    out.push({ ...leg, startSec, durationSec: Math.min(leg.durationSec, durationSec - startSec) });
+    startSec += leg.durationSec;
+  }
+  return out;
+}
+
+/** The plan for a selection: as before for one leg; for a routine, its last kept leg owns the end. */
+function planFor(sel: ExportSelection): { plan: RenderPlan; legs: TimedLeg[] } {
+  if (!sel.legs || sel.legs.length === 0) {
+    const plan = buildRenderPlan({
+      state: sel.state,
+      durationSec: sel.durationSec,
+      chimeEnabled: sel.chimeEnabled,
+      program: sel.program,
+      wakeUp: sel.wakeUp,
+    });
+    return { plan, legs: timedLegs(sel, plan.durationSec) };
+  }
+  const legs = timedLegs(sel, Math.min(sel.durationSec, EXPORT_MAX_SECONDS));
+  const last = legs[legs.length - 1];
+  const plan = buildRenderPlan({
+    state: last.state,
+    durationSec: sel.durationSec,
+    chimeEnabled: sel.chimeEnabled,
+    program: last.program,
+    wakeUp: last.program ? null : last.wakeUp,
+    legs: legs.map((l) => ({ startSec: l.startSec, program: l.program })),
+  });
+  return { plan, legs };
+}
+
+function legIndexAt(legs: readonly TimedLeg[], absSec: number): number {
+  let i = 0;
+  while (i + 1 < legs.length && absSec >= legs[i + 1].startSec) i += 1;
+  return i;
 }
 
 /** Pattern pulses are scheduled this far past the next checkpoint. */
@@ -84,17 +188,17 @@ export async function renderSessionChunks(
   opts: { chunkSec?: number } = {},
 ): Promise<void> {
   signal?.throwIfAborted();
-  const plan = buildRenderPlan(sel);
+  const { plan, legs } = planFor(sel);
   let handover: ChunkHandover | null = null;
   for (const chunk of splitRenderPlan(plan, opts.chunkSec)) {
-    const buffer = await renderChunk(sel, plan, chunk, handover, onProgress, signal);
+    const buffer = await renderChunk(legs, plan, chunk, handover, onProgress, signal);
     handover = buffer.handover;
     onChunk(buffer.audio, chunk);
   }
 }
 
 async function renderChunk(
-  sel: ExportSelection,
+  legs: TimedLeg[],
   plan: RenderPlan,
   chunk: RenderChunk,
   handover: ChunkHandover | null,
@@ -106,9 +210,10 @@ async function renderChunk(
     length: Math.ceil(chunk.lengthSec * EXPORT_SAMPLE_RATE),
     sampleRate: EXPORT_SAMPLE_RATE,
   });
-  const engine = await AudioEngine.createOffline(sel.profile, ctx);
+  // A chunk starts on whichever leg is playing at its origin.
+  const engine = await AudioEngine.createOffline(legs[legIndexAt(legs, chunk.originSec)].profile, ctx);
   try {
-    return await driveChunk(engine, ctx, sel, plan, chunk, handover, onProgress, signal);
+    return await driveChunk(engine, ctx, legs, plan, chunk, handover, onProgress, signal);
   } finally {
     // Each chunk builds a full node graph (worklets, oscillators); release it
     // explicitly rather than leaving 16 of them to GC during a 4 h export.
@@ -119,7 +224,7 @@ async function renderChunk(
 async function driveChunk(
   engine: AudioEngine,
   ctx: OfflineAudioContext,
-  sel: ExportSelection,
+  legs: TimedLeg[],
   plan: RenderPlan,
   chunk: RenderChunk,
   handover: ChunkHandover | null,
@@ -128,16 +233,23 @@ async function driveChunk(
 ): Promise<{ audio: AudioBuffer; handover: ChunkHandover | null }> {
   const toAbs = (ctxTime: number) => chunk.originSec + ctxTime;
   const toCtx = (absTime: number) => absTime - chunk.originSec;
-  const arc = resolveArc(sel.state, {
-    wakeUp: sel.program ? undefined : (sel.wakeUp ?? undefined),
-    durationSec: plan.durationSec,
-  });
+  // Each leg evolves over its own length, from its own t=0 (one leg = the
+  // whole session, exactly as before routines).
+  const arcs = legs.map((leg) =>
+    resolveArc(leg.state, {
+      wakeUp: leg.program ? undefined : (leg.wakeUp ?? undefined),
+      durationSec: leg.durationSec,
+    }),
+  );
 
   const applyModulation = (absSec: number, timeConstant?: number) => {
-    if (sel.program) {
-      engine.setProgramModulation(evaluateProgram(sel.program, absSec), timeConstant);
+    const i = legIndexAt(legs, absSec);
+    const leg = legs[i];
+    const localSec = absSec - leg.startSec;
+    if (leg.program) {
+      engine.setProgramModulation(evaluateProgram(leg.program, localSec), timeConstant);
     } else {
-      engine.setArcModulation(evaluateArc(arc, absSec / plan.durationSec), timeConstant);
+      engine.setArcModulation(evaluateArc(arcs[i], localSec / leg.durationSec), timeConstant);
     }
   };
 
@@ -156,6 +268,23 @@ async function driveChunk(
       case 'chime':
         engine.playOfflineChime();
         break;
+      case 'handoff': {
+        // Mirrors SessionController.continueWith: glide onto the next leg's
+        // sound, types dissolving slowly, breathing re-anchored at the
+        // leg's start, its arc or program from t=0 — no fade, no gap.
+        const leg = legs[ev.leg];
+        engine.applyProfile(leg.profile, ADAPT_RAMP_TIME_CONSTANT, { typeFadeSec: PROGRAM_TYPE_FADE_SEC });
+        engine.setBreathPattern(null);
+        if (!leg.program && leg.breathing) engine.setBreathPattern(leg.breathing, ev.time);
+        if (leg.program) {
+          engine.setProgramModulation(evaluateProgram(leg.program, 0), ADAPT_RAMP_TIME_CONSTANT);
+        } else {
+          engine.setProgramModulation(null);
+          engine.setArcModulation(evaluateArc(arcs[ev.leg], 0), ADAPT_RAMP_TIME_CONSTANT);
+        }
+        engine.schedulePulsesUntil(ev.time + MODULATION_STEP_SEC + PULSE_HORIZON_SEC);
+        break;
+      }
     }
   };
 
@@ -163,7 +292,10 @@ async function driveChunk(
   // for the first chunk; later chunks snap (default quick ramp) onto the
   // session's values at their origin and pick up the rhythm mid-bar.
   // Breath cycle 0 is session t=0, i.e. ctx time −originSec in this chunk.
-  if (!sel.program && sel.breathing) engine.setBreathPattern(sel.breathing, -chunk.originSec);
+  const startLeg = legs[legIndexAt(legs, chunk.originSec)];
+  if (!startLeg.program && startLeg.breathing) {
+    engine.setBreathPattern(startLeg.breathing, toCtx(startLeg.startSec));
+  }
   applyModulation(chunk.originSec);
   if (handover) engine.importPulseHandover(handover.pulse, -chunk.originSec);
   engine.schedulePulsesUntil(MODULATION_STEP_SEC + PULSE_HORIZON_SEC);

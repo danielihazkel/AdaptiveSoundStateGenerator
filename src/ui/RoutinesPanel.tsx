@@ -11,6 +11,8 @@ import {
 } from '../routines/types';
 import type { MoodLevel } from '../storage/types';
 import { MoodScale } from './MoodScale';
+import type { Mp3Exporter } from '../export/useMp3Export';
+import { ExportRow } from './ExportRow';
 import { formatDuration } from './format';
 import { ShareButton } from './ShareButton';
 
@@ -29,6 +31,9 @@ export function RoutinesPanel(props: {
   onEdit: (routine: Routine) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
+  /** Phase 17: download the whole routine as one file (absent = no Download). */
+  exporter?: Mp3Exporter;
+  onDownload?: (routine: Routine) => void;
 }) {
   const all: Array<{ routine: Routine; builtIn: boolean; description?: string }> = [
     ...props.routines.map((routine) => ({ routine, builtIn: false })),
@@ -134,6 +139,13 @@ export function RoutinesPanel(props: {
               </button>
             )}
           </div>
+          {props.exporter && props.onDownload && (
+            <ExportRow
+              exporter={props.exporter}
+              label={`⤓ Download the whole routine · ${formatDuration(routineMinutes(selected.routine) * 60)}`}
+              onDownload={() => props.onDownload?.(selected.routine)}
+            />
+          )}
         </div>
       )}
     </section>

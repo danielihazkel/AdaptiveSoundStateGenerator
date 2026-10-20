@@ -3,7 +3,8 @@ import { ChunkSeamer } from './chunkSeamer';
 import { exportTags, tagExport } from './tagExport';
 
 async function coverFor(sel: ExportSelection) {
-  const data = await stateArtworkPng(sel.state).catch(() => null);
+  // A routine's cover is where it starts.
+  const data = await stateArtworkPng(sel.legs?.[0]?.state ?? sel.state).catch(() => null);
   return data ? { mime: 'image/png', data } : undefined;
 }
 import { EncodeStream } from './encodeMp3';

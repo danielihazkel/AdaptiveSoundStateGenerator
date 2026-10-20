@@ -48,7 +48,15 @@ const PLAIN_TAIL_SEC = 0.2;
 export type RenderEvent =
   | { time: number; kind: 'modulation' }
   | { time: number; kind: 'endFade'; fadeSeconds: number }
-  | { time: number; kind: 'chime' };
+  | { time: number; kind: 'chime' }
+  /** Routine export (Phase 17): leg `leg` takes over here, like continueWith. */
+  | { time: number; kind: 'handoff'; leg: number };
+
+/** Where each leg of a multi-leg (routine) render starts, and the program it plays. */
+export interface PlanLeg {
+  startSec: number;
+  program?: Partial<Pick<Program, 'boundaryChime' | 'segments'>> | null;
+}
 
 export interface RenderPlan {
   /** Total length of the offline render, including the end tail. */
@@ -78,6 +86,14 @@ export function buildRenderPlan(opts: {
   program?: Partial<Pick<Program, 'endChime' | 'boundaryChime' | 'segments'>> | null;
   /** Wake-up ending: short fade and always a chime (plain sessions only). */
   wakeUp?: WakeUp | null;
+  /**
+   * Routine export (Phase 17): the legs, in order. Each later leg's start
+   * becomes a hand-off event (replacing the modulation checkpoint there),
+   * and boundary cues come from each leg's own program, offset by its
+   * start. `state` / `program` / `wakeUp` then describe the last leg — the
+   * one that owns the ending.
+   */
+  legs?: readonly PlanLeg[];
 }): RenderPlan {
   const capped = opts.durationSec > EXPORT_MAX_SECONDS;
   const durationSec = capped ? EXPORT_MAX_SECONDS : opts.durationSec;
@@ -98,17 +114,26 @@ export function buildRenderPlan(opts: {
   for (let t = MODULATION_STEP_SEC; t < fadeStart; t += MODULATION_STEP_SEC) {
     events.push({ time: t, kind: 'modulation' });
   }
-  if (opts.program?.boundaryChime && opts.program.segments) {
+  const legs: readonly PlanLeg[] = opts.legs ?? [{ startSec: 0, program: opts.program }];
+  for (const leg of legs) {
+    if (!leg.program?.boundaryChime || !leg.program.segments) continue;
     // Boundaries land on whole seconds, i.e. on modulation checkpoints —
     // nudge each cue just past its checkpoint so event times stay strictly
     // increasing (the offline driver suspends once per event).
-    for (const segment of opts.program.segments.slice(0, -1)) {
+    for (const segment of leg.program.segments.slice(0, -1)) {
       if (segment.endMin === null) continue;
-      const time = segment.endMin * 60 + BOUNDARY_CUE_OFFSET_SEC;
+      const time = leg.startSec + segment.endMin * 60 + BOUNDARY_CUE_OFFSET_SEC;
       if (time > 0 && time < fadeStart) events.push({ time, kind: 'chime' });
     }
-    events.sort((a, b) => a.time - b.time);
   }
+  legs.forEach((leg, index) => {
+    if (index === 0 || leg.startSec >= fadeStart) return;
+    // The hand-off applies the next leg's modulation itself.
+    const clash = events.findIndex((e) => e.kind === 'modulation' && e.time === leg.startSec);
+    if (clash >= 0) events.splice(clash, 1);
+    events.push({ time: leg.startSec, kind: 'handoff', leg: index });
+  });
+  events.sort((a, b) => a.time - b.time);
   events.push({ time: fadeStart, kind: 'endFade', fadeSeconds: durationSec - fadeStart });
   if (chime) events.push({ time: durationSec, kind: 'chime' });
 
