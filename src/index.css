@@ -193,6 +193,16 @@ input[type="range"]:focus-visible {
   margin: 0.25rem 0 0.75rem;
 }
 
+/* Read by screen readers, not shown. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .control {
   display: grid;
   grid-template-columns: 7.5rem 1fr 4rem;

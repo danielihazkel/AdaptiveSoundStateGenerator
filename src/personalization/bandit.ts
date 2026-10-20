@@ -309,18 +309,37 @@ function decayStats(arms: Record<string, ArmStats>): Record<string, ArmStats> {
 }
 
 /**
- * One resolved session's worth of forgetting for a state: every arm's stats
- * (state level and every context) shrink by DECAY and the undecayed session
- * counter advances. Call exactly once per session that yields at least one
- * credit, before crediting it — both the incremental path and
- * rebuildFromSessions do, so they stay equal.
+ * Whether a resolved session advances the cold-start / held-out schedule.
+ * A session pinned from the Insights table (Phase 15) is the user's own
+ * pick: its evidence counts, but it must not shift which upcoming session
+ * is held out, nor end cold start early.
  */
-export function decayState(state: PersonalizationState, mental: MentalState): PersonalizationState {
+export function countsTowardSchedule(record: Pick<SessionRecord, 'servedBy'>): boolean {
+  return record.servedBy !== 'pinned';
+}
+
+/**
+ * One resolved session's worth of forgetting for a state: every arm's stats
+ * (state level and every context) shrink by DECAY and — unless `count` is
+ * false (countsTowardSchedule) — the undecayed session counter advances.
+ * Call exactly once per session that yields at least one credit, before
+ * crediting it — both the incremental path and rebuildFromSessions do, so
+ * they stay equal.
+ */
+export function decayState(
+  state: PersonalizationState,
+  mental: MentalState,
+  count = true,
+): PersonalizationState {
   const next: PersonalizationState = {
     ...state,
     arms: { ...state.arms, [mental]: decayStats(state.arms[mental] ?? {}) },
-    resolved: { ...(state.resolved ?? {}), [mental]: (state.resolved?.[mental] ?? 0) + 1 },
   };
+  // An uncounted session leaves the counter untouched — even absent, so a
+  // legacy payload keeps its Σn fallback (eligibleSessionCount).
+  if (count) {
+    next.resolved = { ...(state.resolved ?? {}), [mental]: (state.resolved?.[mental] ?? 0) + 1 };
+  }
   const stateContexts = state.contexts?.[mental];
   if (stateContexts) {
     const decayed: Record<string, Record<string, ArmStats>> = {};
@@ -360,7 +379,7 @@ export function rebuildFromSessions(
     const credits = computeCredits(record, { sourceArm });
     if (credits.length === 0) continue;
     const ctx = contextOf(record.startedAt, record.monoMode) ?? undefined;
-    state = decayState(state, record.state);
+    state = decayState(state, record.state, countsTowardSchedule(record));
     for (const credit of credits) {
       state = updateArm(state, record.state, credit.armId, credit.reward, ctx);
     }

@@ -7,7 +7,7 @@ import { STATES, type MentalState } from '../audio/states';
 import { cloneProfile, normalizeProfile, type SoundProfile } from '../audio/types';
 import { timeBucketOf, type ServeContext } from '../personalization/context';
 import type { SessionSoundKind } from '../personalization/explain';
-import { chooseProfile, type ServedProfile } from '../personalization/personalizer';
+import { chooseProfile, pinnedProfile, type ServedProfile } from '../personalization/personalizer';
 import { playSilentKeepAlive } from '../platform/silentAudio';
 import { acquireSessionLock, type LockRelease } from '../platform/tabGuard';
 import { programMinDurationSec, type Program } from '../programs/types';
@@ -288,10 +288,18 @@ export function useSessionOrchestrator(deps: {
 
   /**
    * Start a session from the setup selection — or, with `replayOf`, replay
-   * that record directly ("Play last"), bypassing the selection so it can be
-   * called in the same gesture as the tap without waiting for a re-render.
+   * that record directly ("Play last"), or with `pinArm`, play exactly that
+   * arm ("Try this one" on Insights, Phase 15). Both bypass the selection so
+   * they can be called in the same gesture as the tap without waiting for a
+   * re-render.
    */
-  const begin = async (opts: { replayOf?: SessionRecord; moodBefore?: MoodLevel } = {}) => {
+  const begin = async (
+    opts: {
+      replayOf?: SessionRecord;
+      pinArm?: { state: MentalState; armId: string; intensity: number };
+      moodBefore?: MoodLevel;
+    } = {},
+  ) => {
     if (starting) return;
     // Synchronously inside the tap: iOS only starts media from a gesture, and
     // the keep-alive is what lets the session survive a locked screen.
@@ -305,23 +313,26 @@ export function useSessionOrchestrator(deps: {
         mono: settings.monoMode,
       };
       const direct = opts.replayOf ?? null;
-      const mentalState = direct?.state ?? selection.mentalState;
-      const intensity = direct?.intensity ?? selection.intensity;
+      const pin = direct ? null : (opts.pinArm ?? null);
+      // A replay or a pinned arm ignores the setup selection's sound choices.
+      const bypass = direct !== null || pin !== null;
+      const mentalState = direct?.state ?? pin?.state ?? selection.mentalState;
+      const intensity = direct?.intensity ?? pin?.intensity ?? selection.intensity;
       const minutes = direct
         ? Math.max(1, Math.round(direct.plannedDurationSec / 60))
         : selection.resolveMinutes();
-      const selectedPreset = direct
+      const selectedPreset = bypass
         ? undefined
         : deps.presets.find(
             (p) => p.id === selection.selectedPresetId && p.state === mentalState,
           );
       // A history replay only applies to the state it was recorded for; a
       // chosen preset or saved program overrides it.
-      const replayCandidate = direct ?? (selectedPreset ? null : selection.replay);
+      const replayCandidate = direct ?? (selectedPreset || pin ? null : selection.replay);
       const programInput = {
         programs: deps.programs,
-        selectedProgramId: direct ? undefined : selection.selectedProgramId,
-        intervals: direct ? null : selection.intervals,
+        selectedProgramId: bypass ? undefined : selection.selectedProgramId,
+        intervals: bypass ? null : selection.intervals,
         state: mentalState,
         intensity,
         baseProfile: selectedPreset?.profile,
@@ -369,13 +380,15 @@ export function useSessionOrchestrator(deps: {
         soundKindRef.current = 'replay';
       } else {
         soundKindRef.current = 'served';
-        const served = chooseProfile(
-          mentalState,
-          intensity,
-          modeFor(settings, mentalState),
-          Math.random,
-          serveContext,
-        );
+        const served = pin
+          ? pinnedProfile(mentalState, intensity, pin.armId)
+          : chooseProfile(
+              mentalState,
+              intensity,
+              modeFor(settings, mentalState),
+              Math.random,
+              serveContext,
+            );
         profile = served.profile;
         servedRef.current = served;
       }
@@ -418,16 +431,19 @@ export function useSessionOrchestrator(deps: {
       // program on a served sound does — the arm swap replaces the base the
       // program keeps shaping (a check-in may land during a break; v1
       // accepts that).
+      // A pinned arm is the user's explicit pick — don't swap it away either.
       const adaptationOn =
         !preset &&
         !replaying &&
+        !pin &&
         (!program || resolved.generated) &&
         settings.adaptationEnabled !== false;
       // A program's closed phases must all play out; extra time extends the
       // open-ended final phase.
       // "Until I stop": plain sessions only. A replayed open-ended session
       // is open-ended again; a program or preset fixes its own length.
-      const openEnded = !program && (direct ? direct.openEnded === true : selection.openEnded);
+      const openEnded =
+        !program && (direct ? direct.openEnded === true : !pin && selection.openEnded);
       const durationSec = program
         ? resolved.generated
           ? programMinDurationSec(program)

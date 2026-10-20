@@ -88,6 +88,8 @@ export interface ArmInsight {
 export interface StateInsights {
   state: MentalState;
   sessionCount: number;
+  /** Depth of the most recent session — "Try this one" plays at it (Phase 15). */
+  lastIntensity: number;
   ratedCount: number;
   avgRating: number | null;
   bestArm: { id: string; label: string; mean: number; n: number } | null;
@@ -300,6 +302,8 @@ function computeStateInsights(
     state,
     moodShift: moodShiftOf(state, records),
     sessionCount: scored.length,
+    // Records are stored newest-first.
+    lastIntensity: scored[0].record.intensity,
     ratedCount: ratings.length,
     avgRating:
       ratings.length > 0

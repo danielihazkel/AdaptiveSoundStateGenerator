@@ -3,6 +3,8 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STATES } from '../audio/states';
 import { cloneProfile, type SoundProfile } from '../audio/types';
+import { buildCandidateProfile } from '../personalization/candidates';
+import { SessionController } from '../session/sessionController';
 import { loadInProgress, loadSessions } from '../storage/storage';
 import { defaultSettings, type Preset, type Settings } from '../storage/types';
 import { fakeEngine, type FakeEngine } from '../test/fakeEngine';
@@ -200,6 +202,35 @@ describe('useSessionOrchestrator', () => {
     expect(record.presetId).toBe('p1');
     expect(record.servedBy).toBe('preset');
     expect(record.servedArmId).toBeUndefined();
+  });
+
+  it('a pinned arm ("Try this one") plays exactly that arm, ignoring the selection, with no check-ins', async () => {
+    const start = vi.spyOn(SessionController.prototype, 'start');
+    const { result } = setup({
+      selection: { mentalState: 'relax', intensity: 0.2, selectedPresetId: 'ignored', openEnded: true },
+    });
+    await act(async () => {
+      await result.current.begin({ pinArm: { state: 'focus', armId: 'bass-up', intensity: 0.7 } });
+    });
+    expect(result.current.liveProfile).toEqual(buildCandidateProfile('focus', 0.7, 'bass-up'));
+    expect(result.current.getServedInfo()).toMatchObject({
+      kind: 'served',
+      served: { armId: 'bass-up', servedBy: 'pinned' },
+    });
+    // No adaptation checkpoints: the user picked this sound on purpose.
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'focus', checkpointSec: undefined, openEnded: false }),
+    );
+    start.mockRestore();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(65_000);
+    });
+    expect(loadSessions()[0]).toMatchObject({
+      state: 'focus',
+      intensity: 0.7,
+      servedArmId: 'bass-up',
+      servedBy: 'pinned',
+    });
   });
 
   it('separates volume tweaks (implicit signal) from sound customization', async () => {

@@ -182,8 +182,11 @@ export interface SessionRecord {
    * start (1 in HOLDOUT_EVERY explore sessions): the unbiased measuring
    * stick the "is personalization working?" comparison needs — early
    * 'prior' sessions alone are confounded with the user settling in.
+   * 'pinned' (Phase 15) = the user picked this arm from the Insights table:
+   * it credits the arm like any served session but never advances the
+   * cold-start / held-out schedule, and stays out of the lift comparison.
    */
-  servedBy?: 'prior' | 'bandit' | 'locked' | 'preset' | 'baseline';
+  servedBy?: 'prior' | 'bandit' | 'locked' | 'preset' | 'baseline' | 'pinned';
   /**
    * Sleep-onset wind-down (Phase 9): elapsed seconds at which the heart
    * rate said "asleep" and the session faded out early as completed.

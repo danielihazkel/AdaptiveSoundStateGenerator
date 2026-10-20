@@ -109,6 +109,15 @@ describe('decayState', () => {
     expect(decayState(after, 'focus').resolved).toEqual({ focus: 2 });
   });
 
+  it('an uncounted session decays but leaves the schedule counter alone — even when absent', () => {
+    let state = updateArm(emptyState(), 'focus', PRIOR_ARM_ID, { value: 0.6, weight: 1 });
+    const legacy = decayState(state, 'focus', false);
+    expect(legacy.arms.focus![PRIOR_ARM_ID].n).toBeCloseTo(DECAY, 12);
+    expect(legacy.resolved).toBeUndefined();
+    state = decayState(state, 'focus');
+    expect(decayState(state, 'focus', false).resolved).toEqual({ focus: 1 });
+  });
+
   it('has the documented half-life', () => {
     expect(DECAY ** DECAY_HALF_LIFE_SESSIONS).toBeCloseTo(0.5, 12);
     expect(DECAY).toBeLessThan(1);
@@ -216,6 +225,28 @@ describe('rebuildFromSessions', () => {
     }
     expect(rebuildFromSessions(records)).toEqual(incremental);
     expect(incremental.resolved).toEqual({ focus: 3 });
+  });
+
+  it('a pinned session (Phase 15) credits its arm without advancing the schedule — rebuild matches', () => {
+    const records = [
+      record({ servedArmId: 'bass-up', servedBy: 'pinned', banditResolvedAt: '2026-08-22T08:00:00.000Z' }),
+      record({ banditResolvedAt: '2026-08-21T08:00:00.000Z' }),
+    ];
+    let incremental = emptyState();
+    for (const r of [...records].reverse()) {
+      incremental = decayState(incremental, r.state, r.servedBy !== 'pinned');
+      incremental = updateArm(
+        incremental,
+        r.state,
+        r.servedArmId!,
+        computeReward(r)!,
+        contextOf(r.startedAt, r.monoMode) ?? undefined,
+      );
+    }
+    const rebuilt = rebuildFromSessions(records);
+    expect(rebuilt).toEqual(incremental);
+    expect(rebuilt.resolved).toEqual({ focus: 1 });
+    expect(rebuilt.arms.focus!['bass-up'].n).toBeGreaterThan(0);
   });
 
   it('replays equal stamps oldest-first (higher stored index) so order is deterministic', () => {

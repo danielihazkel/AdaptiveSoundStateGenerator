@@ -34,13 +34,24 @@ function formatHz(value: number): string {
 export function InsightsScreen(props: {
   insights: StateInsights[];
   onBack: () => void;
+  /** "Try this one" (Phase 15): start a session on exactly this variation. */
+  onTryArm?: (state: MentalState, armId: string) => void;
+  /** A session is starting — disables the Try buttons. */
+  starting?: boolean;
+  startError?: string | null;
 }) {
   return (
     <div className="insights">
       <h2>Your sound profile</h2>
       <p className="hint">
         Learned from your sessions — rated ones count most, finished ones count too.
+        {props.onTryArm && ' Tap ► Try to play any variation again.'}
       </p>
+      {props.startError && (
+        <p className="notice warning" role="alert">
+          {props.startError}
+        </p>
+      )}
 
       {props.insights.map((insight) => {
         const stateDef = STATES[insight.state];
@@ -162,6 +173,11 @@ export function InsightsScreen(props: {
                       <th scope="col" className="num">
                         Score
                       </th>
+                      {props.onTryArm && (
+                        <th scope="col">
+                          <span className="visually-hidden">Play</span>
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -176,6 +192,19 @@ export function InsightsScreen(props: {
                           {Math.round(arm.mean * 100)}%
                           <span className="insight-ci"> ±{Math.round(arm.ci * 100)}</span>
                         </td>
+                        {props.onTryArm && (
+                          <td className="num">
+                            <button
+                              type="button"
+                              className="chip"
+                              disabled={props.starting}
+                              aria-label={`Try ${arm.label} for ${stateDef.label.toLowerCase()}`}
+                              onClick={() => props.onTryArm?.(insight.state, arm.id)}
+                            >
+                              ► Try
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

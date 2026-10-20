@@ -629,7 +629,20 @@ export function App() {
       )}
 
       {screen === 'insights' && (
-        <InsightsScreen insights={data.insights} onBack={() => navigate('setup')} />
+        <InsightsScreen
+          insights={data.insights}
+          onBack={() => navigate('setup')}
+          starting={session.starting}
+          startError={session.startError}
+          onTryArm={(state, armId) => {
+            const intensity =
+              data.insights.find((i) => i.state === state)?.lastIntensity ?? selection.intensity;
+            // Mirror the selection so setup reads right afterwards, and start
+            // inside this same tap (iOS gesture rule).
+            selection.selectState(state);
+            void session.begin({ pinArm: { state, armId, intensity } });
+          }}
+        />
       )}
 
       {screen === 'history' && (

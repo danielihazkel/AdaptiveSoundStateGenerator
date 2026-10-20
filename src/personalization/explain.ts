@@ -87,6 +87,8 @@ export function explainServed(
     reason = 'Checking the default against your favourites';
   } else if (servedBy === 'locked') {
     reason = 'Your best so far';
+  } else if (servedBy === 'pinned') {
+    reason = 'You picked this from your sound profile';
   } else if (armId === bestArm(personalization, state, ctx)) {
     reason = 'Your current favourite';
   } else {

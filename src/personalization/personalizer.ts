@@ -14,6 +14,7 @@ import {
   COLD_START_SESSIONS,
   decayState,
   eligibleSessionCount,
+  countsTowardSchedule,
   rebuildFromSessions,
   sampleArm,
   updateArm,
@@ -40,7 +41,7 @@ import { makeSourceArmResolver } from './sourceArm';
 export interface ServedProfile {
   profile: SoundProfile;
   armId: string;
-  servedBy: 'prior' | 'bandit' | 'locked' | 'baseline';
+  servedBy: 'prior' | 'bandit' | 'locked' | 'baseline' | 'pinned';
 }
 
 /**
@@ -96,6 +97,14 @@ export function chooseProfile(
 }
 
 /**
+ * "Try this one" from the Insights table (Phase 15): serve exactly the arm
+ * the user picked. Unknown ids fall back to the prior (buildCandidateProfile).
+ */
+export function pinnedProfile(mental: MentalState, intensity: number, armId: string): ServedProfile {
+  return { profile: buildCandidateProfile(mental, intensity, armId), armId, servedBy: 'pinned' };
+}
+
+/**
  * Feeds one finished session's rewards into its served arm(s) — one credit
  * per adapted segment plus the end-of-session score (Phase 3), or the single
  * legacy credit for non-adapted sessions. Idempotent: the banditResolvedAt
@@ -112,7 +121,11 @@ export function resolveOutcome(sessionId: string): void {
   if (credits.length > 0) {
     // Credit lands in the context the session was actually served in.
     const ctx = contextOf(record.startedAt, record.monoMode) ?? undefined;
-    let state = decayState(loadPersonalization(CANDIDATE_SET_VERSION), record.state);
+    let state = decayState(
+      loadPersonalization(CANDIDATE_SET_VERSION),
+      record.state,
+      countsTowardSchedule(record),
+    );
     for (const credit of credits) {
       state = updateArm(state, record.state, credit.armId, credit.reward, ctx);
     }

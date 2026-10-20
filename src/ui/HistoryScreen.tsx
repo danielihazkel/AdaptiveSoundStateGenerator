@@ -100,6 +100,7 @@ export function HistoryScreen(props: {
               )}
               {preset && <span className="badge">{preset.name}</span>}
               {adapted && <span className="badge">adapted</span>}
+              {s.servedBy === 'pinned' && <span className="badge">picked from insights</span>}
               {s.coachUsed && <span className="badge">coach</span>}
               {s.programId ? (
                 program && (
