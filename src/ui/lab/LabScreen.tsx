@@ -7,6 +7,7 @@ import { LabProgramRunner } from '../../lab/programRunner';
 import { randomizeProfile } from '../../lab/randomize';
 import { WakeLockHolder } from '../../platform/wakeLock';
 import type { Program } from '../../programs/types';
+import { scenesFor } from '../../scenes/scenes';
 import type { Preset } from '../../storage/types';
 import { AdvancedPanel } from '../AdvancedPanel';
 import { PresetSaveRow } from '../PresetSaveRow';
@@ -154,6 +155,21 @@ export function LabScreen(props: {
           />
           <span className="value">{Math.round(labIntensity * 100)}%</span>
         </label>
+        {scenesFor(labState).length > 0 && (
+          <div className="preset-strip" role="group" aria-label="Scenes">
+            {scenesFor(labState).map((scene) => (
+              <button
+                key={scene.id}
+                type="button"
+                className="chip"
+                title={scene.description}
+                onClick={() => apply(scene.build(labIntensity))}
+              >
+                {scene.emoji} {scene.name}
+              </button>
+            ))}
+          </div>
+        )}
         {statePresets.length > 0 && (
           <div className="preset-strip">
             {statePresets.map((preset) => (

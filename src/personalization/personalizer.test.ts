@@ -379,3 +379,18 @@ describe('mood context (Phase 15)', () => {
     expect(eligibleSessionCount(state, 'focus')).toBe(0);
   });
 });
+
+describe('scenes (Phase 17)', () => {
+  it('a scene session is settled like a preset nobody can trace to an arm: no credit', () => {
+    const s = makeSession({
+      presetId: 'scene:campfire',
+      servedBy: 'preset',
+      servedArmId: undefined,
+      feedback: { rating: 5, ratedAt: new Date().toISOString() },
+    });
+    appendSession(s);
+    resolveOutcome(s.id);
+    expect(loadPersonalization(CANDIDATE_SET_VERSION).arms).toEqual({});
+    expect(loadSessions()[0].banditResolvedAt).toBeDefined();
+  });
+});

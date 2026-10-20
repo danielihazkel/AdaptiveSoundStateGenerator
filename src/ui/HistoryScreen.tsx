@@ -4,7 +4,18 @@ import { TIME_BUCKET_LABELS } from '../personalization/context';
 import { summarizeHistory, weeklyReflection, type WeeklyReflection } from '../personalization/history';
 import type { Program } from '../programs/types';
 import type { Preset, SessionRecord } from '../storage/types';
+import { SCENE_BY_ID } from '../scenes/scenes';
 import { formatDuration } from './format';
+
+/** A scene session (Phase 17) — scenes aren't stored presets, so name it from the catalog. */
+function sceneBadge(presetId: string | undefined) {
+  const scene = presetId ? SCENE_BY_ID.get(presetId) : undefined;
+  return scene ? (
+    <span className="badge">
+      {scene.emoji} {scene.name}
+    </span>
+  ) : null;
+}
 
 const PAGE = 50;
 
@@ -109,6 +120,7 @@ export function HistoryScreen(props: {
                 </span>
               )}
               {preset && <span className="badge">{preset.name}</span>}
+              {sceneBadge(s.presetId)}
               {adapted && <span className="badge">adapted</span>}
               {s.servedBy === 'pinned' && <span className="badge">picked from insights</span>}
               {s.coachUsed && <span className="badge">coach</span>}

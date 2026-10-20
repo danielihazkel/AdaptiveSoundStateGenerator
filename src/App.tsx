@@ -12,6 +12,7 @@ import { STATES } from './audio/states';
 import { moodBucketOf, timeBucketOf } from './personalization/context';
 import { describeServedSound } from './personalization/personalizer';
 import { resolveRoutineExport } from './export/routineExport';
+import { SCENES, scenePreset } from './scenes/scenes';
 import { resolveSetupExport } from './export/setupExport';
 import { useMp3Export } from './export/useMp3Export';
 import type { Program } from './programs/types';
@@ -171,6 +172,10 @@ export function App() {
 
   const data = useStoredData(screen);
   const { settings, updateSettings, presets, programs } = data;
+  // Scenes (Phase 17) play as virtual presets: the session and Download
+  // resolve them from the same list as the user's saved sounds.
+  const scenePresets = useMemo(() => SCENES.map(scenePreset), []);
+  const playablePresets = useMemo(() => [...presets, ...scenePresets], [presets, scenePresets]);
   const coach = useCoach();
   const selection = useSetupSelection({ onUserOverride: coach.reset });
   const biometrics = useBiometrics();
@@ -218,7 +223,7 @@ export function App() {
   const session = useSessionOrchestrator({
     settings,
     selection,
-    presets,
+    presets: playablePresets,
     programs,
     adaptation,
     biometrics,
@@ -277,7 +282,7 @@ export function App() {
   const handleDownload = () => {
     const { sel, label } = resolveSetupExport({
       programs,
-      presets,
+      presets: playablePresets,
       selectedProgramId: selection.selectedProgramId,
       selectedPresetId: selection.selectedPresetId,
       state: selection.mentalState,
@@ -493,6 +498,7 @@ export function App() {
           intervals={selection.intervals}
           onIntervalsChange={selection.setIntervals}
           presets={presets}
+          scenePresets={scenePresets}
           selectedPresetId={selection.selectedPresetId}
           programs={programs}
           selectedProgramId={selection.selectedProgramId}

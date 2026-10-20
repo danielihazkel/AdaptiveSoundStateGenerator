@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STATES } from '../audio/states';
 import { cloneProfile, type SoundProfile } from '../audio/types';
 import { buildCandidateProfile } from '../personalization/candidates';
+import { SCENE_BY_ID, scenePreset } from '../scenes/scenes';
 import { SessionController } from '../session/sessionController';
 import { defaultProgram, programMinDurationSec, type Program } from '../programs/types';
 import { loadInProgress, loadSessions } from '../storage/storage';
@@ -257,6 +258,24 @@ describe('useSessionOrchestrator', () => {
       servedArmId: 'bass-up',
       servedBy: 'pinned',
     });
+  });
+
+  it('Phase 17: a scene plays as a virtual preset — tagged, no arm, no check-ins', async () => {
+    const campfire = scenePreset(SCENE_BY_ID.get('scene:campfire')!);
+    const { result, adaptation } = setup({
+      presets: [campfire],
+      selection: { mentalState: 'relax', selectedPresetId: 'scene:campfire' },
+    });
+    await act(async () => {
+      await result.current.begin();
+    });
+    expect(result.current.liveProfile?.ambience.type).toBe('fireplace');
+    expect(adaptation.beginSession).toHaveBeenCalledWith(expect.objectContaining({ servedArmId: null }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(65_000);
+    });
+    expect(loadSessions()[0]).toMatchObject({ presetId: 'scene:campfire', servedBy: 'preset' });
+    expect(loadSessions()[0].servedArmId).toBeUndefined();
   });
 
   it('separates volume tweaks (implicit signal) from sound customization', async () => {

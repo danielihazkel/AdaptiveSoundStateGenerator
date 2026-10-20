@@ -34,6 +34,7 @@ import { HeadphoneHint, NoDrivingWarning } from './SafetyNotices';
 import { MoodScale } from './MoodScale';
 import { ShareButton } from './ShareButton';
 import { StatePicker } from './StatePicker';
+import { SCENE_BY_ID } from '../scenes/scenes';
 
 /** Screen-reader text for the depth slider — the labels are the design, never numbers. */
 export function intensityValueText(labels: readonly [string, string], intensity: number): string {
@@ -62,6 +63,8 @@ export function SetupScreen(props: {
   intervals: IntervalPlan | null;
   onIntervalsChange: (plan: IntervalPlan | null) => void;
   presets: Preset[];
+  /** Phase 17: curated scenes, offered as virtual presets (scenes.ts). */
+  scenePresets?: Preset[];
   selectedPresetId: string | undefined;
   programs: Program[];
   selectedProgramId: string | undefined;
@@ -115,6 +118,8 @@ export function SetupScreen(props: {
 }) {
   const stateDef = STATES[props.state];
   const statePresets = props.presets.filter((p) => p.state === props.state);
+  const stateScenes = (props.scenePresets ?? []).filter((p) => p.state === props.state);
+  const selectedScene = SCENE_BY_ID.get(props.selectedPresetId ?? '');
   const [showTemplates, setShowTemplates] = useState(false);
   const selectedProgram = props.programs.find((p) => p.id === props.selectedProgramId);
   const programMinMinutes = selectedProgram
@@ -370,6 +375,31 @@ export function SetupScreen(props: {
             ✕
           </button>
         </div>
+      )}
+
+      {stateScenes.length > 0 && (
+        <section className="setup-section">
+          <h2 className="setup-question">Scenes</h2>
+          <div className="preset-strip" role="group" aria-label="Scenes">
+            {stateScenes.map((preset) => {
+              const scene = SCENE_BY_ID.get(preset.id);
+              const selected = props.selectedPresetId === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`chip${selected ? ' selected' : ''}`}
+                  aria-pressed={selected}
+                  title={scene?.description}
+                  onClick={() => props.onSelectPreset(selected ? undefined : preset)}
+                >
+                  {scene?.emoji} {preset.name}
+                </button>
+              );
+            })}
+          </div>
+          {selectedScene && <p className="hint">{selectedScene.description}</p>}
+        </section>
       )}
 
       {statePresets.length > 0 && (
