@@ -5,6 +5,7 @@ import {
   MAX_WAKE_RISE_MINUTES,
   MIN_WAKE_RISE_MINUTES,
   NIGHTSTAND_MODES,
+  SMART_WAKE_WINDOWS,
   THEMES,
   type NightstandMode,
   type PersonalizationMode,
@@ -53,6 +54,10 @@ export function normalizeSettings(raw: unknown): Settings {
         ? Math.min(MAX_WAKE_RISE_MINUTES, Math.max(MIN_WAKE_RISE_MINUTES, Math.round(minutes)))
         : 10,
     };
+    const smart = p.wakeUp.smartWindowMinutes;
+    if ((SMART_WAKE_WINDOWS as readonly unknown[]).includes(smart)) {
+      out.wakeUp.smartWindowMinutes = smart as number;
+    }
   }
   if (typeof p.sleepOnsetFade === 'boolean') out.sleepOnsetFade = p.sleepOnsetFade;
   if (THEMES.includes(p.theme as Theme)) out.theme = p.theme as Theme;

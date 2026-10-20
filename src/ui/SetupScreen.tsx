@@ -18,6 +18,7 @@ import { programMinDurationSec, type Program } from '../programs/types';
 import {
   MAX_WAKE_RISE_MINUTES,
   MIN_WAKE_RISE_MINUTES,
+  SMART_WAKE_WINDOWS,
   type MoodLevel,
   type PersonalizationMode,
   type Preset,
@@ -55,6 +56,8 @@ export function SetupScreen(props: {
   onBreathingPatternChange: (id: BreathingPatternId) => void;
   wakeUp: NonNullable<Settings['wakeUp']>;
   onWakeUpChange: (wakeUp: NonNullable<Settings['wakeUp']>) => void;
+  /** Phase 16: a sensor (phone motion or heart rate) is agreed to — smart wake can work. */
+  smartWakeAvailable?: boolean;
   /** Interval (Pomodoro) plan, when working in intervals. */
   intervals: IntervalPlan | null;
   onIntervalsChange: (plan: IntervalPlan | null) => void;
@@ -314,6 +317,35 @@ export function SetupScreen(props: {
               />
               minutes
             </label>
+          )}
+          {props.wakeUp.enabled && (
+            <div className="option-row">
+              <span className="hint" id="smart-wake-label">
+                Wake me early if I'm stirring
+              </span>
+              <div className="preset-strip" role="group" aria-labelledby="smart-wake-label">
+                {SMART_WAKE_WINDOWS.map((w) => {
+                  const selected = (props.wakeUp.smartWindowMinutes ?? 0) === w;
+                  return (
+                    <button
+                      key={w}
+                      type="button"
+                      className={`chip${selected ? ' selected' : ''}`}
+                      aria-pressed={selected}
+                      disabled={w > 0 && !props.smartWakeAvailable}
+                      onClick={() => props.onWakeUpChange({ ...props.wakeUp, smartWindowMinutes: w })}
+                    >
+                      {w === 0 ? 'Off' : `up to ${w} min`}
+                    </button>
+                  );
+                })}
+              </div>
+              {!props.smartWakeAvailable && (
+                <p className="hint">
+                  Needs the phone on the mattress or a heart-rate sensor — turn one on in Settings.
+                </p>
+              )}
+            </div>
           )}
         </section>
       )}

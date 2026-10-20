@@ -11,7 +11,7 @@ import { chooseProfile, pinnedProfile, type ServedProfile } from '../personaliza
 import { playSilentKeepAlive } from '../platform/silentAudio';
 import { acquireSessionLock, type LockRelease } from '../platform/tabGuard';
 import { programMinDurationSec, type Program } from '../programs/types';
-import { IDENTITY_MODULATION } from '../session/evolution';
+import { IDENTITY_MODULATION, type WakeUp } from '../session/evolution';
 import { CHECKPOINT_EVERY_SEC } from '../session/inProgress';
 import { breathingFor, wakeUpFor } from '../session/sessionOptions';
 import {
@@ -37,6 +37,7 @@ import {
 } from '../storage/types';
 import { OTHER_TAB_SESSION_MESSAGE, START_ERROR_MESSAGE } from '../ui/SafetyNotices';
 import { watchSleepOnset, type SleepOnsetWatch } from './sleepOnsetWatcher';
+import { watchSmartWake, type SmartWakeWatch } from './smartWakeWatcher';
 import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
 import type { Motion } from './useMotion';
@@ -116,9 +117,13 @@ export function useSessionOrchestrator(deps: {
   const unsubscribeCheckpointRef = useRef<(() => void) | null>(null);
   /** Sleep-onset watch of the running session (Phase 9), if armed. */
   const sleepOnsetWatchRef = useRef<SleepOnsetWatch | null>(null);
-  const stopSleepOnsetWatch = () => {
+  /** Smart-wake watch of the running session (Phase 16), if armed. */
+  const smartWakeWatchRef = useRef<SmartWakeWatch | null>(null);
+  const stopSensorWatches = () => {
     sleepOnsetWatchRef.current?.stop();
     sleepOnsetWatchRef.current = null;
+    smartWakeWatchRef.current?.stop();
+    smartWakeWatchRef.current = null;
   };
   /** Cross-tab "a session is playing" lock held for the life of the session. */
   const sessionLockRef = useRef<LockRelease | null>(null);
@@ -184,7 +189,7 @@ export function useSessionOrchestrator(deps: {
     // how the session was configured (the controller mutates its config:
     // Stop clears `openEnded`, windDown pins `durationSec`).
     const checkpoint = checkpointRef.current;
-    stopSleepOnsetWatch();
+    stopSensorWatches();
     stopCheckpointing();
     const routine = routineRef.current;
     const handOff = result.handOff === true && routine !== null;
@@ -204,7 +209,7 @@ export function useSessionOrchestrator(deps: {
       // fade" — the checkpoint holds what was actually planned.
       plannedDurationSec: openEnded
         ? result.actualDurationSec
-        : result.woundDownAtSec !== undefined
+        : result.woundDownAtSec !== undefined || result.smartWakeAtSec !== undefined
           ? (checkpoint?.plannedDurationSec ?? result.config.durationSec)
           : result.config.durationSec,
       actualDurationSec: result.actualDurationSec,
@@ -234,6 +239,7 @@ export function useSessionOrchestrator(deps: {
       wakeUp: result.config.wakeUp,
       openEnded: openEnded || undefined,
       sleepOnsetSec: result.woundDownAtSec,
+      smartWakeAtSec: result.smartWakeAtSec,
       moodBefore: checkpoint?.moodBefore,
       routine: checkpoint?.routine,
     };
@@ -276,6 +282,7 @@ export function useSessionOrchestrator(deps: {
   useEffect(
     () => () => {
       sleepOnsetWatchRef.current?.stop();
+      smartWakeWatchRef.current?.stop();
       unsubscribeCheckpointRef.current?.();
       sessionLockRef.current?.();
       controllerRef.current?.dispose();
@@ -513,12 +520,13 @@ export function useSessionOrchestrator(deps: {
       // adaptation loop). Without a connected sensor the detector simply
       // never has fresh samples.
       armSleepOnsetWatch(controller, sessionState === 'sleep' && !wakeUp && !program && !openEnded);
+      armSmartWakeWatch(controller, wakeUp);
       deps.onSessionStarted();
     } catch (err) {
       // AudioContext blocked, worklet failed to load, no output device… The
       // controller may be mid-start; stop it so the next Begin starts clean.
       console.error('Session failed to start', err);
-      stopSleepOnsetWatch();
+      stopSensorWatches();
       stopCheckpointing();
       releaseSessionLock();
       try {
@@ -534,7 +542,7 @@ export function useSessionOrchestrator(deps: {
 
   /** Opt-in sleep-onset fade (Phase 9) for a session that is eligible for it. */
   const armSleepOnsetWatch = (controller: SessionController, eligible: boolean) => {
-    stopSleepOnsetWatch();
+    stopSensorWatches();
     if (!eligible || settings.sleepOnsetFade !== true) return;
     // Without a live sensor (heart rate or motion) the detector simply never
     // has fresh samples.
@@ -547,6 +555,24 @@ export function useSessionOrchestrator(deps: {
           checkpointRef.current = { ...checkpointRef.current, sleepOnsetSec: elapsedSec };
         }
       },
+      motion.getSamples,
+    );
+  };
+
+  /**
+   * Smart wake (Phase 16) for a wake-up session, when the user picked a
+   * window. Like the sleep-onset fade, it only ever acts on a live sensor —
+   * without one the alarm rings at the planned time.
+   */
+  const armSmartWakeWatch = (controller: SessionController, wakeUp: WakeUp | undefined) => {
+    smartWakeWatchRef.current?.stop();
+    smartWakeWatchRef.current = null;
+    const windowMin = settings.wakeUp?.smartWindowMinutes ?? 0;
+    if (!wakeUp || windowMin <= 0) return;
+    smartWakeWatchRef.current = watchSmartWake(
+      controller,
+      { windowSec: windowMin * 60, riseSec: wakeUp.riseSec },
+      biometrics.getSamples,
       motion.getSamples,
     );
   };
@@ -627,6 +653,7 @@ export function useSessionOrchestrator(deps: {
       };
       startCheckpointing(controller);
       armSleepOnsetWatch(controller, last && leg.state === 'sleep' && !wakeUp);
+      armSmartWakeWatch(controller, wakeUp);
     };
     if (mode === 'start') return controller.start(config).then(afterStart);
     controller.continueWith(config);
@@ -659,7 +686,7 @@ export function useSessionOrchestrator(deps: {
       console.error('Routine failed to start', err);
       routineRef.current = null;
       setRoutineLeg(null);
-      stopSleepOnsetWatch();
+      stopSensorWatches();
       stopCheckpointing();
       releaseSessionLock();
       try {

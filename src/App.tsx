@@ -482,6 +482,10 @@ export function App() {
           onBreathingPatternChange={(id) => updateSettings({ breathingPattern: id })}
           wakeUp={settings.wakeUp ?? DEFAULT_WAKE_UP}
           onWakeUpChange={(wakeUp) => updateSettings({ wakeUp })}
+          smartWakeAvailable={Boolean(
+            (motion.possible && settings.motionConsentAt) ||
+              (biometrics.possible && settings.biometricsConsentAt),
+          )}
           intervals={selection.intervals}
           onIntervalsChange={selection.setIntervals}
           presets={presets}

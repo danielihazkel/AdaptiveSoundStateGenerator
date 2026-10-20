@@ -31,8 +31,13 @@ export interface Settings {
   motionConsentAt?: string | null;
   /** Guided breathing for calm/relax/meditation; absent = follow the pulse. */
   breathingPattern?: BreathingPatternId;
-  /** Sleep sessions: rise gently over the last `riseMinutes` and end with a chime. */
-  wakeUp?: { enabled: boolean; riseMinutes: number };
+  /**
+   * Sleep sessions: rise gently over the last `riseMinutes` and end with a
+   * chime. Phase 16 `smartWindowMinutes` (one of SMART_WAKE_WINDOWS; absent
+   * or 0 = off): start the rise early when the user stirs, so the alarm
+   * lands up to that many minutes before the planned end.
+   */
+  wakeUp?: { enabled: boolean; riseMinutes: number; smartWindowMinutes?: number };
   /**
    * Phase 9 (opt-in, needs a heart-rate sensor): fade a sleep session out as
    * completed once sleep onset is detected. Absent = off — a session must
@@ -65,6 +70,8 @@ export const THEMES: readonly Theme[] = ['system', 'light', 'dark'];
 export const DEFAULT_WAKE_UP = { enabled: false, riseMinutes: 10 } as const;
 export const MIN_WAKE_RISE_MINUTES = 3;
 export const MAX_WAKE_RISE_MINUTES = 30;
+/** Smart-wake window choices, minutes (0 = off). */
+export const SMART_WAKE_WINDOWS = [0, 15, 20, 30] as const;
 
 export const defaultSettings: Settings = {
   schemaVersion: SCHEMA_VERSION,
@@ -196,6 +203,12 @@ export interface SessionRecord {
    * rate said "asleep" and the session faded out early as completed.
    */
   sleepOnsetSec?: number;
+  /**
+   * Smart wake (Phase 16): elapsed seconds at which the user stirred inside
+   * the wake window and the rise started early. The session still counts as
+   * fully completed — waking at a light moment is the point.
+   */
+  smartWakeAtSec?: number;
   /** User explicitly declined to rate — itself an implicit signal (PRD §9). */
   feedbackSkipped?: boolean;
   /** ISO timestamp of the bandit update — guards against double-counting. */

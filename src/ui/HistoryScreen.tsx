@@ -90,6 +90,16 @@ export function HistoryScreen(props: {
               {s.feedback?.useAgain === false && <span className="badge early">wouldn't reuse</span>}
               {!s.completed && !s.recovered && <span className="badge early">stopped early</span>}
               {s.sleepOnsetSec !== undefined && <span className="badge">fell asleep</span>}
+              {s.smartWakeAtSec !== undefined && s.wakeUp && (
+                <span className="badge">
+                  woke{' '}
+                  {Math.max(
+                    1,
+                    Math.round((s.plannedDurationSec - s.smartWakeAtSec - s.wakeUp.riseSec) / 60),
+                  )}{' '}
+                  min early
+                </span>
+              )}
               {s.recovered && <span className="badge">ended unexpectedly</span>}
               {program && <span className="badge">{program.name}</span>}
               {s.programId && !program && <span className="badge">program (deleted)</span>}

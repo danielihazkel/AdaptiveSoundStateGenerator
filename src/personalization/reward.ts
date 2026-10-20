@@ -129,10 +129,10 @@ export function computeReward(record: SessionRecord): RewardResult | null {
  * aggregations (PRD §10), which cover every session including presets.
  */
 export function scoreSession(record: SessionRecord): RewardResult {
-  // A detected sleep onset ended the session early *on purpose* — that is
-  // full completion, not an early stop.
+  // A detected sleep onset — or a smart wake at a light moment — ended the
+  // session early *on purpose*: that is full completion, not an early stop.
   const fraction =
-    record.sleepOnsetSec !== undefined
+    record.sleepOnsetSec !== undefined || (record.smartWakeAtSec !== undefined && record.completed)
       ? 1
       : record.openEnded
         ? Math.min(record.actualDurationSec / OPEN_ENDED_TARGET_SEC, 1)

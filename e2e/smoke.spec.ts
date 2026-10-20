@@ -184,3 +184,33 @@ test('a routine flows from leg to leg without stopping, then rates each part', a
   await expect(history).toContainText(/Focus · .*★★★★★/);
   await expect(history).toContainText(/Energy · .*★★★★(?!★)/);
 });
+
+test('smart wake: stirring inside the window starts the rise early (simulated phone motion)', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/?simmotion=restless');
+  await page.getByRole('button', { name: 'I understand' }).click();
+  await page.getByRole('button', { name: 'Skip tour' }).click();
+
+  // Opt in to motion sensing, then set up a 30 min sleep with a 3 min rise
+  // and a 15 min smart window: the watch opens 18 min before the end.
+  await page.getByRole('button', { name: /Settings/ }).click();
+  await page.getByRole('checkbox', { name: /motion sensor/ }).check();
+  await page.goBack();
+  await page.getByRole('radio', { name: /Sleep/ }).click();
+  await page.getByRole('radio', { name: '30 min' }).click();
+  await page.getByRole('checkbox', { name: /Wake me up/ }).check();
+  await page.getByRole('spinbutton', { name: 'Wake-up rise length in minutes' }).fill('3');
+  await page.getByRole('button', { name: 'up to 15 min' }).click();
+  await page.getByRole('button', { name: /► Begin/ }).click();
+  await expect(page.locator('.session-clock')).toHaveText(/^(30:00|29:5\d)$/);
+
+  // The window opens 12 min in; the restless sensor triggers the rise at the
+  // first check, so at 13 min the alarm is under 3 min away, not 17.
+  await page.clock.runFor(13 * 60_000);
+  const remaining = async () => {
+    const [m, s] = (await page.locator('.session-clock').textContent())!.split(':').map(Number);
+    return m * 60 + s;
+  };
+  await expect.poll(remaining).toBeLessThanOrEqual(3 * 60);
+  expect(await remaining()).toBeGreaterThan(60);
+});

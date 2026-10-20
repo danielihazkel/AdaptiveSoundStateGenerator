@@ -477,3 +477,20 @@ describe('mood before/after (Phase 13)', () => {
     expect(scoreSession(withMood(3, 1, 5)).value).toBeLessThan(scoreSession(rated(4)).value);
   });
 });
+
+describe('smart wake (Phase 16)', () => {
+  it('waking early at a light moment scores like running the full session', () => {
+    const base = {
+      state: 'sleep' as const,
+      plannedDurationSec: 8 * 3600,
+      completed: true,
+      wakeUp: { riseSec: 600 },
+      feedback: { rating: 4 as const, ratedAt: '2026-08-21T07:00:00.000Z' },
+    };
+    const smart = computeReward(
+      makeRecord({ ...base, actualDurationSec: 8 * 3600 - 20 * 60, smartWakeAtSec: 8 * 3600 - 30 * 60 }),
+    )!;
+    const full = computeReward(makeRecord({ ...base, actualDurationSec: 8 * 3600 }))!;
+    expect(smart.value).toBeCloseTo(full.value, 12);
+  });
+});

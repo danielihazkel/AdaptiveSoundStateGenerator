@@ -77,6 +77,8 @@ export interface SessionResult {
   completed: boolean;
   /** Elapsed seconds at which windDown() fired (sleep onset), if it did. */
   woundDownAtSec?: number;
+  /** Elapsed seconds at which wakeNow() started the rise early (smart wake), if it did. */
+  smartWakeAtSec?: number;
   /** User-initiated pauses (PRD §9 implicit signal); interruptions excluded. */
   pauseCount?: number;
   /** Total wall-clock seconds spent in user-initiated pauses. */
@@ -138,6 +140,8 @@ export class SessionController {
   private startedAt = '';
   /** Elapsed seconds at which windDown() pinned the end, else null. */
   private woundDownAtSec: number | null = null;
+  /** Elapsed seconds at which wakeNow() pulled the rise forward, else null. */
+  private smartWakeAtSec: number | null = null;
   /** User pauses (PRD §9): count + accumulated wall time; not interruptions. */
   private pauseCount = 0;
   private pausedMs = 0;
@@ -176,6 +180,7 @@ export class SessionController {
     this.config = config;
     this.resumeFailed = false;
     this.woundDownAtSec = null;
+    this.smartWakeAtSec = null;
     this.pauseCount = 0;
     this.pausedMs = 0;
     this.pausedAt = null;
@@ -336,6 +341,28 @@ export class SessionController {
   }
 
   /**
+   * Smart wake (Phase 16): start a wake-up session's rise now instead of at
+   * its planned time — the smart-wake watcher calls this when the user
+   * stirs inside their wake window. Pinning the end to "now + rise" puts
+   * the arc's wake-up knee exactly at this moment (resolveArc scales the
+   * knee with durationSec), so the rise starts here and the alarm lands
+   * riseSec later; snooze and extend keep working off the new end.
+   * Refused (false) outside 'running', for sessions without a wake-up, and
+   * once the rise is already under way.
+   */
+  wakeNow(): boolean {
+    const config = this.config;
+    if (!config || this.snapshot.phase !== 'running') return false;
+    if (!config.wakeUp || config.program || config.openEnded) return false;
+    const elapsedSec = this.elapsedMs() / 1000;
+    if (elapsedSec >= config.durationSec - config.wakeUp.riseSec) return false;
+    this.smartWakeAtSec = Math.round(elapsedSec);
+    config.durationSec = elapsedSec + config.wakeUp.riseSec;
+    this.tick();
+    return true;
+  }
+
+  /**
    * Routine hand-off (Phase 14): carry on into the next leg without stopping.
    * The leg clock, counters and checkpoints restart for `next`; the sound
    * glides onto its profile over the adaptation time constant, noise-colour
@@ -347,6 +374,7 @@ export class SessionController {
     if (!this.config || this.snapshot.phase !== 'running') return;
     this.config = next;
     this.woundDownAtSec = null;
+    this.smartWakeAtSec = null;
     this.pauseCount = 0;
     this.pausedMs = 0;
     this.pausedAt = null;
@@ -505,6 +533,7 @@ export class SessionController {
       actualDurationSec: Math.round(this.clock.elapsedMs() / 1000),
       completed,
       ...(this.woundDownAtSec !== null ? { woundDownAtSec: this.woundDownAtSec } : {}),
+      ...(this.smartWakeAtSec !== null ? { smartWakeAtSec: this.smartWakeAtSec } : {}),
       ...(this.pauseCount > 0
         ? { pauseCount: this.pauseCount, pausedSec: Math.round(this.pausedMs / 1000) }
         : {}),

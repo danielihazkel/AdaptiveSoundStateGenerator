@@ -727,3 +727,78 @@ describe('routine hand-off (Phase 14)', () => {
     expect(engine.applyProfile).not.toHaveBeenCalled();
   });
 });
+
+describe('wakeNow (smart wake, Phase 16)', () => {
+  let engine: ReturnType<typeof stubEngine> & {
+    startAlarm: ReturnType<typeof vi.fn>;
+    stopAlarm: ReturnType<typeof vi.fn>;
+  };
+  let controller: SessionController;
+  const sleepWithWakeUp = () =>
+    config({
+      state: 'sleep',
+      durationSec: 8 * 60 * 60,
+      profile: STATES.sleep.buildProfile(0.5),
+      wakeUp: { riseSec: 10 * 60 },
+    });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] });
+    engine = { ...stubEngine(), startAlarm: vi.fn(), stopAlarm: vi.fn() };
+    controller = new SessionController(engine as unknown as AudioEngine);
+  });
+
+  afterEach(() => {
+    controller.dispose();
+    vi.useRealTimers();
+  });
+
+  it('starts the rise now: the arc reaches its wake-up knee here and the alarm rings a rise later', async () => {
+    const results: Array<{ completed: boolean; smartWakeAtSec?: number; actualDurationSec: number }> = [];
+    controller.onComplete = (r) =>
+      results.push({ completed: r.completed, smartWakeAtSec: r.smartWakeAtSec, actualDurationSec: r.actualDurationSec });
+    await controller.start(sleepWithWakeUp());
+    const at = 7 * 60 * 60 + 35 * 60; // 25 min before the planned end
+    await vi.advanceTimersByTimeAsync(at * 1000);
+    expect(controller.wakeNow()).toBe(true);
+    expect(controller.getSnapshot().remainingSec).toBe(10 * 60);
+    // The arc is now evaluated on the shortened session, right at the knee.
+    const arc = resolveArc('sleep', { wakeUp: { riseSec: 10 * 60 }, durationSec: at + 10 * 60 });
+    expect(engine.setArcModulation).toHaveBeenLastCalledWith(
+      evaluateArc(arc, at / (at + 10 * 60)),
+      expect.any(Number),
+    );
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 1000);
+    expect(engine.startAlarm).toHaveBeenCalledTimes(1);
+    controller.dismissAlarm();
+    expect(results).toEqual([{ completed: true, smartWakeAtSec: at, actualDurationSec: at + 10 * 60 }]);
+  });
+
+  it('is refused without a wake-up, once the rise is under way, and when not running', async () => {
+    await controller.start(config({ state: 'sleep', durationSec: 60 * 60, profile: STATES.sleep.buildProfile(0.5) }));
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    expect(controller.wakeNow()).toBe(false);
+    controller.stop();
+
+    await controller.start(sleepWithWakeUp());
+    await vi.advanceTimersByTimeAsync((8 * 60 * 60 - 5 * 60) * 1000); // inside the planned rise
+    expect(controller.wakeNow()).toBe(false);
+    controller.stop();
+
+    await controller.start(sleepWithWakeUp());
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    await controller.pause();
+    expect(controller.wakeNow()).toBe(false);
+  });
+
+  it('snooze still works after a smart wake', async () => {
+    await controller.start(sleepWithWakeUp());
+    await vi.advanceTimersByTimeAsync(7 * 60 * 60 * 1000);
+    expect(controller.wakeNow()).toBe(true);
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 1000);
+    expect(controller.getSnapshot().phase).toBe('alarm');
+    await controller.snooze();
+    expect(controller.getSnapshot().phase).toBe('running');
+    expect(controller.getSnapshot().remainingSec).toBeGreaterThan(4 * 60);
+  });
+});
