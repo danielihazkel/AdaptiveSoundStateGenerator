@@ -71,6 +71,8 @@ export class AudioEngine {
   /** Guided-breathing side channel (never part of the profile). */
   private breath: BreathPattern | null = null;
   private breathAnchor = 0;
+  /** Adaptive-masking boost (Phase 16) — another side channel; 1 = none. */
+  private masking = 1;
 
   /** Listeners for AudioContext state changes (interruption handling). */
   private readonly contextStateListeners = new Set<(state: AudioContextState) => void>();
@@ -268,6 +270,17 @@ export class AudioEngine {
       this.breathAnchor = anchorCtxTime ?? this.ctx.currentTime;
     }
     this.breath = pattern;
+    this.applyAll(timeConstant);
+  }
+
+  /**
+   * Adaptive-masking entry point (Phase 16): lift the noise and ambience
+   * beds by `gain` (clamped to [1, MAX_MASKING_BOOST] in compose) because
+   * the room got loud. Like the other side channels it never touches the
+   * profile, so records, presets and customization detection never see it.
+   */
+  setMasking(gain: number, timeConstant?: number): void {
+    this.masking = gain;
     this.applyAll(timeConstant);
   }
 
@@ -665,6 +678,7 @@ export class AudioEngine {
         breath: this.breath,
         monoMode: this.monoMode,
         typeFadeSec,
+        masking: this.masking,
       }),
       timeConstant,
     );

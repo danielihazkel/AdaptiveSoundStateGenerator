@@ -101,6 +101,27 @@ async function renderGlide(spec: {
   return { seconds: spec.seconds };
 }
 
+/**
+ * A steady state-default whose masking side channel (Phase 16) jumps to
+ * `gain` mid-render with the live loop's ramp — the worst case of a room
+ * that gets loud, without the loop's minute-long smoothing.
+ */
+async function renderMasking(spec: {
+  state: MentalState;
+  gain: number;
+  seconds: number;
+  maskAt: number;
+}): Promise<{ seconds: number }> {
+  last = await renderSteady(profileFor({ state: spec.state }), spec.seconds, (engine, ctx) =>
+    ctx.suspend(spec.maskAt).then(() => {
+      engine.setMasking(spec.gain, 2);
+      engine.schedulePulsesUntil(spec.seconds);
+      void ctx.resume();
+    }),
+  );
+  return { seconds: spec.seconds };
+}
+
 /** A profile rendered as-is: no arc, no fade-in. */
 async function renderSteady(
   profile: SoundProfile,
@@ -192,6 +213,6 @@ async function measureArms(
   return out;
 }
 
-const hooks = { render, renderGlide, transition, lufs, measureArms };
+const hooks = { render, renderGlide, renderMasking, transition, lufs, measureArms };
 export type QaHooks = typeof hooks;
 (window as unknown as { __qa: QaHooks }).__qa = hooks;

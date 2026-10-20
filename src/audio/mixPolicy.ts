@@ -55,3 +55,11 @@ export const AMBIENCE_TRIM: Record<AmbienceType, number> = {
 export const MONO_SUBSTITUTE_MIN_DEPTH = 0.35;
 /** Guided breathing must be audible as a swell: relax/meditation pulses are 3-12 % deep. */
 export const BREATH_MIN_DEPTH = 0.3;
+
+/**
+ * Phase 16 adaptive masking: the most the masking beds (noise + ambience)
+ * may rise over the profile when the room gets loud — +3 dB. Small on
+ * purpose: the limiter is the only hard ceiling, and masking should help
+ * concentration without turning into "the app got loud". Clamped in compose.
+ */
+export const MAX_MASKING_BOOST = 10 ** (3 / 20);

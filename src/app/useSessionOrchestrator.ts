@@ -41,6 +41,7 @@ import { watchSmartWake, type SmartWakeWatch } from './smartWakeWatcher';
 import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
 import type { Motion } from './useMotion';
+import { MASKING_STATES, type RoomMasking } from './useRoomMasking';
 import type { Coach } from './useCoach';
 import type { SetupSelection } from './useSetupSelection';
 import { resolveSessionProgram } from './resolveSessionProgram';
@@ -71,6 +72,11 @@ function soundFingerprint(profile: SoundProfile): string {
  */
 export const VOLUME_GESTURE_GAP_MS = 1500;
 
+/** The session's largest masking boost for the record: 0.1 dB, absent when it never ran. */
+function roundMaskingDb(db: number | null): number | undefined {
+  return db === null ? undefined : Math.round(db * 10) / 10;
+}
+
 /**
  * Owns the shared AudioEngine + SessionController and the lifecycle of one
  * session: resolving what to play (program > preset > replay > personalized),
@@ -87,6 +93,8 @@ export function useSessionOrchestrator(deps: {
   biometrics: Biometrics;
   /** Phase 16: the phone's motion sensor (opt-in). */
   motion: Motion;
+  /** Phase 16: adaptive masking from the room's loudness (opt-in). */
+  roomMasking: RoomMasking;
   coach: Coach;
   /** A session record was written — refresh stored-data views. */
   onSessionStored: () => void;
@@ -144,7 +152,7 @@ export function useSessionOrchestrator(deps: {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
-  const { settings, selection, adaptation, biometrics, motion, coach } = deps;
+  const { settings, selection, adaptation, biometrics, motion, roomMasking, coach } = deps;
 
   /**
    * Opted-in motion sensing starts from the Begin tap (iOS asks permission
@@ -232,6 +240,7 @@ export function useSessionOrchestrator(deps: {
       coachUsed: meta?.coachUsed || undefined,
       biometricsUsed: biometrics.wasUsed() || undefined,
       motionUsed: motion.wasUsed() || undefined,
+      maskingMaxDb: roundMaskingDb(roomMasking.getMaxBoostDb()),
       breathingPattern:
         result.config.breathing && result.config.breathing.id !== 'pulse'
           ? result.config.breathing.id
@@ -251,6 +260,7 @@ export function useSessionOrchestrator(deps: {
       void startLeg(routine.leg + 1, 'continue');
       return;
     }
+    roomMasking.stop();
     const routineLegs = routine?.records;
     routineRef.current = null;
     setRoutineLeg(null);
@@ -340,6 +350,8 @@ export function useSessionOrchestrator(deps: {
       // A replay or a pinned arm ignores the setup selection's sound choices.
       const bypass = direct !== null || pin !== null;
       const mentalState = direct?.state ?? pin?.state ?? selection.mentalState;
+      // Still synchronous inside the tap: the microphone prompt needs it.
+      if (settings.roomMasking === true && MASKING_STATES.has(mentalState)) roomMasking.start(true);
       const intensity = direct?.intensity ?? pin?.intensity ?? selection.intensity;
       const minutes = direct
         ? Math.max(1, Math.round(direct.plannedDurationSec / 60))
@@ -529,6 +541,7 @@ export function useSessionOrchestrator(deps: {
       stopSensorWatches();
       stopCheckpointing();
       releaseSessionLock();
+      roomMasking.stop();
       try {
         controllerRef.current?.stop();
       } catch {
@@ -619,6 +632,7 @@ export function useSessionOrchestrator(deps: {
     });
     biometrics.resetForSession();
     motion.resetForSession();
+    roomMasking.setActive(MASKING_STATES.has(leg.state));
     const durationSec = leg.minutes * 60;
     // Only the last leg can end in a wake-up rise.
     const wakeUp = last ? (wakeUpFor(leg.state, settings.wakeUp, durationSec) ?? undefined) : undefined;
@@ -669,6 +683,9 @@ export function useSessionOrchestrator(deps: {
     setStartError(null);
     try {
       const first = routine.legs[0];
+      if (settings.roomMasking === true && routine.legs.some((leg) => MASKING_STATES.has(leg.state))) {
+        roomMasking.start(MASKING_STATES.has(first.state));
+      }
       const [, releaseLock] = await Promise.all([
         ensureEngine(STATES[first.state].buildProfile(first.intensity)),
         acquireSessionLock(),
@@ -689,6 +706,7 @@ export function useSessionOrchestrator(deps: {
       stopSensorWatches();
       stopCheckpointing();
       releaseSessionLock();
+      roomMasking.stop();
       try {
         controllerRef.current?.stop();
       } catch {
@@ -753,6 +771,7 @@ export function useSessionOrchestrator(deps: {
     engineRef.current?.setArcModulation(IDENTITY_MODULATION);
     engineRef.current?.setProgramModulation(null);
     engineRef.current?.setBreathPattern(null);
+    engineRef.current?.setMasking(1);
     return true;
   };
 
@@ -761,6 +780,7 @@ export function useSessionOrchestrator(deps: {
     engineRef.current?.setProgramModulation(null);
     engineRef.current?.setBreathPattern(null);
     engineRef.current?.setArcModulation(IDENTITY_MODULATION);
+    engineRef.current?.setMasking(1);
   };
 
   return {

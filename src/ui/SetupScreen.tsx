@@ -96,6 +96,10 @@ export function SetupScreen(props: {
   onOpenLab: () => void;
   onToggleMono: (mono: boolean) => void;
   onToggleChime: (chime: boolean) => void;
+  /** Phase 16: adaptive masking is possible for this state on this device. */
+  roomMaskingAvailable?: boolean;
+  roomMasking?: boolean;
+  onRoomMaskingChange?: (on: boolean) => void;
   onOpenSettings: () => void;
   /** Optional "how do you feel right now?" on the state's axis (Phase 13). */
   moodBefore: MoodLevel | undefined;
@@ -517,6 +521,25 @@ export function SetupScreen(props: {
           />
           Gentle chime when the session ends
         </label>
+      )}
+      {props.roomMaskingAvailable && (
+        <>
+          <label className="mono-toggle">
+            <input
+              type="checkbox"
+              checked={props.roomMasking === true}
+              onChange={(e) => props.onRoomMaskingChange?.(e.target.checked)}
+            />
+            Adapt to room noise 🎤
+          </label>
+          {props.roomMasking && (
+            <p className="hint">
+              Noise and ambience rise a little (up to +3 dB) when your surroundings get loud,
+              and settle back when they quieten. Only the room's loudness is measured — nothing
+              is recorded, and the microphone closes when the session ends.
+            </p>
+          )}
+        </>
       )}
       {stateDef.noDrivingWarning && <NoDrivingWarning />}
 

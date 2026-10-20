@@ -10,6 +10,7 @@ import {
   BINAURAL_TRIM,
   BREATH_MIN_DEPTH,
   HARMONY_TRIM,
+  MAX_MASKING_BOOST,
   MONO_SUBSTITUTE_MIN_DEPTH,
   NOISE_TRIM,
   TONE_TRIM,
@@ -56,6 +57,10 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   const harmonyScale = pm?.harmonyScale ?? 1;
   const bassScale = pm?.bassScale ?? 1;
   const warmth = pm && pm.warmth !== null ? pm.warmth : p.tone.warmth;
+  // Phase 16: the adaptive-masking boost on the masking beds, clamped to
+  // [1, MAX_MASKING_BOOST]; absent = 1.
+  const masking =
+    input.masking === undefined ? 1 : Math.min(MAX_MASKING_BOOST, Math.max(1, input.masking));
 
   const toneEnabled = substitute ? true : p.tone.enabled;
   const toneFrequency = substitute ? carrier : p.tone.frequency;
@@ -87,14 +92,16 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   // this.noise.setType(type, fadeSec) / setLevel
   out.noise = {
     type: noiseType,
-    level: p.noise.enabled ? p.noise.level * arcGain * noiseScale * NOISE_TRIM[noiseType] : 0,
+    level: p.noise.enabled
+      ? p.noise.level * arcGain * noiseScale * NOISE_TRIM[noiseType] * masking
+      : 0,
     fadeSec,
   };
   // this.ambience.setType(type, fadeSec) / setLevel
   out.ambience = {
     type: ambienceType,
     level: p.ambience.enabled
-      ? p.ambience.level * arcGain * ambienceScale * AMBIENCE_TRIM[ambienceType]
+      ? p.ambience.level * arcGain * ambienceScale * AMBIENCE_TRIM[ambienceType] * masking
       : 0,
     fadeSec,
   };
@@ -102,7 +109,7 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
   out.ambience2 = {
     type: p.ambience2.type,
     level: p.ambience2.enabled
-      ? p.ambience2.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience2.type]
+      ? p.ambience2.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience2.type] * masking
       : 0,
     fadeSec,
   };
@@ -270,6 +277,11 @@ function* matrix(): Generator<ComposeInput> {
           for (const monoMode of [false, true]) {
             yield { profile, arc, program, breath, monoMode };
           }
+          // Phase 16: masking at, inside and beyond its cap (stereo only —
+          // the boost is independent of the mono path).
+          for (const masking of [1.2, MAX_MASKING_BOOST, 3]) {
+            yield { profile, arc, program, breath, monoMode: false, masking };
+          }
         }
       }
     }
@@ -297,6 +309,27 @@ describe('composeEffectiveParams', () => {
     expect(composeEffectiveParams({ ...base, program: PROGRAM, typeFadeSec: 3 }).ambience.fadeSec).toBe(
       PROGRAM.typeFadeSec,
     );
+  });
+
+  it('Phase 16: masking lifts only the masking beds, by at most +3 dB', () => {
+    const profile = STATES.focus.buildProfile(0.5);
+    profile.ambience2.enabled = true;
+    const base = { profile, arc: IDENTITY_MODULATION, program: null, breath: null, monoMode: false };
+    const plain = composeEffectiveParams(base);
+    const masked = composeEffectiveParams({ ...base, masking: 10 });
+    expect(masked.noise.level / plain.noise.level).toBeCloseTo(MAX_MASKING_BOOST, 12);
+    expect(masked.ambience.level / plain.ambience.level).toBeCloseTo(MAX_MASKING_BOOST, 12);
+    expect(masked.ambience2.level / plain.ambience2.level).toBeCloseTo(MAX_MASKING_BOOST, 12);
+    expect(20 * Math.log10(MAX_MASKING_BOOST)).toBeCloseTo(3, 12);
+    // Everything that isn't a masking bed is untouched.
+    expect({ ...masked, noise: null, ambience: null, ambience2: null }).toEqual({
+      ...plain,
+      noise: null,
+      ambience: null,
+      ambience2: null,
+    });
+    // A boost below 1 is never a cut.
+    expect(composeEffectiveParams({ ...base, masking: 0.2 })).toEqual(plain);
   });
 
   it('does not mutate its inputs', () => {

@@ -67,6 +67,7 @@ export function normalizeSettings(raw: unknown): Settings {
   if (p.export !== undefined) out.export = normalizeExportOptions(p.export);
   if (typeof p.visualizer === 'boolean') out.visualizer = p.visualizer;
   if (typeof p.explainSound === 'boolean') out.explainSound = p.explainSound;
+  if (typeof p.roomMasking === 'boolean') out.roomMasking = p.roomMasking;
   if (NIGHTSTAND_MODES.includes(p.nightstand as NightstandMode)) {
     out.nightstand = p.nightstand as NightstandMode;
   }

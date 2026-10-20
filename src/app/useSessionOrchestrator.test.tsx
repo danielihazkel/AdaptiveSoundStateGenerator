@@ -13,6 +13,7 @@ import type { AdaptationLoop } from './useAdaptationLoop';
 import type { Biometrics } from './useBiometrics';
 import type { Coach } from './useCoach';
 import type { Motion } from './useMotion';
+import type { RoomMasking } from './useRoomMasking';
 import { useSessionOrchestrator } from './useSessionOrchestrator';
 import type { SetupSelection } from './useSetupSelection';
 
@@ -68,6 +69,13 @@ const motion = {
   wasUsed: () => false,
   getSamples: () => [],
 } as unknown as Motion;
+const roomMasking = {
+  possible: false,
+  start: vi.fn(),
+  setActive: vi.fn(),
+  stop: vi.fn(),
+  getMaxBoostDb: () => null,
+} as unknown as RoomMasking;
 
 function setup(opts: { settings?: Partial<Settings>; selection?: Partial<SetupSelection>; presets?: Preset[] } = {}) {
   const callbacks = {
@@ -86,6 +94,7 @@ function setup(opts: { settings?: Partial<Settings>; selection?: Partial<SetupSe
       adaptation,
       biometrics,
       motion,
+      roomMasking,
       coach,
       ...callbacks,
     }),

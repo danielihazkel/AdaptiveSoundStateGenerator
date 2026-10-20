@@ -7,6 +7,7 @@ import {
   BINAURAL_TRIM,
   BREATH_MIN_DEPTH,
   HARMONY_TRIM,
+  MAX_MASKING_BOOST,
   MONO_SUBSTITUTE_MIN_DEPTH,
   NOISE_TRIM,
   TONE_TRIM,
@@ -17,9 +18,9 @@ import type { AmbienceType, NoiseType, SoundProfile } from './types';
 
 /**
  * The pure half of AudioEngine.applyAll: everything the engine needs to know
- * to drive its node graph, computed from the profile and its three side
- * channels (evolution arc, timed program, guided breathing) plus the mono
- * fallback. No audio objects touched — fully unit-testable.
+ * to drive its node graph, computed from the profile and its side channels
+ * (evolution arc, timed program, guided breathing, adaptive masking) plus
+ * the mono fallback. No audio objects touched — fully unit-testable.
  *
  * Every level here already includes its per-layer trim and is 0 when the
  * layer is disabled, so the engine only ramps values.
@@ -36,6 +37,13 @@ export interface ComposeInput {
    * program fade. Absent = TYPE_FADE_SECONDS.
    */
   typeFadeSec?: number;
+  /**
+   * Phase 16 adaptive masking: a linear boost on the masking beds — noise
+   * and both ambiences — when the room gets loud (masking.ts), in
+   * [1, MAX_MASKING_BOOST]. Clamped here so no caller can exceed the cap.
+   * Absent = 1, which is bit-identical (x × 1 = x).
+   */
+  masking?: number;
 }
 
 export type PulseParams =
@@ -104,6 +112,7 @@ export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
   const toneScale = pm?.toneScale ?? 1;
   const harmonyScale = pm?.harmonyScale ?? 1;
   const bassScale = pm?.bassScale ?? 1;
+  const masking = Math.min(MAX_MASKING_BOOST, Math.max(1, input.masking ?? 1));
   // A program segment may override tone warmth; it softens the pad too.
   const warmth = pm && pm.warmth !== null ? pm.warmth : p.tone.warmth;
 
@@ -160,13 +169,15 @@ export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
     },
     noise: {
       type: noiseType,
-      level: p.noise.enabled ? p.noise.level * arcGain * noiseScale * NOISE_TRIM[noiseType] : 0,
+      level: p.noise.enabled
+        ? p.noise.level * arcGain * noiseScale * NOISE_TRIM[noiseType] * masking
+        : 0,
       fadeSec: typeFadeSec,
     },
     ambience: {
       type: ambienceType,
       level: p.ambience.enabled
-        ? p.ambience.level * arcGain * ambienceScale * AMBIENCE_TRIM[ambienceType]
+        ? p.ambience.level * arcGain * ambienceScale * AMBIENCE_TRIM[ambienceType] * masking
         : 0,
       fadeSec: typeFadeSec,
     },
@@ -175,7 +186,7 @@ export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
     ambience2: {
       type: p.ambience2.type,
       level: p.ambience2.enabled
-        ? p.ambience2.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience2.type]
+        ? p.ambience2.level * arcGain * ambienceScale * AMBIENCE_TRIM[p.ambience2.type] * masking
         : 0,
       fadeSec: typeFadeSec,
     },

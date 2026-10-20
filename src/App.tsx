@@ -49,6 +49,7 @@ import { useHashScreen } from './app/useHashScreen';
 import { useAdaptationLoop } from './app/useAdaptationLoop';
 import { useBiometrics } from './app/useBiometrics';
 import { useMotion } from './app/useMotion';
+import { MASKING_STATES, useRoomMasking } from './app/useRoomMasking';
 import { useCoach } from './app/useCoach';
 import { useFeedbackHandlers } from './app/useFeedbackHandlers';
 import {
@@ -173,6 +174,7 @@ export function App() {
   const selection = useSetupSelection({ onUserOverride: coach.reset });
   const biometrics = useBiometrics();
   const motion = useMotion();
+  const roomMasking = useRoomMasking({ getEngine: () => sessionRef.current?.getEngine() ?? null });
   const exporter = useMp3Export({
     options: settings.export,
     onOptionsChange: (next) => updateSettings({ export: next }),
@@ -220,6 +222,7 @@ export function App() {
     adaptation,
     biometrics,
     motion,
+    roomMasking,
     coach,
     onSessionStored: data.bumpData,
     onPresetSaved: data.refreshPresets,
@@ -532,6 +535,9 @@ export function App() {
             session.setMonoMode(mono);
           }}
           onToggleChime={(chime) => updateSettings({ chimeEnabled: chime })}
+          roomMaskingAvailable={roomMasking.possible && MASKING_STATES.has(selection.mentalState)}
+          roomMasking={settings.roomMasking === true}
+          onRoomMaskingChange={(on) => updateSettings({ roomMasking: on })}
           onOpenSettings={() => navigate('settings')}
           lastSession={data.lastSession}
           onPlayLast={playLast}

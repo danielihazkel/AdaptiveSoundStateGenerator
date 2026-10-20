@@ -59,6 +59,11 @@ export interface Settings {
   visualizer?: boolean;
   /** Phase 15: "why this sound" line on the session screen; absent = on. */
   explainSound?: boolean;
+  /**
+   * Phase 16: raise the noise / ambience beds a little when the room gets
+   * loud (microphone loudness only, focus-type states). Absent = off.
+   */
+  roomMasking?: boolean;
 }
 
 export type NightstandMode = 'sleep' | 'always' | 'never';
@@ -221,6 +226,11 @@ export interface SessionRecord {
   biometricsUsed?: boolean;
   /** Phase 16: the phone's motion sensor delivered during the session. */
   motionUsed?: boolean;
+  /**
+   * Phase 16 adaptive masking ran: the largest boost it applied to the
+   * noise / ambience beds, dB (0 = the room never got loud). Absent = off.
+   */
+  maskingMaxDb?: number;
   /** Guided breathing pattern the mix followed (absent = none / pulse-derived). */
   breathingPattern?: Exclude<BreathingPatternId, 'pulse'>;
   /** The session closed with a wake-up rise of this length. */

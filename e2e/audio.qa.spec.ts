@@ -138,3 +138,20 @@ test('turning the room (space) up keeps the loudness', async ({ page }) => {
   });
   expect(Math.abs(wet - dry)).toBeLessThan(1);
 });
+
+test('adaptive masking at its cap stays within +3 LU and click-free', async ({ page }) => {
+  const report = await page.evaluate(async () => {
+    const qa = window.__qa;
+    await qa.renderMasking({ state: 'focus', gain: 10, seconds: 40, maskAt: 10 });
+    return {
+      before: qa.lufs([2, 9.9]),
+      after: qa.lufs([25, 39]),
+      glide: qa.transition([2, 9.9], [9.9, 20], [25, 39]),
+    };
+  });
+  const lift = report.after - report.before;
+  // It does lift the beds, but never past the +3 dB cap (gain 10 is clamped).
+  expect(lift).toBeGreaterThan(0.5);
+  expect(lift).toBeLessThanOrEqual(3.05);
+  expect(report.glide.clickRatio).toBeLessThan(CLICK_LIMIT);
+});

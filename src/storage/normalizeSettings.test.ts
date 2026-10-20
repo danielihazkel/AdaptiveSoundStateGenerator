@@ -28,6 +28,7 @@ describe('normalizeSettings', () => {
       nightstand: 'never' as const,
       visualizer: false,
       explainSound: false,
+      roomMasking: true,
     };
     expect(normalizeSettings(full)).toEqual(full);
   });

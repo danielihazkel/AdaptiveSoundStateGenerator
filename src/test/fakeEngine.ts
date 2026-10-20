@@ -26,6 +26,7 @@ export function fakeEngine(initial?: SoundProfile) {
     setArcModulation: vi.fn(),
     setProgramModulation: vi.fn(),
     setBreathPattern: vi.fn(),
+    setMasking: vi.fn(),
     setMonoMode: vi.fn((on: boolean) => {
       mono = on;
     }),
