@@ -160,7 +160,7 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Lock-screen artwork drawn per state (canvas, cached) — `src/platform/artwork.ts`
 - [x] Export metadata: ID3v2.3 (title, artist, album, genre, comment, cover) for MP3, LIST/INFO for WAV — `src/export/id3.ts`, `src/export/tagExport.ts`
 - [x] Ambience recordings keep playing offline: runtime cache + Cache API probe fallback — `vite.config.ts`, `src/audio/ambienceAssets.ts`
-- [ ] Out of scope for now: MP3 export of a whole routine; mood check-in on routines; routine legs that run a timed program
+- [x] ~~Out of scope for now: MP3 export of a whole routine; mood check-in on routines; routine legs that run a timed program~~ — all three done in Phase 17
 - [ ] Verify by ear / on a phone: a real routine's hand-offs sound like one continuous piece; Android lock screen shows the artwork; an exported MP3 shows its title + cover in the phone's player; with a recording in `public/ambience/`, it still plays after going offline
 
 ## Phase 15 — Visible learning
@@ -176,6 +176,15 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Smart wake: `Settings.wakeUp.smartWindowMinutes` (15/20/30), `SessionController.wakeNow()` pins the end to now + rise (knee lands now; snooze/extend unchanged), watcher stirs on restless motion or HR rising vs the previous 20 min, `smartWakeAtSec` on records (reward = full completion, "woke N min early" badge); smoke e2e with `?simmotion=restless` — `src/app/smartWakeWatcher.ts`, `src/session/sessionController.ts`
 - [x] Adaptive masking: `MicrophoneRoomMeter` (analyser only, echo cancellation on, closed at session end) + `?simroom`; `masking.ts` (first-minute baseline, 3 dB deadband, +3 dB cap at 15 dB louder, 60 s attack / 20 s release, own boost subtracted); `engine.setMasking` side channel → compose multiplies the noise + ambience beds (clamped, absent = bit-identical, oracle extended); opt-in `Settings.roomMasking` for focus/flow/creative/relax; hidden on iOS; `maskingMaxDb` on records; audio QA: jump to the cap ≤ +3 LU, click-free — `src/audio/masking.ts`, `roomMeter.ts`, `src/app/useRoomMasking.ts`
 - [ ] Verify on a phone: the phone on a mattress reads still while lying still and restless when rolling over (with sound playing through the speaker); a real night with a 20-min smart window wakes early on a restless moment; in a café the beds audibly lift a little after a minute and settle when it's quiet, and the mic indicator turns off when the session ends (Android Chrome)
+
+## Phase 17 — Routines + music
+
+- [x] Routine legs that play a timed program: `RoutineLeg.programId` (kept by normalization), editor "Sound" picker (takes the program's state and min length), `startLeg` plays it like a saved-program session (no bandit/adaptation/breathing/wake-up), deleted programs fall back to served with a panel warning, share links carry the programs (fresh ids, legs remapped) — `src/routines/types.ts`, `src/ui/RoutineEditor.tsx`, `src/app/useSessionOrchestrator.ts`, `src/share/shareLink.ts`, `src/app/importShare.ts`
+- [x] Routine mood check-in on the destination's axis (`routineDestination`): recorded on the final leg (pairs with the after-mood), mood context only for legs in that state — `src/ui/RoutinesPanel.tsx`
+- [x] Whole-routine download: `ExportSelection.legs` / `routineExportSelection`, 'handoff' render events (replacing that second's modulation), per-leg arcs/programs from their own t=0, chunk engines start on the leg at their origin, the hand-off mirrors `continueWith`; `resolveRoutineExport` (locked per leg, program legs, first leg's volume, wake-up on the last plain leg); "Routine" tags; audio QA with a chunk seam on the hand-off — `src/export/offlineRenderer.ts`, `renderTimeline.ts`, `routineExport.ts`
+- [x] Scenes: seven curated scene profiles as virtual presets (`scene:<id>`) on setup and in the lab; preset tagging → no bandit credit, no adaptation, outside lift; History badge — `src/scenes/scenes.ts`
+- [x] Generative melody: `SoundProfile.melody` (disabled = legacy identical, every state emits it), pure seeded note placement (`melody.ts`), `MelodyLayer` (8 ms attack, post-pulse → preMaster, realtime lookahead / offline `scheduleUntil` + per-chunk clock), compose + oracle + edge profiles, Advanced panel, lab randomizer, insights component, tag comment; `melody-on` arm on pad states (candidate set v5, cap 17, pinned draws re-pinned for relax's larger menu), loudness table re-calibrated
+- [ ] Verify by ear: a routine with a program part plays the program's phases after the hand-off; a downloaded routine sounds like one continuous piece in a phone's player; each scene sounds like its name; melody-on on meditation — sparse, pleasant, never clicky, sitting inside the pad
 
 ## Ongoing / Cross-cutting
 
