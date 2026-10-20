@@ -186,6 +186,9 @@ test('a routine flows from leg to leg without stopping, then rates each part', a
 });
 
 test('smart wake: stirring inside the window starts the rise early (simulated phone motion)', async ({ page }) => {
+  // Fast-forwards 13 simulated minutes of every app timer (session tick,
+  // sensor epochs, schedulers) — more than the default 30 s budget.
+  test.setTimeout(120_000);
   await page.clock.install();
   await page.goto('/?simmotion=restless');
   await page.getByRole('button', { name: 'I understand' }).click();

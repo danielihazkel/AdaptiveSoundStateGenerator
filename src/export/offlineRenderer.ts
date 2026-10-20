@@ -292,6 +292,8 @@ async function driveChunk(
   // for the first chunk; later chunks snap (default quick ramp) onto the
   // session's values at their origin and pick up the rhythm mid-bar.
   // Breath cycle 0 is session t=0, i.e. ctx time −originSec in this chunk.
+  // The melody plays the notes of this moment of the session (melody.ts).
+  engine.setMelodyClock(chunk.originSec);
   const startLeg = legs[legIndexAt(legs, chunk.originSec)];
   if (!startLeg.program && startLeg.breathing) {
     engine.setBreathPattern(startLeg.breathing, toCtx(startLeg.startSec));

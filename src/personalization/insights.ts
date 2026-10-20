@@ -59,6 +59,7 @@ export type SoundComponent =
   | 'rhythm'
   | 'tone'
   | 'harmony'
+  | 'melody'
   | 'bass'
   | 'ambience';
 
@@ -69,6 +70,7 @@ export const SOUND_COMPONENTS: readonly SoundComponent[] = [
   'rhythm',
   'tone',
   'harmony',
+  'melody',
   'bass',
   'ambience',
 ];

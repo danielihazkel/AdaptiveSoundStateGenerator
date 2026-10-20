@@ -33,6 +33,7 @@ function expectedArmCount(state: MentalState): number {
   if (ref.ambience.enabled) n += 1; // ambience-alt
   else n -= 1; // ambience-off would be a no-op
   if (ref.tone.enabled || ref.harmony.enabled || ref.binaural.enabled) n += 1; // space-on (v4)
+  if (ref.harmony.enabled) n += 1; // melody-on (v5)
   return n;
 }
 
@@ -41,7 +42,8 @@ describe('candidate sets', () => {
     for (const { id: state } of STATE_LIST) {
       const specs = candidatesFor(state);
       expect(specs).toHaveLength(expectedArmCount(state));
-      expect(specs.length).toBeLessThanOrEqual(16);
+      // 17 since v5's melody-on (pad states); keep the menu small — see candidatesFor.
+      expect(specs.length).toBeLessThanOrEqual(17);
       expect(specs[0].id).toBe(PRIOR_ARM_ID);
       expect(new Set(specs.map((s) => s.id)).size).toBe(specs.length);
       for (const spec of specs) expect(spec.label.length).toBeGreaterThan(0);

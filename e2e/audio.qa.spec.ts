@@ -174,3 +174,31 @@ test('a routine export hands over click-free, even with a chunk seam right on th
   expect(report.handoff.clickRatio).toBeLessThan(CLICK_LIMIT);
   expect(report.handoff.dipRatio).toBeGreaterThan(DIP_LIMIT);
 });
+
+test('the generative melody plucks click-free, also across export chunk seams', async ({ page }) => {
+  const reports = await page.evaluate(async () => {
+    const qa = window.__qa;
+    // The densest, brightest melody over meditation, with 60 s chunks so
+    // notes straddle two seams (both engines must play the same notes).
+    await qa.render({
+      state: 'meditation',
+      durationSec: 150,
+      chunkSec: 60,
+      melody: { enabled: true, level: 1, density: 8, brightness: 1 },
+    });
+    const windows = [
+      qa.transition([5, 30], [30, 55], [55, 58]),
+      qa.transition([50, 59], [59, 61], [61, 70]),
+      qa.transition([110, 119], [119, 121], [121, 130]),
+    ];
+    const withMelody = qa.lufs([5, 140]);
+    await qa.render({ state: 'meditation', durationSec: 150, chunkSec: 60 });
+    return { windows, lift: withMelody - qa.lufs([5, 140]) };
+  });
+  // The plucks really are there (a silent layer would pass the click check)…
+  expect(reports.lift).toBeGreaterThan(0.1);
+  // …and never click, seams included.
+  for (const [i, r] of reports.windows.entries()) {
+    expect(r.clickRatio, `window ${i} click`).toBeLessThan(CLICK_LIMIT);
+  }
+});

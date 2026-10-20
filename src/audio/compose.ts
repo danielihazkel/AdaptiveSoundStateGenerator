@@ -8,6 +8,7 @@ import {
   BREATH_MIN_DEPTH,
   HARMONY_TRIM,
   MAX_MASKING_BOOST,
+  MELODY_TRIM,
   MONO_SUBSTITUTE_MIN_DEPTH,
   NOISE_TRIM,
   TONE_TRIM,
@@ -66,6 +67,8 @@ export interface EffectiveParams {
     softness: number;
     level: number;
   };
+  /** Phase 17 generative melody: bus level (0 = off) and the note generator's inputs. */
+  melody: { level: number; density: number; brightness: number; rootHz: number };
   /** Low-shelf gain in dB (0..BASS_MAX_DB). */
   bassDb: number;
   /** Reverb send: wet mix and room size (see reverb.ts). */
@@ -197,6 +200,13 @@ export function composeEffectiveParams(input: ComposeInput): EffectiveParams {
       movement: p.harmony.movement,
       softness: warmth,
       level: p.harmony.enabled ? p.harmony.level * arcGain * harmonyScale * HARMONY_TRIM : 0,
+    },
+    // Notes key to the pad's root whether or not the pad itself plays.
+    melody: {
+      level: p.melody.enabled ? p.melody.level * arcGain * MELODY_TRIM : 0,
+      density: p.melody.density,
+      brightness: p.melody.brightness,
+      rootHz: p.harmony.rootHz,
     },
     bassDb: BASS_MAX_DB * Math.min(1, p.bass * bassScale),
     // The wet path taps the already-scaled mix, so arc/program gains reach

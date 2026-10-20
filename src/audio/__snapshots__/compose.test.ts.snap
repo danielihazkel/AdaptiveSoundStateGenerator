@@ -29,6 +29,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 9000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.19599999999999998,
@@ -76,6 +82,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 18000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.27999999999999997,
@@ -123,6 +135,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 10800,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.3136,
@@ -174,6 +192,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 9000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.07874999999999999,
@@ -221,6 +245,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 18000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.11249999999999999,
@@ -268,6 +298,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 10800,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.126,
@@ -319,6 +355,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 1000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.20999999999999996,
@@ -366,6 +408,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 2000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.30000000000000004,
@@ -413,6 +461,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 1200,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.3360000000000001,
@@ -464,6 +518,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 9000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.0336,
@@ -511,6 +571,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 18000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.048,
@@ -559,6 +625,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 10800,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.053759999999999995,
@@ -610,6 +682,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 9000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 105,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.052500000000000005,
@@ -657,6 +735,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 18000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 105,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.07500000000000001,
@@ -704,6 +788,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 10800,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 105,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.084,
@@ -755,6 +845,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 3000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 98,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.12040000000000001,
@@ -802,6 +898,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 6000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 98,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.17200000000000001,
@@ -849,6 +951,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 3600,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 98,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.19264000000000003,
@@ -900,6 +1008,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 9000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.20999999999999996,
@@ -947,6 +1061,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 18000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.30000000000000004,
@@ -994,6 +1114,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 10800,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.3360000000000001,
@@ -1045,6 +1171,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 4000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.06475,
@@ -1092,6 +1224,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 8000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.0925,
@@ -1139,6 +1277,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 4800,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 110,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.10359999999999998,
@@ -1190,6 +1334,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 9000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 146.8,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.052500000000000005,
@@ -1237,6 +1387,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 18000,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 146.8,
+      },
       "noise": {
         "fadeSec": 0.1,
         "level": 0.07500000000000001,
@@ -1284,6 +1440,12 @@ exports[`composeEffectiveParams > pins a representative sample of composed value
       },
       "loudnessTrim": 1,
       "lowpassHz": 10800,
+      "melody": {
+        "brightness": 0.4,
+        "density": 3,
+        "level": 0,
+        "rootHz": 146.8,
+      },
       "noise": {
         "fadeSec": 8,
         "level": 0.084,

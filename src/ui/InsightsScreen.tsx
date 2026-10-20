@@ -11,6 +11,7 @@ const COMPONENT_LABELS: Record<SoundComponent, string> = {
   rhythm: 'Pattern rhythm',
   tone: 'Pure tone',
   harmony: 'Harmonic pad',
+  melody: 'Melody',
   bass: 'Bass lift',
   ambience: 'Ambience',
 };

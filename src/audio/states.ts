@@ -89,6 +89,11 @@ function disabledAmbience2(): SoundProfile['ambience2'] {
   return { enabled: false, type: 'ocean', level: 0.1 };
 }
 
+/** The melody (Phase 17) is a variation and a user choice, never part of a state prior. */
+function disabledMelody(): SoundProfile['melody'] {
+  return { enabled: false, level: 0.3, density: 3, brightness: 0.4 };
+}
+
 /** Isochronic pulses above ~16 Hz stop being perceived as rhythm. */
 export const MAX_PULSE_RATE_HZ = 16;
 
@@ -117,6 +122,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'rain', level: 0.05 }, // PRD §8
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: disabledHarmony(),
         bass: 0,
         space: noSpace(),
@@ -146,6 +152,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'ocean', level: 0.4 }, // PRD §8
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: {
           enabled: true,
           level: lerp(0.08, 0.14, t),
@@ -182,6 +189,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'space', level: 0.15 }, // dark, sits under the 2 kHz lowpass
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: disabledHarmony(),
         bass: lerp(0.1, 0.2, t), // body under the lowpass without raising it
         space: noSpace(),
@@ -215,6 +223,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: { mode: 'pattern', bpm: lerp(115, 140, t), complexity: lerp(0.3, 0.55, t) },
         ambience: { enabled: false, type: 'wind', level: 0.1 }, // bright pulse wants no bed
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: disabledHarmony(),
         bass: lerp(0.1, 0.25, t),
         space: noSpace(),
@@ -243,6 +252,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'wind', level: 0.15 },
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: {
           enabled: true,
           level: lerp(0.1, 0.16, t),
@@ -277,6 +287,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'ocean', level: 0.25 }, // slow breathing-like bed
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: { enabled: true, level: 0.1, richness: 0.35, movement: 0.3, rootHz: 98 },
         bass: 0,
         space: noSpace(),
@@ -314,6 +325,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'rain', level: 0.05 },
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: disabledHarmony(),
         bass: 0,
         space: noSpace(),
@@ -346,6 +358,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'ocean', level: 0.35 }, // nature sound aids stress recovery (Alvarsson 2010)
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: {
           enabled: true,
           level: lerp(0.1, 0.16, t),
@@ -382,6 +395,7 @@ export const STATES: Record<MentalState, StateDefinition> = {
         rhythm: simpleRhythm(),
         ambience: { enabled: true, type: 'space', level: 0.2 },
         ambience2: disabledAmbience2(),
+        melody: disabledMelody(),
         harmony: {
           enabled: true,
           level: lerp(0.1, 0.18, t),

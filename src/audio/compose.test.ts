@@ -11,6 +11,7 @@ import {
   BREATH_MIN_DEPTH,
   HARMONY_TRIM,
   MAX_MASKING_BOOST,
+  MELODY_TRIM,
   MONO_SUBSTITUTE_MIN_DEPTH,
   NOISE_TRIM,
   TONE_TRIM,
@@ -144,6 +145,14 @@ function legacyCompose(input: ComposeInput): EffectiveParams {
     softness: warmth,
     level: p.harmony.enabled ? p.harmony.level * arcGain * harmonyScale * HARMONY_TRIM : 0,
   };
+  // Phase 17: this.melody.setParams(...) / setLevel — the notes key to the
+  // pad's root whether or not the pad plays.
+  out.melody = {
+    level: p.melody.enabled ? p.melody.level * arcGain * MELODY_TRIM : 0,
+    density: p.melody.density,
+    brightness: p.melody.brightness,
+    rootHz: p.harmony.rootHz,
+  };
   // ramp(this.bassShelf.gain, BASS_MAX_DB * Math.min(1, p.bass * bassScale))
   out.bassDb = BASS_MAX_DB * Math.min(1, p.bass * bassScale);
   // Phase 9: this.reverb.setParams(level, size); a program phase may
@@ -231,9 +240,13 @@ function edgeProfiles(): SoundProfile[] {
     p.ambience2 = { enabled: true, type, level: 0.2 };
     out.push(p);
   }
+  const melody = cloneProfile(base);
+  melody.melody = { enabled: true, level: 0.6, density: 8, brightness: 1 };
+  out.push(melody);
   const everything = cloneProfile(base);
   everything.tone.enabled = true;
   everything.harmony.enabled = true;
+  everything.melody = { enabled: true, level: 0.3, density: 0.5, brightness: 0 };
   everything.bass = 0.5;
   everything.lowpassHz = 300;
   out.push(everything);
@@ -299,7 +312,9 @@ describe('composeEffectiveParams', () => {
       cases += 1;
     }
     expect(cases).toBeGreaterThan(5000);
-  });
+    // Tens of thousands of exact comparisons — a few seconds alone, more
+    // under the full parallel suite.
+  }, 60_000);
 
   it('honours a one-off type fade outside programs, never inside one', () => {
     const profile = STATES.focus.buildProfile(0.5);

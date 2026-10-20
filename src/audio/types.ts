@@ -99,6 +99,19 @@ export interface SoundProfile {
     movement: number; // 0..1
     rootHz: number; // 30..1000
   };
+  /**
+   * Generative melody (Phase 17): sparse plucked / belled notes on a
+   * pentatonic scale over the pad's root (`harmony.rootHz`, an octave or two
+   * up), placed by a seeded pure function of time so live play, exports and
+   * chunk seams agree. `density` = average notes per minute; `brightness`
+   * lifts the upper partial. Disabled = legacy identical.
+   */
+  melody: {
+    enabled: boolean;
+    level: number; // 0..1
+    density: number; // 0.5..8 notes per minute
+    brightness: number; // 0..1
+  };
   /** Low-shelf boost at 150 Hz: 0 → 0 dB (legacy identical) .. 1 → +6 dB. */
   bass: number; // 0..1
   /**
@@ -121,6 +134,10 @@ export interface SoundProfile {
   loudnessTrimDb?: number;
 }
 
+/** Melody density bounds, notes per minute (Phase 17). */
+export const MELODY_MIN_DENSITY = 0.5;
+export const MELODY_MAX_DENSITY = 8;
+
 export const LOUDNESS_TRIM_MIN_DB = -9;
 export const LOUDNESS_TRIM_MAX_DB = 3;
 
@@ -137,6 +154,7 @@ export const defaultProfile: SoundProfile = {
   ambience: { enabled: false, type: 'rain', level: 0.1 },
   ambience2: { enabled: false, type: 'ocean', level: 0.1 },
   harmony: { enabled: false, level: 0.25, richness: 0.5, movement: 0.3, rootHz: 110 },
+  melody: { enabled: false, level: 0.3, density: 3, brightness: 0.4 },
   bass: 0,
   space: { level: 0, size: 0.5 },
   stereoWidth: 0.7,
@@ -191,6 +209,7 @@ export function normalizeProfile(raw: unknown): SoundProfile {
   const ambience2 = (p.ambience2 ?? {}) as Record<string, unknown>;
   const harmony = (p.harmony ?? {}) as Record<string, unknown>;
   const space = (p.space ?? {}) as Record<string, unknown>;
+  const melody = (p.melody ?? {}) as Record<string, unknown>;
   return {
     masterVolume: num(p.masterVolume, d.masterVolume, 0, 1),
     tone: {
@@ -242,6 +261,14 @@ export function normalizeProfile(raw: unknown): SoundProfile {
       richness: num(harmony.richness, d.harmony.richness, 0, 1),
       movement: num(harmony.movement, d.harmony.movement, 0, 1),
       rootHz: num(harmony.rootHz, d.harmony.rootHz, 30, 1000),
+    },
+    // Profiles saved before the melody existed come back without it and
+    // must sound identical: it defaults to disabled.
+    melody: {
+      enabled: bool(melody.enabled, d.melody.enabled),
+      level: num(melody.level, d.melody.level, 0, 1),
+      density: num(melody.density, d.melody.density, MELODY_MIN_DENSITY, MELODY_MAX_DENSITY),
+      brightness: num(melody.brightness, d.melody.brightness, 0, 1),
     },
     bass: num(p.bass, d.bass, 0, 1),
     // Profiles saved before space existed come back without it and must

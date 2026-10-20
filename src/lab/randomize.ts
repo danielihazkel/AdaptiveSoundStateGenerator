@@ -44,6 +44,12 @@ export function randomizeProfile(
   draft.harmony.movement = between(0.1, 0.7);
   draft.harmony.rootHz = Math.round(between(60, 300));
 
+  // A few plucks now and then — sparse, and never louder than the pad.
+  draft.melody.enabled = rand() < 0.3;
+  draft.melody.level = between(0.1, 0.4);
+  draft.melody.density = Math.round(between(1, 6) * 2) / 2;
+  draft.melody.brightness = between(0.1, 0.8);
+
   draft.bass = between(0, 0.6);
 
   // A room half the time, and never drenched.

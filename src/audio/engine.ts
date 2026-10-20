@@ -7,6 +7,7 @@ import type { OscillatorPhaseTracker } from '../export/phaseTracker';
 import { AmbienceLayer } from './layers/ambienceLayer';
 import { BinauralLayer } from './layers/binauralLayer';
 import { HarmonyLayer } from './layers/harmonyLayer';
+import { MelodyLayer } from './layers/melodyLayer';
 import { NoiseLayer } from './layers/noiseLayer';
 import { ToneLayer } from './layers/toneLayer';
 import { loadNoiseWorklet } from './noise-processor';
@@ -98,6 +99,7 @@ export class AudioEngine {
     private readonly ambience: AmbienceLayer,
     private readonly ambience2: AmbienceLayer,
     private readonly harmony: HarmonyLayer,
+    private readonly melody: MelodyLayer,
     private readonly reverb: ReverbUnit,
     private profile: SoundProfile,
   ) {
@@ -183,10 +185,13 @@ export class AudioEngine {
     // Tonal, mono-compatible — joins the width matrix like tone/noise, and
     // deliberately rides the pulse bus: rhythm pulsing the pad is the effect.
     const harmony = new HarmonyLayer(ctx, width.input, p.harmony.rootHz);
+    // Phase 17: post-pulse (an isochronic pulse never chops a note) but
+    // pre-master, so plucks get the room and every master fade.
+    const melody = new MelodyLayer(ctx, preMaster, offline);
 
     const engine = new AudioEngine(
       ctx, offline, chain, width, pulse, tone, binaural, noise, ambience, ambience2, harmony,
-      reverb, p,
+      melody, reverb, p,
     );
     engine.applyAll();
     return engine;
@@ -425,9 +430,18 @@ export class AudioEngine {
     playChime(this.ctx, this.limiter);
   }
 
-  /** Push pattern-mode pulses forward past the next offline checkpoint. */
+  /** Push pattern-mode pulses (and melody notes) forward past the next offline checkpoint. */
   schedulePulsesUntil(time: number): void {
     this.pulse.scheduleAheadUntil(time);
+    if (this.offline) this.melody.scheduleUntil(time);
+  }
+
+  /**
+   * Offline chunks (Phase 17): the session second at this chunk's ctx t=0,
+   * so the melody plays the notes that belong to that moment.
+   */
+  setMelodyClock(sessionSecAtCtxZero: number): void {
+    this.melody.setClockOffset(sessionSecAtCtxZero);
   }
 
   /** Pending async ambience sample load — await before startRendering(). */
@@ -655,6 +669,7 @@ export class AudioEngine {
     this.ambience.dispose();
     this.ambience2.dispose();
     this.harmony.dispose();
+    this.melody.dispose();
     this.width.dispose();
     this.pulse.dispose();
     this.reverb.dispose();
@@ -715,6 +730,8 @@ export class AudioEngine {
     this.harmony.setMovement(e.harmony.movement, timeConstant);
     this.harmony.setSoftness(e.harmony.softness, timeConstant);
     this.harmony.setLevel(e.harmony.level, timeConstant);
+    this.melody.setParams(e.melody);
+    this.melody.setLevel(e.melody.level, timeConstant);
     ramp(this.ctx, this.bassShelf.gain, e.bassDb, timeConstant);
     this.reverb.setParams(e.space.level, e.space.size, timeConstant);
     this.width.setWidth(e.stereoWidth, timeConstant);

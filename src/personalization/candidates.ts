@@ -46,7 +46,12 @@ import { LOUDNESS_TABLE, LOUDNESS_TABLE_INTENSITIES } from '../audio/loudnessTab
 // wet room on the pulsed mix, gated on the state having tonal content for
 // the reverb to act on. State priors keep space.level = 0 (a prior retune is
 // a separate decision; the arm supplies the contrast).
-export const CANDIDATE_SET_VERSION = 4;
+// v5 (additive): the Phase 17 generative melody joins as `melody-on` —
+// sparse plucks keyed to the pad — offered only where the state's prior has
+// the pad (relax, meditation, arousal, calm, creative): there the notes have
+// harmony to sit in, while for focus/flow/energy they'd compete for
+// attention and for sleep they'd risk waking. Those states go to 17 arms.
+export const CANDIDATE_SET_VERSION = 5;
 
 export interface CandidateSpec {
   /** Stable across releases — persisted in SessionRecord.servedArmId. */
@@ -122,7 +127,7 @@ function shiftCarrier(deltaHz: number) {
 }
 
 /**
- * Arm menu per state: the identity prior plus 13–15 perturbations. Kept
+ * Arm menu per state: the identity prior plus 12–16 perturbations. Kept
  * deliberately small: Thompson sampling needs a handful of pulls per arm to
  * differentiate, and the data rate is roughly one session a day — so the v3
  * arms are gated on being *audible* against the state's prior (a warmth arm
@@ -284,6 +289,18 @@ export function candidatesFor(state: MentalState): CandidateSpec[] {
       apply: (prior) => {
         const next = cloneProfile(prior);
         next.space = { level: 0.25, size: 0.5 };
+        return next;
+      },
+    });
+  }
+  // --- v5: Phase 17 melody --------------------------------------------------
+  if (reference.harmony.enabled) {
+    specs.push({
+      id: 'melody-on',
+      label: 'A gentle melody',
+      apply: (prior) => {
+        const next = cloneProfile(prior);
+        next.melody = { enabled: true, level: 0.3, density: 3, brightness: 0.4 };
         return next;
       },
     });

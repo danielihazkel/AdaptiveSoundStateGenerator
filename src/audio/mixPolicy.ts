@@ -63,3 +63,10 @@ export const BREATH_MIN_DEPTH = 0.3;
  * concentration without turning into "the app got loud". Clamped in compose.
  */
 export const MAX_MASKING_BOOST = 10 ** (3 / 20);
+
+/**
+ * Generative melody (Phase 17): bus gain at level 1. Plucks are sparse and
+ * decay fast, so they read clearly well under the beds; the loudness table
+ * then trims the melody-on arm against its state's default.
+ */
+export const MELODY_TRIM = 0.35;

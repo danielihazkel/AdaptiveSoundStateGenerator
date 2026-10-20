@@ -2,6 +2,8 @@ import { memo } from 'react';
 import {
   AMBIENCE_TYPES,
   cloneProfile,
+  MELODY_MAX_DENSITY,
+  MELODY_MIN_DENSITY,
   type AmbienceType,
   type NoiseType,
   type RhythmMode,
@@ -386,6 +388,46 @@ export const AdvancedPanel = memo(function AdvancedPanel(props: {
           value={p.harmony.movement}
           display={pct(p.harmony.movement)}
           onChange={(v) => edit((d) => (d.harmony.movement = v))}
+        />
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <h2>Melody</h2>
+          <input
+            type="checkbox"
+            aria-label="Melody on"
+            checked={p.melody.enabled}
+            onChange={(e) => edit((d) => (d.melody.enabled = e.target.checked))}
+          />
+        </div>
+        <p className="hint">Sparse plucks on a pentatonic scale over the pad's root.</p>
+        <Slider
+          label="Level"
+          min={0}
+          max={1}
+          step={0.01}
+          value={p.melody.level}
+          display={pct(p.melody.level)}
+          onChange={(v) => edit((d) => (d.melody.level = v))}
+        />
+        <Slider
+          label="Notes per minute"
+          min={MELODY_MIN_DENSITY}
+          max={MELODY_MAX_DENSITY}
+          step={0.5}
+          value={p.melody.density}
+          display={`${p.melody.density}`}
+          onChange={(v) => edit((d) => (d.melody.density = v))}
+        />
+        <Slider
+          label="Brightness"
+          min={0}
+          max={1}
+          step={0.01}
+          value={p.melody.brightness}
+          display={pct(p.melody.brightness)}
+          onChange={(v) => edit((d) => (d.melody.brightness = v))}
         />
       </section>
     </div>

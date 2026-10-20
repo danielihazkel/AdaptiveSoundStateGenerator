@@ -328,12 +328,13 @@ describe('contextual posterior', () => {
     let state = emptyState();
     state = updateArm(state, 'relax', PRIOR_ARM_ID, { value: 0.6, weight: 1 });
     state = updateArm(state, 'relax', 'noise-up', { value: 0.9, weight: 0.6 });
-    // Captured with this exact seed/state; re-pinned when the v4 arm menu
-    // grew (a larger menu consumes the rng differently — expected). The
-    // invariant under test is that an empty context never changes a draw.
+    // Captured with this exact seed/state; re-pinned when the v4 and v5 arm
+    // menus grew (relax gained space-on, then melody-on: a larger menu
+    // consumes the rng differently — expected). The invariant under test is
+    // that an empty context never changes a draw.
     const pinned = [
-      'space-on', 'bass-up', 'beat-down', 'warmth-up', 'binaural-soft', 'pulse-deep',
-      'beat-up', 'noise-alt', 'beat-up', 'binaural-soft', 'binaural-soft', 'beat-up',
+      'space-on', 'harmony-off', 'noise-up', 'ambience-off', 'noise-alt', 'beat-up',
+      'melody-on', 'harmony-off', 'bass-up', 'harmony-off', 'noise-up', 'ambience-off',
     ];
     const rng1 = lcg(123);
     expect(Array.from({ length: 12 }, () => sampleArm(state, 'relax', rng1))).toEqual(pinned);

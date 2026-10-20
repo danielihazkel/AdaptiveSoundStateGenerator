@@ -27,6 +27,7 @@ export function exportTags(sel: ExportSelection, label: string): AudioTags {
   if (p.binaural.enabled) parts.push(`${Math.round(p.binaural.beat * 10) / 10} Hz beat`);
   if (p.ambience.enabled) parts.push(p.ambience.type);
   if (p.harmony.enabled) parts.push('harmonic pad');
+  if (p.melody.enabled) parts.push('melody');
   return {
     title: label,
     artist: 'Resonance',

@@ -32,13 +32,18 @@ export interface RenderSpec {
   chunkSec?: number;
   /** Override the profile's reverb send. */
   space?: { level: number; size: number };
+  /** Phase 17: override the melody block (e.g. turn it on, dense, for a click check). */
+  melody?: { enabled: boolean; level: number; density: number; brightness: number };
 }
 
 let last: { left: Float32Array; right: Float32Array } | null = null;
 
-function profileFor(spec: Pick<RenderSpec, 'state' | 'intensity' | 'armId' | 'space'>): SoundProfile {
+function profileFor(
+  spec: Pick<RenderSpec, 'state' | 'intensity' | 'armId' | 'space' | 'melody'>,
+): SoundProfile {
   const profile = buildCandidateProfile(spec.state, spec.intensity ?? 0.5, spec.armId ?? PRIOR_ARM_ID);
   if (spec.space) profile.space = { ...spec.space };
+  if (spec.melody) profile.melody = { ...spec.melody };
   return normalizeProfile(profile);
 }
 
