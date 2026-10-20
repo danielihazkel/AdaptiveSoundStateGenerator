@@ -18,6 +18,10 @@ test('setup → session → stop → rate → history', async ({ page }) => {
   // Session screen: the volume is in view and answers to the arrow keys.
   const volume = page.getByRole('slider', { name: 'Volume' });
   await expect(volume).toBeVisible();
+  // "Why this sound" (Phase 15): a first session is cold start.
+  const why = page.getByRole('button', { name: /The default sound · Learning your taste — session 1 of 6/ });
+  await why.click();
+  await expect(page.getByText(/No ratings for this one yet/)).toBeVisible();
   const before = Number(await volume.inputValue());
   await page.locator('h1').focus();
   await page.keyboard.press('ArrowUp');

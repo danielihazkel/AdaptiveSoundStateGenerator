@@ -163,6 +163,13 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [ ] Out of scope for now: MP3 export of a whole routine; mood check-in on routines; routine legs that run a timed program
 - [ ] Verify by ear / on a phone: a real routine's hand-offs sound like one continuous piece; Android lock screen shows the artwork; an exported MP3 shows its title + cover in the phone's player; with a recording in `public/ambience/`, it still plays after going offline
 
+## Phase 15 — Visible learning
+
+- [x] "Why this sound" line on the session screen: the served variation in plain words, the personalizer's reason (cold start N of 6 / held-out default / locked best / current favourite / trying a variation / switched after a check-in / pinned), score ± interval one tap away from the same contextual, pooled posterior the bandit used; presets/replays get a plain line, programs none; `Settings.explainSound` (default on) — `src/personalization/explain.ts`, `src/ui/WhySound.tsx`, `describeServedSound` in `personalizer.ts`
+- [x] "► Try" per row of the insights variation table: `begin({ pinArm })` plays exactly that arm at the state's latest depth inside the tap; `servedBy: 'pinned'` credits the arm, skips adaptation, never advances the cold-start/held-out schedule (`decayState(…, count)` / `countsTowardSchedule`, mirrored in rebuild), and stays out of the lift groups; history badge — `src/ui/InsightsScreen.tsx`, `src/app/useSessionOrchestrator.ts`, `src/personalization/bandit.ts`
+- [x] Before-mood as a serving context: `moodBucketOf` (1–2 low, 4–5 high, else none), `mood:low|high` cells beside time × output, chain shrinkage in `contextualPosterior` via `servePosterior`; serve, mid-session resample, credit and rebuild all carry it; pinned draws unchanged; insights "Works best when you start out …" once the winner has 3 sessions in that mood — `src/personalization/context.ts`, `bandit.ts`, `insights.ts`
+- [ ] Verify in-browser: after a few sessions, tap ► Try on a variation and see "You picked this from your sound profile" under the clock; the History row shows "picked from insights"; a session started "Scattered" lands `mood:low` keys in the exported personalization data
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs
