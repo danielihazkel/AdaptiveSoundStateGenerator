@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { STATES, type MentalState } from '../audio/states';
 import { MAX_CUSTOM_MINUTES, MIN_CUSTOM_MINUTES } from '../session/durationLimits';
+import { onQuickStartLink } from '../platform/nativeIncoming';
 import { loadSessions } from '../storage/storage';
 import type { SetupSelection } from './useSetupSelection';
+import { useStableCallback } from './useStableCallback';
 
 export type QuickStart =
   | { kind: 'state'; state: MentalState; minutes?: number; intensity?: number }
@@ -33,9 +35,24 @@ export function parseQuickStart(search: string): QuickStart | null {
 /**
  * Applies a quick-start URL to the setup selection on first load and strips
  * it from the address bar. It pre-fills only — audio needs a tap, so the
- * user still presses Begin.
+ * user still presses Begin. In the Android app the launcher shortcuts arrive
+ * as resonance://start?… links instead, at launch or while running.
  */
 export function useQuickStart(selection: SetupSelection, ready = true): void {
+  const apply = useStableCallback((quick: QuickStart) => {
+    if (quick.kind === 'last') {
+      const last = loadSessions().find((s) => !s.recovered);
+      if (last) selection.replayFrom(last);
+      return;
+    }
+    selection.selectState(quick.state);
+    if (quick.minutes !== undefined) {
+      selection.setMinutes(quick.minutes);
+      selection.setEndAt(null);
+    }
+    if (quick.intensity !== undefined) selection.setIntensity(quick.intensity);
+  });
+
   useEffect(() => {
     // "Play last" needs the session store; the URL is consumed once it's up.
     if (!ready) return;
@@ -49,18 +66,15 @@ export function useQuickStart(selection: SetupSelection, ready = true): void {
       '',
       window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash,
     );
-    if (quick.kind === 'last') {
-      const last = loadSessions().find((s) => !s.recovered);
-      if (last) selection.replayFrom(last);
-      return;
-    }
-    selection.selectState(quick.state);
-    if (quick.minutes !== undefined) {
-      selection.setMinutes(quick.minutes);
-      selection.setEndAt(null);
-    }
-    if (quick.intensity !== undefined) selection.setIntensity(quick.intensity);
+    apply(quick);
     // Runs once the store is ready; the URL is consumed exactly once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  }, [ready, apply]);
+
+  useEffect(() => {
+    if (!ready) return;
+    return onQuickStartLink((search) => {
+      const quick = parseQuickStart(search);
+      if (quick) apply(quick);
+    });
+  }, [ready, apply]);
 }

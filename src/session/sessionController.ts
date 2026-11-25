@@ -215,6 +215,19 @@ export class SessionController {
     await this.engine.pause();
   }
 
+  /**
+   * The OS took the audio away while the AudioContext itself kept running —
+   * Android audio focus (a phone call, another player, headphones pulled).
+   * Lands in 'interrupted' exactly like a context suspension does, and
+   * silences the sound, but is not a user pause (no PRD §9 pause signal).
+   */
+  async interrupt(): Promise<void> {
+    if (this.snapshot.phase !== 'running') return;
+    this.clock.pause();
+    this.setPhase('interrupted');
+    await this.engine.pause();
+  }
+
   async resume(): Promise<void> {
     const phase = this.snapshot.phase;
     if (phase !== 'paused' && phase !== 'interrupted') return;

@@ -34,6 +34,34 @@ npm run e2e:qa    # Playwright audio QA: real-engine renders checked for clicks,
 
 CI (`.github/workflows/ci.yml`) runs lint, tests, and the production build on every push and pull request, plus both Playwright suites. Much of the old "verify by ear" list is automated: the Node tests run the real worklet source and check every noise/ambience switch for clicks, dropouts and pops (`src/audio/typeSwitch.test.ts`); the browser QA (`e2e/audio.qa.spec.ts`, dev-only hooks in `src/dev/qaHooks.ts`) renders through the actual engine and export path and checks each state, adaptation glides, export chunk seams, program boundaries and loudness with a BS.1770 LUFS meter (`src/audio/loudness.ts`).
 
+## Android app
+
+The same web app, wrapped with [Capacitor](https://capacitorjs.com/) into a native Android app (`android/`, `capacitor.config.ts`, app id `app.resonance`). It bundles the web build, so it runs fully offline with no server. Every native branch goes through `isNative()` (`src/platform/native.ts`), so the browser/PWA build behaves exactly as before.
+
+Building it needs the Android SDK and JDK 21 (Android Studio ships both). Set `ANDROID_HOME` to the SDK, e.g. `%LOCALAPPDATA%\Android\Sdk`:
+
+```sh
+npm run android:sync    # native build (vite --mode native: no service worker) + copy into android/
+npm run android:apk     # …then a debug APK: android/app/build/outputs/apk/debug/app-debug.apk
+npm run android:run     # …or install and launch on a connected phone / emulator
+npm run android:icons   # regenerate launcher icons + splash from public/icon.svg
+```
+
+Sideload with `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`, or download the `resonance-debug-apk` artifact that CI builds on every push. Debug the WebView from desktop Chrome at `chrome://inspect`.
+
+What the app does differently from the browser:
+
+- **Background playback**: a `mediaPlayback` foreground service (`android/app/src/main/java/app/resonance/session/`, driven by `src/platform/nativeSession.ts`) keeps the synthesized sound alive with the screen off. It also shows the lock-screen / notification card (artwork, pause/resume, stop, position), holds a partial wake lock, and takes audio focus. A phone call or another player interrupts the session (`SessionController.interrupt()`: not counted as a user pause). The session resumes when a call ends but not after another app takes over. Pulling the headphones out interrupts too. This replaces the Media Session API and the silent `<audio>` keep-alive.
+- **Screen on**: the window's keep-screen-on flag (`@capacitor-community/keep-awake`) instead of the Screen Wake Lock API. Phone-motion sensing and mic masking still need the screen on, as on the web.
+- **Heart-rate straps**: native BLE (`src/biometrics/nativeBleHr.ts`, `@capacitor-community/bluetooth-le`) with the same parser as Web Bluetooth, which the WebView lacks. Scans are declared `neverForLocation`, so Android 12+ asks for no location permission.
+- **Downloads** (MP3/WAV exports, data export, shared files): written to the app cache in 768 KB pieces, so a 4-hour MP3 never crosses the bridge as one string. Then the system share sheet opens: save to Files or Drive, or send it (`src/platform/download.ts`).
+- **Sharing**: the app is served from `https://localhost`, which nobody else can open. So **Share** sends the `.resonance.json` file through the share sheet instead of a link, unless `VITE_SHARE_BASE_URL` points at a hosted copy of the PWA. Opening such a file with Resonance, or sharing it to Resonance, brings up the usual import prompt (`android/…/incoming/IncomingPlugin.java` → `useShareImport`).
+- **Launcher shortcuts** (long-press the icon): Focus 25 min, Sleep and Play last, as `resonance://start?…` links into `parseQuickStart`. They only pre-fill the setup screen, like the PWA's.
+- **Back button**: walks the app's screens and never leaves a session. At the root it sends the app to the background instead of closing it.
+- **No service worker or update toast**: updates arrive as a new APK.
+
+Phones from some manufacturers (Samsung, Xiaomi, OnePlus and others) add their own battery killers on top of Android. If a long sleep session stops overnight, set Resonance to "Unrestricted" battery use.
+
 ## How it works
 
 The whole app is client-side: Vite + React + TypeScript, with a framework-agnostic audio engine in plain TS on top of the Web Audio API.
@@ -97,6 +125,7 @@ New programs start from a **template**: blank, the 5-phase build arc, or one of 
 ```
 PRD.txt                  product spec (the source of truth)
 TODO.md                  phased task breakdown derived from the PRD
+android/                 Capacitor Android project (native session service, incoming files, shortcuts)
 src/
   audio/                 engine core: layers, worklet, states, ramps
   session/               session lifecycle: timer, pause/resume, interruptions
@@ -108,6 +137,7 @@ src/
   coach/                 natural-language goal → session configuration
   biometrics/            heart-rate sources (Web Bluetooth / simulated) + trend
   share/                 shareable program / preset links (URL hash, no backend)
+  platform/              browser + Android integration: wake lock, media controls / background session, downloads, deep links
   ui/                    React components: setup → session → feedback → insights screens
   test/                  test harness: jsdom setup, fake AudioEngine, fake IndexedDB
 ```
@@ -127,6 +157,7 @@ src/
 - **Phase 12 — QA infrastructure** ✅ output-chain extraction (loudness-trim node, analyser tap), Node click/dropout QA for every type switch, a BS.1770 LUFS meter, Playwright smoke + real-engine audio QA in CI — which caught and fixed reverb adding +3 LU
 - **Phase 13 — Better learning signal** ✅ arm loudness matching from a browser-measured calibration table, a cross-state pooled prior for recipes that mean the same everywhere, and the optional mood before/after check-in
 - **Phase 17 — Routines + music** ✅ routine parts that play a timed program, a routine mood check-in, whole-routine downloads, scene presets, and the generative melody layer with its `melody-on` variation (candidate set v5)
+- **Android app** ✅ Capacitor wrapper: background session service with lock-screen controls and audio focus, native BLE heart rate, share-sheet downloads and file import, launcher shortcuts, CI-built debug APK (Play Store release still to do)
 - **Phase 16 — Sensing without a wearable** ✅ phone-on-the-mattress motion as a restlessness / sleep-onset signal, the smart wake window, and adaptive masking from the room's loudness (+3 dB cap)
 - **Phase 15 — Visible learning** ✅ the "why this sound" line on the session screen, ► Try any variation from the insights table (pinned sessions), and the before-mood as a bandit serving context
 - **Phase 14 — Routines + polish** ✅ routines (states back to back with seamless hand-offs), the session visualizer, the weekly reflection card, lock-screen artwork, tagged exports, and offline ambience recordings

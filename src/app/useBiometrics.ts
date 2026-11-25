@@ -1,12 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
+import { NativeBleHeartRateSource } from '../biometrics/nativeBleHr';
 import { SimulatedHeartRateSource } from '../biometrics/simulatedHr';
 import {
-  isWebBluetoothAvailable,
+  isHeartRateSensorAvailable,
   type BiometricSample,
   type BiometricSource,
   type BiometricStatus,
 } from '../biometrics/types';
 import { WebBluetoothHeartRateSource } from '../biometrics/webBluetoothHr';
+import { isNative } from '../platform/native';
 
 /** In-memory sample cap ≈ 2h at 1 Hz — plenty for any session's windows. */
 const HR_SAMPLE_CAP = 7200;
@@ -33,7 +35,7 @@ export function useBiometrics() {
     return params.get('simhr') === 'sleep' ? ('sleep' as const) : ('rising' as const);
   }, []);
   const simulated = simulatedMode !== null;
-  const possible = simulated || isWebBluetoothAvailable();
+  const possible = simulated || isHeartRateSensorAvailable();
 
   const connect = async () => {
     if (!sourceRef.current) {
@@ -43,7 +45,9 @@ export function useBiometrics() {
               ? { baselineBpm: 64, driftPerMin: -0.8, noiseBpm: 1, hrvMs: 55 }
               : { driftPerMin: 2 },
           )
-        : new WebBluetoothHeartRateSource();
+        : isNative()
+          ? new NativeBleHeartRateSource()
+          : new WebBluetoothHeartRateSource();
       source.onStatusChange = setStatus;
       sourceRef.current = source;
     }

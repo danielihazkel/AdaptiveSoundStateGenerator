@@ -186,6 +186,18 @@ Task breakdown derived from `PRD.txt`. Section references (§) point at the PRD.
 - [x] Generative melody: `SoundProfile.melody` (disabled = legacy identical, every state emits it), pure seeded note placement (`melody.ts`), `MelodyLayer` (8 ms attack, post-pulse → preMaster, realtime lookahead / offline `scheduleUntil` + per-chunk clock), compose + oracle + edge profiles, Advanced panel, lab randomizer, insights component, tag comment; `melody-on` arm on pad states (candidate set v5, cap 17, pinned draws re-pinned for relax's larger menu), loudness table re-calibrated
 - [ ] Verify by ear: a routine with a program part plays the program's phases after the hand-off; a downloaded routine sounds like one continuous piece in a phone's player; each scene sounds like its name; melody-on on meditation — sparse, pleasant, never clicky, sitting inside the pad
 
+## Android app (Capacitor)
+
+- [x] Scaffold: Capacitor 8, `android/`, `capacitor.config.ts`, `npm run build:native` (`vite --mode native`: no service worker, `virtual:pwa-register` stubbed), `isNative()` gate — `src/platform/native.ts`
+- [x] Background session: `SessionService` (mediaPlayback foreground service, MediaSession card with art/pause/resume/stop/position, partial wake lock, audio focus, becoming-noisy) + `SessionPlugin`; `NativeSessionBackend` behind `useSessionPlatform` (position sent on drift > 2 s or a 60 s heartbeat); `SessionController.interrupt()` for focus loss — verified on an API 36 emulator: 3 min screen-off in forced deep idle, audio stream kept running, clock exact
+- [x] Keep-awake on native (`wakeLock.ts`); native BLE heart rate (`src/biometrics/nativeBleHr.ts`, `neverForLocation`, location only ≤ Android 11)
+- [x] Downloads via cache + share sheet, chunked bridge writes (`src/platform/download.ts`) — a 15-min MP3 from the emulator verified frame-exact (900.2 s, no sync loss)
+- [x] Share as file when there's no hosted URL (`VITE_SHARE_BASE_URL`), `.resonance.json` VIEW/SEND intent filters → import prompt (`IncomingPlugin`, `pendingFromIncomingFile`)
+- [x] Launcher shortcuts (`res/xml/shortcuts.xml`, `resonance://start?…` → `parseQuickStart`), Back button (history, minimize at root), mic permissions for masking, icons + dark splash from `public/icon.svg` (`npm run android:icons`)
+- [x] CI `android` job: native build (asserts no `sw.js`), `assembleDebug`, APK artifact
+- [ ] Verify on a real phone: a full night's sleep session with the screen off (and on a Samsung/Xiaomi with default battery settings); a phone call pauses and the session resumes after; another music app takes over and Resonance stays interrupted; unplugging headphones interrupts; an HR strap connects and streams; the notification controls on the lock screen; a 4-hour export saves through the share sheet; a `.resonance.json` sent over WhatsApp/Gmail opens the import prompt; phone motion + mic masking with the screen on
+- [ ] Play Store (later): release keystore out of git + signing from env, `bundleRelease` AAB, privacy policy + Data safety (nothing leaves the device), foreground-service `mediaPlayback` declaration video, content-rating questionnaire (arousal state, context templates), host the PWA → set `VITE_SHARE_BASE_URL` + App Links
+
 ## Ongoing / Cross-cutting
 
 - [x] Session evolution: parameter arcs over the session, crossfaded (§12, §7) — `src/session/evolution.ts`, `AudioEngine.setArcModulation` (arc composed below the profile, so presets/bandit/user-edit detection never see it); always on, per-state arcs

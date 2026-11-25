@@ -32,8 +32,10 @@ export function DataPanel(props: {
 
   const handleExport = () => {
     const bundle = buildExportBundle();
-    downloadJson(bundle, `resonance-export-${bundle.exportedAt.slice(0, 10)}.json`);
-    setMessage('Exported your sessions, presets, programs, and settings.');
+    downloadJson(bundle, `resonance-export-${bundle.exportedAt.slice(0, 10)}.json`).then(
+      () => setMessage('Exported your sessions, presets, programs, and settings.'),
+      () => setMessage('Could not save the export file.'),
+    );
   };
 
   const handleImportFile = async (file: File) => {

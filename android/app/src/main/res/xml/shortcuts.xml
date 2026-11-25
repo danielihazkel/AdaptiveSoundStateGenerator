@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher long-press shortcuts: the PWA manifest's shortcuts (vite.config.ts). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="focus"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_focus_short"
+        android:shortcutLongLabel="@string/shortcut_focus_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="resonance://start?start=focus&amp;minutes=25"
+            android:targetPackage="app.resonance"
+            android:targetClass="app.resonance.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="sleep"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_sleep"
+        android:shortcutLongLabel="@string/shortcut_sleep">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="resonance://start?start=sleep"
+            android:targetPackage="app.resonance"
+            android:targetClass="app.resonance.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="last"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_last_short"
+        android:shortcutLongLabel="@string/shortcut_last_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="resonance://start?start=last"
+            android:targetPackage="app.resonance"
+            android:targetClass="app.resonance.MainActivity" />
+    </shortcut>
+</shortcuts>

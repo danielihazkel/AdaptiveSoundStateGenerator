@@ -2,16 +2,27 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { fileURLToPath } from 'node:url';
 
-export default defineConfig({
+// `--mode native` builds the bundle the Android app ships (capacitor.config.ts):
+// no service worker or web manifest — the APK is the offline install, and
+// updates arrive as a new APK.
+export default defineConfig(({ mode }) => ({
   test: {
     // Node by default; React suites opt into jsdom per file.
     setupFiles: ["src/test/setup.ts"],
     // Browser specs in e2e/ belong to Playwright.
     include: ['src/**/*.test.{ts,tsx}'],
   },
+  resolve: {
+    alias:
+      mode === 'native'
+        ? { 'virtual:pwa-register': fileURLToPath(new URL('./src/platform/pwaRegisterStub.ts', import.meta.url)) }
+        : ({} as Record<string, string>),
+  },
   plugins: [
     react(),
+    mode !== 'native' &&
     // Installable + offline: every build asset is precached, so the app
     // opens with no network (the audio was always synthesized locally).
     VitePWA({
@@ -81,4 +92,4 @@ export default defineConfig({
       },
     }),
   ],
-});
+}));

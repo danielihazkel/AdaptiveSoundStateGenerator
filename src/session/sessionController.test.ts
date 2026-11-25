@@ -173,6 +173,35 @@ describe('SessionController', () => {
     expect(controller.getSnapshot().elapsedSec).toBe(6);
   });
 
+  it('interrupt() (Android audio focus) silences, freezes the clock and is not a user pause', async () => {
+    let result: SessionResult | undefined;
+    controller.onComplete = (r) => (result = r);
+    await controller.start(config());
+    await vi.advanceTimersByTimeAsync(5_000);
+    await controller.interrupt();
+    expect(controller.phase).toBe('interrupted');
+    expect(engine.pause).toHaveBeenCalledTimes(1);
+    engine.emitContextState('suspended'); // the engine's own suspend is not news
+    expect(controller.phase).toBe('interrupted');
+
+    await vi.advanceTimersByTimeAsync(30_000); // the call doesn't count
+    await controller.resume();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(controller.getSnapshot().elapsedSec).toBe(6);
+
+    controller.stop();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(result?.pauseCount).toBeUndefined();
+  });
+
+  it('interrupt() is a no-op unless running', async () => {
+    await controller.start(config());
+    await controller.pause();
+    await controller.interrupt();
+    expect(controller.phase).toBe('paused');
+    expect(engine.pause).toHaveBeenCalledTimes(1);
+  });
+
   it('a deliberate pause does not read as an interruption', async () => {
     await controller.start(config());
     await controller.pause();

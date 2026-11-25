@@ -37,3 +37,28 @@ jobs:
         with:
           name: playwright-traces
           path: test-results/
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      # The bundle the app ships: no service worker (vite.config.ts, native mode).
+      - run: npm run android:sync
+      - run: test ! -e dist/sw.js
+      - run: chmod +x gradlew && ./gradlew assembleDebug
+        working-directory: android
+      # A debug APK to sideload from every push (Actions → this run → Artifacts).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resonance-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk

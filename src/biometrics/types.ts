@@ -1,3 +1,5 @@
+import { isNative } from '../platform/native';
+
 /**
  * Optional wearable signals (Phase 3, PRD §17). Strictly opt-in (PRD §14:
  * explicit consent before reading any wearable data) and strictly optional —
@@ -38,4 +40,9 @@ export interface BiometricSource {
 /** Chrome/Edge on desktop/Android only; not Safari/iOS. */
 export function isWebBluetoothAvailable(): boolean {
   return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
+}
+
+/** A strap can be connected: Web Bluetooth, or native BLE in the Android app. */
+export function isHeartRateSensorAvailable(): boolean {
+  return isNative() || isWebBluetoothAvailable();
 }
