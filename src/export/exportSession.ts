@@ -78,7 +78,7 @@ export async function exportSessionAudio(
     }).catch(() => encoded); // a tag is a nicety — never lose the file over one
 
     const minutes = Math.round(Math.min(sel.durationSec, maxSec) / 60);
-    downloadBlob(blob, exportFilename(label, minutes, options.format));
+    await downloadBlob(blob, exportFilename(label, minutes, options.format));
   } catch (err) {
     // Make sure a render failure also tears down the encoder worker.
     void stream.finish().catch(() => undefined);

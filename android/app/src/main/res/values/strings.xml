@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Resonance</string>
+    <string name="title_activity_main">Resonance</string>
+    <string name="package_name">app.resonance</string>
+    <string name="custom_url_scheme">app.resonance</string>
+    <string name="session_channel">Playing session</string>
+    <string name="session_channel_description">Shows while a session plays, with pause and stop.</string>
+    <string name="session_pause">Pause</string>
+    <string name="session_resume">Resume</string>
+    <string name="session_stop">Stop</string>
+    <string name="shortcut_focus_short">Focus</string>
+    <string name="shortcut_focus_long">Focus 25 min</string>
+    <string name="shortcut_sleep">Sleep</string>
+    <string name="shortcut_last_short">Play last</string>
+    <string name="shortcut_last_long">Play last session</string>
+</resources>

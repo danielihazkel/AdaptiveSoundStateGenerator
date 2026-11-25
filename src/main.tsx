@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { App } from './App';
 import { installGlobalErrorHandlers } from './app/appErrors';
 import { markUpdateReady, setUpdateHandler } from './app/swUpdate';
+import { installBackButton } from './platform/nativeIncoming';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import './index.css';
 
@@ -24,6 +25,9 @@ const updateSW = registerSW({
   onNeedRefresh: markUpdateReady,
 });
 setUpdateHandler(() => void updateSW(true));
+
+// Android app: the hardware Back button (no-op in a browser).
+installBackButton();
 
 // Root fallback is deliberately static: if the whole tree died, hooks and
 // stores below it can't be trusted either.

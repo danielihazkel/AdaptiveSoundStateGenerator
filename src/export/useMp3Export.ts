@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { ExportSelection } from './offlineRenderer';
 import { exportSessionAudio, type ExportProgress } from './exportSession';
 import { normalizeExportOptions, type ExportOptions } from './options';
+import { isNative } from '../platform/native';
 
 export interface Mp3Exporter {
   /** Non-null while an export is running. */
@@ -41,7 +42,11 @@ export function useMp3Export(persisted: {
     setProgress({ phase: 'rendering', fraction: 0 });
     try {
       await exportSessionAudio(sel, label, setProgress, abort.signal, optionsRef.current);
-      setMessage('Saved — check your downloads. It plays in any audio player.');
+      setMessage(
+        isNative()
+          ? 'Ready — pick where to save or send it. It plays in any audio player.'
+          : 'Saved — check your downloads. It plays in any audio player.',
+      );
     } catch (err) {
       if (abort.signal.aborted) {
         setMessage('Download cancelled.');

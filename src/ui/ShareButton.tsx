@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { downloadJson } from '../platform/download';
+import { isNative } from '../platform/native';
 import { buildShareUrl, ShareError, type SharePayload } from '../share/shareLink';
 import { MAX_QR_URL_LENGTH, sharePayloadFilename } from '../share/sharePayloadFile';
 import { QrCode } from './QrCode';
@@ -10,7 +11,19 @@ import { QrCode } from './QrCode';
  * await), the link is shown in a selectable field instead. Short links can
  * also be shown as a QR code; a payload too large for any link can be saved
  * as a file that the Data panel imports.
+ *
+ * Links point at VITE_SHARE_BASE_URL when set (the hosted app), else at this
+ * page. The Android app is served from https://localhost, which no one else
+ * can open: there, with no hosted URL configured, Share sends the file
+ * through the system share sheet instead, and a link goes out through the
+ * sheet too.
  */
+function shareBaseUrl(): string | null {
+  const configured = import.meta.env.VITE_SHARE_BASE_URL;
+  if (configured) return configured;
+  return isNative() ? null : `${window.location.origin}${window.location.pathname}`;
+}
+
 export function ShareButton(props: {
   getPayload: () => SharePayload;
   label?: string;
@@ -28,12 +41,14 @@ export function ShareButton(props: {
     setUrl(null);
     setShowQr(false);
     setTooLarge(false);
+    const base = shareBaseUrl();
+    if (base === null) {
+      await sendFile('Opening it on a phone with Resonance imports it.');
+      return;
+    }
     let built: string;
     try {
-      built = await buildShareUrl(
-        props.getPayload(),
-        `${window.location.origin}${window.location.pathname}`,
-      );
+      built = await buildShareUrl(props.getPayload(), base);
     } catch (err) {
       if (err instanceof ShareError && err.reason === 'too-long') {
         setTooLarge(true);
@@ -44,6 +59,12 @@ export function ShareButton(props: {
       return;
     }
     setUrl(built);
+    if (isNative()) {
+      const { Share } = await import('@capacitor/share');
+      void Share.share({ url: built }).catch(() => undefined);
+      setStatus('Anyone who opens the link can import this.');
+      return;
+    }
     try {
       await navigator.clipboard.writeText(built);
       setStatus('Link copied — anyone who opens it can import this.');
@@ -53,12 +74,19 @@ export function ShareButton(props: {
     }
   };
 
-  const saveFile = () => {
+  const sendFile = async (done: string) => {
     const payload = props.getPayload();
-    downloadJson(payload, sharePayloadFilename(payload));
-    setStatus('Saved — import the file from “Your data” on the other device.');
     setTooLarge(false);
+    try {
+      await downloadJson(payload, sharePayloadFilename(payload));
+      setStatus(done);
+    } catch {
+      setStatus('Could not save the file.');
+    }
   };
+
+  const saveFile = () =>
+    void sendFile('Saved — import the file from “Your data” on the other device.');
 
   const qrPossible = url !== null && url.length <= MAX_QR_URL_LENGTH;
 
